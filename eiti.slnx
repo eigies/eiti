@@ -1,0 +1,7 @@
+<Solution>
+  <Project Path="eiti.Api/eiti.Api.csproj" />
+  <Project Path="eiti.Application/eiti.Application.csproj" />
+  <Project Path="eiti.Domain/eiti.Domain.csproj" />
+  <Project Path="eiti.Infrastructure/eiti.Infrastructure.csproj" />
+  <Project Path="eiti.Tests/eiti.Tests.csproj" />
+</Solution>

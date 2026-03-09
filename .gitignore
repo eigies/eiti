@@ -1,0 +1,41 @@
+﻿# .NET / Visual Studio
+
+# Build outputs
+**/[Bb]in/
+**/[Oo]bj/
+/artifacts/
+/publish/
+
+# User and IDE files
+.vs/
+.idea/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Logs and diagnostics
+*.log
+*.diag
+/TestResults/
+/BenchmarkDotNet.Artifacts/
+
+# Coverage
+*.coverage
+*.coveragexml
+coverage/
+
+# Local settings and secrets
+**/appsettings.*.local.json
+**/appsettings.Local.json
+**/secrets.json
+/.dotnet-home/
+/.agents/
+
+# Databases / local files
+*.mdf
+*.ldf
+
+# OS
+.DS_Store
+Thumbs.db

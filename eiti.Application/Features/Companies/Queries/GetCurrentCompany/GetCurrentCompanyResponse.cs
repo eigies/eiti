@@ -1,0 +1,7 @@
+namespace eiti.Application.Features.Companies.Queries.GetCurrentCompany;
+
+public sealed record GetCurrentCompanyResponse(
+    Guid Id,
+    string Name,
+    string PrimaryDomain,
+    DateTime CreatedAt);
