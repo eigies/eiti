@@ -1,0 +1,4 @@
+interface:
+  display_name: "Git Commit Back"
+  short_description: "Commit solo en eiti"
+  default_prompt: "Use $git-commit-back to commit only the eiti backend repository with a custom message."

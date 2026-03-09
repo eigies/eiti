@@ -30,7 +30,6 @@ coverage/
 **/appsettings.Local.json
 **/secrets.json
 /.dotnet-home/
-/.agents/
 
 # Databases / local files
 *.mdf

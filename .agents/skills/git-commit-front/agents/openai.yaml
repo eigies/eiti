@@ -1,0 +1,4 @@
+interface:
+  display_name: "Git Commit Front"
+  short_description: "Commit solo en eiti-front"
+  default_prompt: "Use $git-commit-front to commit only eiti-front with a custom message."
