@@ -6,6 +6,7 @@ description: Deploy Eiti API, frontend, and database migrations to a Windows IIS
 Use scripts in this skill:
 - `scripts/precheck.ps1`
 - `scripts/deploy.ps1`
+- `scripts/start-quick-tunnel.ps1`
 
 Run from `C:\Eiti\eiti`:
 
@@ -27,3 +28,11 @@ Apply this flow:
 5. Configure IIS site and `/api` app.
 6. Open firewall rule.
 7. Run smoke tests.
+8. Optional for external testers without router changes: start a free Cloudflare Quick Tunnel.
+
+Quick Tunnel notes:
+- Run `scripts/start-quick-tunnel.ps1` after a successful deploy when the user wants internet access for testing.
+- It downloads `cloudflared` to `C:\eiti\tools\cloudflared` if needed and exposes the local IIS site on port 80.
+- It returns a `https://*.trycloudflare.com` URL.
+- The URL is temporary and usually changes if the process stops or the PC restarts.
+- This is suitable for testing, not for stable production access.
