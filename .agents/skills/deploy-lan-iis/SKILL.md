@@ -13,6 +13,12 @@ Run from `C:\Eiti\eiti`:
 & "C:\Eiti\eiti\.agents\skills\deploy-lan-iis\scripts\deploy.ps1" -HostHeader "eiti.interno.local" -Port 80 -ConnectionString "<connection-string>"
 ```
 
+The deploy script auto-detects both layouts:
+- backend in `C:\Eiti\eiti` with frontend in `C:\EiTeFront\eiti-front`
+- backend in `C:\eiti` with frontend in `C:\eiti-front`
+
+If needed, you can still override paths explicitly with `-ApiProjectPath` and `-FrontRootPath`.
+
 Apply this flow:
 1. Run precheck.
 2. Build frontend.

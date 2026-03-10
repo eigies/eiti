@@ -4,9 +4,9 @@ param(
     [string]$HostHeader,
     [int]$Port = 80,
     [string]$SiteName = 'EitiSite',
-    [string]$ApiProjectPath = 'C:\Eiti\eiti\eiti.Api\eiti.Api.csproj',
+    [string]$ApiProjectPath,
     [string]$ApiPublishPath = 'C:\inetpub\eiti\api',
-    [string]$FrontRootPath = 'C:\EiTeFront\eiti-front',
+    [string]$FrontRootPath,
     [string]$FrontPublishPath = 'C:\inetpub\eiti\front',
     [Parameter(Mandatory = $true)]
     [string]$ConnectionString,
@@ -21,9 +21,35 @@ $ErrorActionPreference = 'Stop'
 function Write-Step([string]$Message) { Write-Host "`n=== $Message ===" -ForegroundColor Cyan }
 function Require-Command([string]$Name) { if (-not (Get-Command $Name -ErrorAction SilentlyContinue)) { throw "Missing command: $Name" } }
 function Ensure-Directory([string]$Path) { if (-not (Test-Path $Path)) { New-Item -ItemType Directory -Path $Path -Force | Out-Null } }
+function Resolve-FirstExistingPath([string[]]$Candidates, [string]$Label) {
+    foreach ($candidate in $Candidates) {
+        if ([string]::IsNullOrWhiteSpace($candidate)) { continue }
+        if (Test-Path $candidate) { return (Resolve-Path $candidate).Path }
+    }
+
+    throw "$Label not found. Checked: $($Candidates -join ', ')"
+}
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $precheckPath = Join-Path $scriptDir 'precheck.ps1'
+$backendRoot = Resolve-Path (Join-Path $scriptDir '..\..\..\..')
+
+if ([string]::IsNullOrWhiteSpace($ApiProjectPath)) {
+    $ApiProjectPath = Resolve-FirstExistingPath -Candidates @(
+        (Join-Path $backendRoot 'eiti.Api\eiti.Api.csproj'),
+        'C:\Eiti\eiti\eiti.Api\eiti.Api.csproj',
+        'C:\eiti\eiti.Api\eiti.Api.csproj'
+    ) -Label 'API project path'
+}
+
+if ([string]::IsNullOrWhiteSpace($FrontRootPath)) {
+    $FrontRootPath = Resolve-FirstExistingPath -Candidates @(
+        $env:EITI_FRONT_ROOT,
+        (Join-Path (Split-Path $backendRoot -Parent) 'eiti-front'),
+        'C:\EiTeFront\eiti-front',
+        'C:\eiti-front'
+    ) -Label 'Frontend root path'
+}
 
 if (-not $SkipPrecheck) {
     if (-not (Test-Path $precheckPath)) {
@@ -165,7 +191,12 @@ Set-ApiAppSettings -ApiPath $ApiPublishPath -ConnString $ConnectionString
 if (-not $SkipMigrations) {
     Write-Step 'Run EF migrations'
     $env:ConnectionStrings__DefaultConnection = $ConnectionString
-    dotnet ef database update --project 'C:\Eiti\eiti\eiti.Infrastructure\eiti.Infrastructure.csproj' --startup-project $ApiProjectPath --context ApplicationDbContext --configuration Release
+    $infraProjectPath = Resolve-FirstExistingPath -Candidates @(
+        (Join-Path $backendRoot 'eiti.Infrastructure\eiti.Infrastructure.csproj'),
+        'C:\Eiti\eiti\eiti.Infrastructure\eiti.Infrastructure.csproj',
+        'C:\eiti\eiti.Infrastructure\eiti.Infrastructure.csproj'
+    ) -Label 'Infrastructure project path'
+    dotnet ef database update --project $infraProjectPath --startup-project $ApiProjectPath --context ApplicationDbContext --configuration Release
     Remove-Item Env:\ConnectionStrings__DefaultConnection -ErrorAction SilentlyContinue
 }
 
