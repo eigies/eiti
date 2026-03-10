@@ -28,18 +28,22 @@ public sealed class UserRepository : IUserRepository
         Username username,
         CancellationToken cancellationToken = default)
     {
-        return await _context.Users
+        var users = await _context.Users
             .Include(u => u.Roles)
-            .FirstOrDefaultAsync(u => u.Username == username, cancellationToken);
+            .ToListAsync(cancellationToken);
+
+        return users.FirstOrDefault(u => u.Username.Value == username.Value);
     }
 
     public async Task<User?> GetByEmailAsync(
         Email email,
         CancellationToken cancellationToken = default)
     {
-        return await _context.Users
+        var users = await _context.Users
             .Include(u => u.Roles)
-            .FirstOrDefaultAsync(u => u.Email == email, cancellationToken);
+            .ToListAsync(cancellationToken);
+
+        return users.FirstOrDefault(u => u.Email.Value == email.Value);
     }
 
     public async Task<IReadOnlyList<User>> ListByCompanyAsync(
@@ -57,16 +61,16 @@ public sealed class UserRepository : IUserRepository
         Username username,
         CancellationToken cancellationToken = default)
     {
-        return await _context.Users
-            .AnyAsync(u => u.Username == username, cancellationToken);
+        var users = await _context.Users.ToListAsync(cancellationToken);
+        return users.Any(u => u.Username.Value == username.Value);
     }
 
     public async Task<bool> EmailExistsAsync(
         Email email,
         CancellationToken cancellationToken = default)
     {
-        return await _context.Users
-            .AnyAsync(u => u.Email == email, cancellationToken);
+        var users = await _context.Users.ToListAsync(cancellationToken);
+        return users.Any(u => u.Email.Value == email.Value);
     }
 
     public async Task<bool> UsernameExistsAsync(
@@ -74,8 +78,8 @@ public sealed class UserRepository : IUserRepository
         UserId excludingUserId,
         CancellationToken cancellationToken = default)
     {
-        return await _context.Users
-            .AnyAsync(u => u.Username == username && u.Id != excludingUserId, cancellationToken);
+        var users = await _context.Users.ToListAsync(cancellationToken);
+        return users.Any(u => u.Username.Value == username.Value && u.Id != excludingUserId);
     }
 
     public async Task<bool> EmailExistsAsync(
@@ -83,8 +87,8 @@ public sealed class UserRepository : IUserRepository
         UserId excludingUserId,
         CancellationToken cancellationToken = default)
     {
-        return await _context.Users
-            .AnyAsync(u => u.Email == email && u.Id != excludingUserId, cancellationToken);
+        var users = await _context.Users.ToListAsync(cancellationToken);
+        return users.Any(u => u.Email.Value == email.Value && u.Id != excludingUserId);
     }
 
     public async Task AddAsync(
