@@ -18,7 +18,7 @@ public sealed class SalesHandlersTests
     {
         var companyId = CompanyId.New();
         var branchId = BranchId.New();
-        var product = Product.Create(companyId, "MON-001", "MONITOR-001", "Contoso", "Monitor", null, 200m);
+        var product = Product.Create(companyId, "MON-001", "MONITOR-001", "Contoso", "Monitor", null, 200m, 150m, null);
         var sale = Sale.Create(
             companyId,
             branchId,

@@ -6,6 +6,8 @@ public sealed class Company : AggregateRoot<CompanyId>
 {
     public CompanyName Name { get; private set; }
     public CompanyDomain PrimaryDomain { get; private set; }
+    public bool IsWhatsAppEnabled { get; private set; }
+    public string? WhatsAppSenderPhone { get; private set; }
     public DateTime CreatedAt { get; private set; }
 
     private Company()
@@ -16,11 +18,15 @@ public sealed class Company : AggregateRoot<CompanyId>
         CompanyId id,
         CompanyName name,
         CompanyDomain primaryDomain,
+        bool isWhatsAppEnabled,
+        string? whatsAppSenderPhone,
         DateTime createdAt)
         : base(id)
     {
         Name = name;
         PrimaryDomain = primaryDomain;
+        IsWhatsAppEnabled = isWhatsAppEnabled;
+        WhatsAppSenderPhone = whatsAppSenderPhone;
         CreatedAt = createdAt;
     }
 
@@ -32,6 +38,8 @@ public sealed class Company : AggregateRoot<CompanyId>
             CompanyId.New(),
             name,
             primaryDomain,
+            false,
+            null,
             DateTime.UtcNow);
     }
 
@@ -41,14 +49,44 @@ public sealed class Company : AggregateRoot<CompanyId>
             id,
             CompanyName.Create("Legacy Company"),
             CompanyDomain.Create("legacy.local"),
+            false,
+            null,
             DateTime.UtcNow);
     }
 
     public void Update(
         CompanyName name,
-        CompanyDomain primaryDomain)
+        CompanyDomain primaryDomain,
+        bool isWhatsAppEnabled,
+        string? whatsAppSenderPhone)
     {
+        var normalizedSenderPhone = NormalizeSenderPhone(whatsAppSenderPhone);
+        if (isWhatsAppEnabled && string.IsNullOrWhiteSpace(normalizedSenderPhone))
+        {
+            throw new ArgumentException(
+                "WhatsApp sender phone is required when WhatsApp is enabled.",
+                nameof(whatsAppSenderPhone));
+        }
+
         Name = name;
         PrimaryDomain = primaryDomain;
+        IsWhatsAppEnabled = isWhatsAppEnabled;
+        WhatsAppSenderPhone = normalizedSenderPhone;
+    }
+
+    private static string? NormalizeSenderPhone(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var normalizedValue = value.Trim();
+        if (normalizedValue.Length > 30)
+        {
+            throw new ArgumentException("WhatsApp sender phone cannot exceed 30 characters.", nameof(value));
+        }
+
+        return normalizedValue;
     }
 }

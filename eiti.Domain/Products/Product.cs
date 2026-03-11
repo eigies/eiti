@@ -12,6 +12,8 @@ public sealed class Product : AggregateRoot<ProductId>
     public string Name { get; private set; }
     public string? Description { get; private set; }
     public decimal Price { get; private set; }
+    public decimal CostPrice { get; private set; }
+    public decimal? UnitPrice { get; private set; }
     public DateTime CreatedAt { get; private set; }
     public DateTime? UpdatedAt { get; private set; }
 
@@ -27,7 +29,9 @@ public sealed class Product : AggregateRoot<ProductId>
         string brand,
         string name,
         string? description,
-        decimal price,
+        decimal publicPrice,
+        decimal costPrice,
+        decimal? unitPrice,
         DateTime createdAt)
         : base(id)
     {
@@ -37,7 +41,9 @@ public sealed class Product : AggregateRoot<ProductId>
         Brand = brand;
         Name = name;
         Description = description;
-        Price = price;
+        Price = publicPrice;
+        CostPrice = costPrice;
+        UnitPrice = unitPrice;
         CreatedAt = createdAt;
     }
 
@@ -48,7 +54,9 @@ public sealed class Product : AggregateRoot<ProductId>
         string brand,
         string name,
         string? description,
-        decimal price)
+        decimal publicPrice,
+        decimal costPrice,
+        decimal? unitPrice)
     {
         var normalizedCode = NormalizeCode(code);
         var normalizedSku = NormalizeSku(sku);
@@ -56,9 +64,19 @@ public sealed class Product : AggregateRoot<ProductId>
         var normalizedName = NormalizeName(name);
         var normalizedDescription = NormalizeDescription(description);
 
-        if (price < 0)
+        if (publicPrice < 0)
         {
-            throw new ArgumentException("Price cannot be negative.", nameof(price));
+            throw new ArgumentException("Public price cannot be negative.", nameof(publicPrice));
+        }
+
+        if (costPrice < 0)
+        {
+            throw new ArgumentException("Cost price cannot be negative.", nameof(costPrice));
+        }
+
+        if (unitPrice.HasValue && unitPrice.Value < 0)
+        {
+            throw new ArgumentException("Unit price cannot be negative.", nameof(unitPrice));
         }
 
         return new Product(
@@ -69,7 +87,9 @@ public sealed class Product : AggregateRoot<ProductId>
             normalizedBrand,
             normalizedName,
             normalizedDescription,
-            price,
+            publicPrice,
+            costPrice,
+            unitPrice,
             DateTime.UtcNow);
     }
 
@@ -79,7 +99,9 @@ public sealed class Product : AggregateRoot<ProductId>
         string brand,
         string name,
         string? description,
-        decimal price)
+        decimal publicPrice,
+        decimal costPrice,
+        decimal? unitPrice)
     {
         var normalizedCode = NormalizeCode(code);
         var normalizedSku = NormalizeSku(sku);
@@ -87,9 +109,19 @@ public sealed class Product : AggregateRoot<ProductId>
         var normalizedName = NormalizeName(name);
         var normalizedDescription = NormalizeDescription(description);
 
-        if (price < 0)
+        if (publicPrice < 0)
         {
-            throw new ArgumentException("Price cannot be negative.", nameof(price));
+            throw new ArgumentException("Public price cannot be negative.", nameof(publicPrice));
+        }
+
+        if (costPrice < 0)
+        {
+            throw new ArgumentException("Cost price cannot be negative.", nameof(costPrice));
+        }
+
+        if (unitPrice.HasValue && unitPrice.Value < 0)
+        {
+            throw new ArgumentException("Unit price cannot be negative.", nameof(unitPrice));
         }
 
         Code = normalizedCode;
@@ -97,7 +129,9 @@ public sealed class Product : AggregateRoot<ProductId>
         Brand = normalizedBrand;
         Name = normalizedName;
         Description = normalizedDescription;
-        Price = price;
+        Price = publicPrice;
+        CostPrice = costPrice;
+        UnitPrice = unitPrice;
         UpdatedAt = DateTime.UtcNow;
     }
 

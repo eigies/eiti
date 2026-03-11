@@ -48,6 +48,8 @@ public sealed class GetCurrentCompanyHandler
                 company.Id.Value,
                 company.Name.Value,
                 company.PrimaryDomain.Value,
+                company.IsWhatsAppEnabled,
+                company.WhatsAppSenderPhone,
                 company.CreatedAt));
     }
 }

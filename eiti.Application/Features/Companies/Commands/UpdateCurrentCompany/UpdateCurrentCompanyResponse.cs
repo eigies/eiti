@@ -4,4 +4,6 @@ public sealed record UpdateCurrentCompanyResponse(
     Guid Id,
     string Name,
     string PrimaryDomain,
+    bool IsWhatsAppEnabled,
+    string? WhatsAppSenderPhone,
     DateTime CreatedAt);

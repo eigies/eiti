@@ -10,7 +10,9 @@ public sealed record UpdateSaleCommand(
     int IdSaleStatus,
     bool HasDelivery,
     Guid? CashDrawerId,
-    IReadOnlyList<UpdateSaleDetailItemRequest> Details
+    IReadOnlyList<UpdateSaleDetailItemRequest> Details,
+    IReadOnlyList<UpdateSalePaymentItemRequest> Payments,
+    IReadOnlyList<UpdateSaleTradeInItemRequest> TradeIns
 ) : IRequest<Result<UpdateSaleResponse>>, IRequirePermissions
 {
     public IReadOnlyCollection<string> RequiredPermissions => [PermissionCodes.SalesUpdate];
@@ -19,3 +21,13 @@ public sealed record UpdateSaleCommand(
 public sealed record UpdateSaleDetailItemRequest(
     Guid ProductId,
     int Quantity);
+
+public sealed record UpdateSalePaymentItemRequest(
+    int IdPaymentMethod,
+    decimal Amount,
+    string? Reference);
+
+public sealed record UpdateSaleTradeInItemRequest(
+    Guid ProductId,
+    int Quantity,
+    decimal Amount);

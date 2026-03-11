@@ -74,7 +74,19 @@ public sealed class UpdateCurrentCompanyHandler
                     "Another company already uses that domain."));
         }
 
-        company.Update(companyName, companyDomain);
+        var isWhatsAppEnabled = request.IsWhatsAppEnabled ?? company.IsWhatsAppEnabled;
+        var whatsAppSenderPhone = request.WhatsAppSenderPhone ?? company.WhatsAppSenderPhone;
+
+        try
+        {
+            company.Update(companyName, companyDomain, isWhatsAppEnabled, whatsAppSenderPhone);
+        }
+        catch (ArgumentException ex)
+        {
+            return Result<UpdateCurrentCompanyResponse>.Failure(
+                Error.Validation("Companies.UpdateCurrent.InvalidWhatsAppConfig", ex.Message));
+        }
+
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return Result<UpdateCurrentCompanyResponse>.Success(
@@ -82,6 +94,8 @@ public sealed class UpdateCurrentCompanyHandler
                 company.Id.Value,
                 company.Name.Value,
                 company.PrimaryDomain.Value,
+                company.IsWhatsAppEnabled,
+                company.WhatsAppSenderPhone,
                 company.CreatedAt));
     }
 }

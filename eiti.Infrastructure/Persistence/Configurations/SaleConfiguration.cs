@@ -97,7 +97,23 @@ public sealed class SaleConfiguration : IEntityTypeConfiguration<Sale>
             .HasForeignKey(detail => detail.SaleId)
             .OnDelete(DeleteBehavior.Cascade);
 
+        builder.HasMany(sale => sale.Payments)
+            .WithOne()
+            .HasForeignKey(payment => payment.SaleId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasMany(sale => sale.TradeIns)
+            .WithOne()
+            .HasForeignKey(tradeIn => tradeIn.SaleId)
+            .OnDelete(DeleteBehavior.Cascade);
+
         builder.Navigation(sale => sale.Details)
+            .UsePropertyAccessMode(PropertyAccessMode.Field);
+
+        builder.Navigation(sale => sale.Payments)
+            .UsePropertyAccessMode(PropertyAccessMode.Field);
+
+        builder.Navigation(sale => sale.TradeIns)
             .UsePropertyAccessMode(PropertyAccessMode.Field);
     }
 }

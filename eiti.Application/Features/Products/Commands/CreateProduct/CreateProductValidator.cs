@@ -26,6 +26,30 @@ public sealed class CreateProductValidator : AbstractValidator<CreateProductComm
             .MaximumLength(1000).WithMessage("Product description cannot exceed 1000 characters.");
 
         RuleFor(x => x.Price)
-            .GreaterThanOrEqualTo(0).WithMessage("Product price cannot be negative.");
+            .GreaterThanOrEqualTo(0)
+            .When(x => x.Price.HasValue)
+            .WithMessage("Product price cannot be negative.");
+
+        RuleFor(x => x.PublicPrice)
+            .GreaterThanOrEqualTo(0)
+            .When(x => x.PublicPrice.HasValue)
+            .WithMessage("Product public price cannot be negative.");
+
+        RuleFor(x => x.CostPrice)
+            .GreaterThanOrEqualTo(0)
+            .WithMessage("Product cost price cannot be negative.");
+
+        RuleFor(x => x.UnitPrice)
+            .GreaterThanOrEqualTo(0)
+            .When(x => x.UnitPrice.HasValue)
+            .WithMessage("Product unit price cannot be negative.");
+
+        RuleFor(x => x)
+            .Must(x => x.Price.HasValue || x.PublicPrice.HasValue)
+            .WithMessage("Either product price or public price is required.");
+
+        RuleFor(x => x)
+            .Must(x => !x.Price.HasValue || !x.PublicPrice.HasValue || x.Price.Value == x.PublicPrice.Value)
+            .WithMessage("When both price and public price are provided, they must be equal.");
     }
 }

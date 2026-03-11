@@ -41,7 +41,7 @@ public sealed class ProductHandlersTests
             unitOfWork.Object);
 
         var result = await handler.Handle(
-            new CreateProductCommand("NOTE-001", "NOTEBOOK-001", "Contoso", "Notebook", "Office device", 99.50m),
+            new CreateProductCommand("NOTE-001", "NOTEBOOK-001", "Contoso", "Notebook", "Office device", 99.50m, null, 60m, 9.95m),
             CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
@@ -52,7 +52,9 @@ public sealed class ProductHandlersTests
                 product.CompanyId == companyId &&
                 product.Brand == "Contoso" &&
                 product.Name == "Notebook" &&
-                product.Price == 99.50m),
+                product.Price == 99.50m &&
+                product.CostPrice == 60m &&
+                product.UnitPrice == 9.95m),
             It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -74,8 +76,8 @@ public sealed class ProductHandlersTests
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<Product>
             {
-                Product.Create(companyId, "LAP-001", "LAPTOP-001", "Contoso", "Laptop", "Portable", 1200m),
-                Product.Create(companyId, "MOU-001", "MOUSE-001", "Contoso", "Mouse", null, 25m)
+                Product.Create(companyId, "LAP-001", "LAPTOP-001", "Contoso", "Laptop", "Portable", 1200m, 900m, 100m),
+                Product.Create(companyId, "MOU-001", "MOUSE-001", "Contoso", "Mouse", null, 25m, 10m, null)
             });
 
         branchProductStockRepository
@@ -102,7 +104,7 @@ public sealed class ProductHandlersTests
     public async Task DeleteProduct_ShouldRemoveProductWhenItIsNotReferenced()
     {
         var companyId = CompanyId.New();
-        var product = Product.Create(companyId, "KEY-001", "KEYBOARD-001", "Contoso", "Keyboard", null, 50m);
+        var product = Product.Create(companyId, "KEY-001", "KEYBOARD-001", "Contoso", "Keyboard", null, 50m, 30m, null);
 
         var currentUserService = new Mock<ICurrentUserService>();
         var productRepository = new Mock<IProductRepository>();
@@ -156,9 +158,9 @@ public sealed class ProductHandlersTests
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<Product>
             {
-                Product.Create(companyId, "LAP-001", "LAPTOP-001", "Contoso", "Laptop", "Portable", 1200m),
-                Product.Create(companyId, "MOU-001", "MOUSE-001", "Contoso", "Mouse", null, 25m),
-                Product.Create(companyId, "KEY-001", "KEYBOARD-001", "Contoso", "Keyboard", null, 50m)
+                Product.Create(companyId, "LAP-001", "LAPTOP-001", "Contoso", "Laptop", "Portable", 1200m, 900m, 100m),
+                Product.Create(companyId, "MOU-001", "MOUSE-001", "Contoso", "Mouse", null, 25m, 10m, null),
+                Product.Create(companyId, "KEY-001", "KEYBOARD-001", "Contoso", "Keyboard", null, 50m, 20m, null)
             });
 
         branchProductStockRepository

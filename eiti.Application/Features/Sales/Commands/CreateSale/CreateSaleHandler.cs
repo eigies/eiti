@@ -5,6 +5,7 @@ using eiti.Application.Common;
 using eiti.Application.Common.Authorization;
 using eiti.Domain.Branches;
 using eiti.Domain.Cash;
+using eiti.Domain.Companies;
 using eiti.Domain.Customers;
 using eiti.Domain.Products;
 using eiti.Domain.Sales;
@@ -49,7 +50,8 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
 
     public async Task<Result<CreateSaleResponse>> Handle(CreateSaleCommand request, CancellationToken cancellationToken)
     {
-        if (!_currentUserService.IsAuthenticated || _currentUserService.CompanyId is null)
+        var companyId = _currentUserService.CompanyId;
+        if (!_currentUserService.IsAuthenticated || companyId is null)
         {
             return Result<CreateSaleResponse>.Failure(
                 Error.Unauthorized("Sales.Create.Unauthorized", "The current user is not authenticated."));
@@ -75,7 +77,7 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
                 Error.Validation("Sales.Create.CancelNotAllowed", "A sale cannot be created with Cancel status."));
         }
 
-        var branch = await _branchRepository.GetByIdAsync(new BranchId(request.BranchId), _currentUserService.CompanyId, cancellationToken);
+        var branch = await _branchRepository.GetByIdAsync(new BranchId(request.BranchId), companyId, cancellationToken);
         if (branch is null)
         {
             return Result<CreateSaleResponse>.Failure(
@@ -85,7 +87,7 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
         Customer? customer = null;
         if (request.CustomerId.HasValue)
         {
-            customer = await _customerRepository.GetByIdAsync(new CustomerId(request.CustomerId.Value), _currentUserService.CompanyId, cancellationToken);
+            customer = await _customerRepository.GetByIdAsync(new CustomerId(request.CustomerId.Value), companyId, cancellationToken);
             if (customer is null)
             {
                 return Result<CreateSaleResponse>.Failure(
@@ -106,7 +108,7 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
         {
             var product = await _productRepository.GetByIdAsync(
                 new ProductId(detail.ProductId),
-                _currentUserService.CompanyId,
+                companyId,
                 cancellationToken);
 
             if (product is null)
@@ -119,7 +121,7 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
             var stock = await _branchProductStockRepository.GetOrCreateAsync(
                 branch.Id,
                 product.Id,
-                _currentUserService.CompanyId,
+                companyId,
                 cancellationToken);
 
             stockMap[product.Id.Value] = stock;
@@ -147,7 +149,7 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
 
             await _stockMovementRepository.AddAsync(
                 StockMovement.Create(
-                    _currentUserService.CompanyId,
+                    companyId,
                     branch.Id,
                     stock.ProductId,
                     stock.Id,
@@ -160,19 +162,40 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
                 cancellationToken);
         }
 
+        List<SalePayment> salePayments;
+        try
+        {
+            salePayments = BuildPayments(request.Payments);
+        }
+        catch (ArgumentException ex)
+        {
+            return Result<CreateSaleResponse>.Failure(
+                Error.Validation("Sales.Create.InvalidPayments", ex.Message));
+        }
+
+        var tradeInsResult = await BuildTradeInsAsync(request.TradeIns, productMap, companyId, cancellationToken);
+        if (!tradeInsResult.IsSuccess)
+        {
+            return Result<CreateSaleResponse>.Failure(tradeInsResult.Error!);
+        }
+
+        var saleTradeIns = tradeInsResult.Value!;
+
         Sale sale;
 
         try
         {
             sale = Sale.Create(
-                _currentUserService.CompanyId,
+                companyId,
                 branch.Id,
                 customer?.Id,
                 request.HasDelivery,
                 requestedStatus == SaleStatus.Paid ? SaleStatus.OnHold : requestedStatus,
-                saleDetails);
+                saleDetails,
+                salePayments,
+                saleTradeIns);
         }
-        catch (ArgumentException ex)
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
         {
             return Result<CreateSaleResponse>.Failure(
                 Error.Validation("Sales.Create.InvalidInput", ex.Message));
@@ -180,28 +203,38 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
 
         if (requestedStatus == SaleStatus.Paid)
         {
-            if (_currentUserService.UserId is null || request.CashDrawerId is null)
-            {
-                return Result<CreateSaleResponse>.Failure(
-                    Error.Validation("Sales.Create.CashDrawerRequired", "A cash drawer is required to create a paid sale."));
-            }
+            var cashAmount = sale.GetPaymentAmount(SalePaymentMethod.Cash);
+            CashSession? session = null;
 
-            var session = await _cashSessionRepository.GetOpenForBranchAsync(
-                branch.Id,
-                new CashDrawerId(request.CashDrawerId.Value),
-                _currentUserService.CompanyId,
-                cancellationToken);
-
-            if (session is null)
+            if (cashAmount > 0)
             {
-                return Result<CreateSaleResponse>.Failure(
-                    Error.Conflict("Sales.Create.CashSessionRequired", "An open cash session is required for the selected cash drawer."));
+                if (_currentUserService.UserId is null || request.CashDrawerId is null)
+                {
+                    return Result<CreateSaleResponse>.Failure(
+                        Error.Validation("Sales.Create.CashDrawerRequired", "A cash drawer is required when cash amount is greater than zero."));
+                }
+
+                session = await _cashSessionRepository.GetOpenForBranchAsync(
+                    branch.Id,
+                    new CashDrawerId(request.CashDrawerId.Value),
+                    companyId,
+                    cancellationToken);
+
+                if (session is null)
+                {
+                    return Result<CreateSaleResponse>.Failure(
+                        Error.Conflict("Sales.Create.CashSessionRequired", "An open cash session is required for the selected cash drawer."));
+                }
             }
 
             try
             {
-                sale.MarkAsPaid(session.Id);
-                session.RegisterSaleIncome(sale.TotalAmount, sale.Id.Value, _currentUserService.UserId);
+                sale.MarkAsPaid(session?.Id);
+
+                if (cashAmount > 0)
+                {
+                    session!.RegisterSaleIncome(cashAmount, sale.Id.Value, _currentUserService.UserId!);
+                }
 
                 foreach (var detail in groupedDetails)
                 {
@@ -209,7 +242,7 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
                     stock.ConfirmSaleOut(detail.Quantity);
                     await _stockMovementRepository.AddAsync(
                         StockMovement.Create(
-                            _currentUserService.CompanyId,
+                            companyId,
                             branch.Id,
                             stock.ProductId,
                             stock.Id,
@@ -218,6 +251,30 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
                             "Sale",
                             sale.Id.Value,
                             "Stock confirmed as sold.",
+                            _currentUserService.UserId),
+                        cancellationToken);
+                }
+
+                foreach (var tradeIn in sale.TradeIns)
+                {
+                    var stock = await _branchProductStockRepository.GetOrCreateAsync(
+                        branch.Id,
+                        tradeIn.ProductId,
+                        companyId,
+                        cancellationToken);
+
+                    stock.ApplyManualEntry(tradeIn.Quantity);
+                    await _stockMovementRepository.AddAsync(
+                        StockMovement.Create(
+                            companyId,
+                            branch.Id,
+                            stock.ProductId,
+                            stock.Id,
+                            StockMovementType.TradeInIn,
+                            tradeIn.Quantity,
+                            "Sale",
+                            sale.Id.Value,
+                            "Stock received from product trade-in.",
                             _currentUserService.UserId),
                         cancellationToken);
                 }
@@ -246,17 +303,32 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
                 (int)sale.SaleStatus,
                 sale.SaleStatus.ToString(),
                 sale.TotalAmount,
+                sale.MonetaryPaidAmount,
+                sale.TradeInAmount,
+                sale.SettledAmount,
+                sale.PendingAmount,
                 sale.CreatedAt,
                 sale.PaidAt,
                 sale.UpdatedAt,
                 sale.IsModified,
                 sale.Details.Select(detail => new CreateSaleDetailItemResponse(
                     detail.ProductId.Value,
-                    productMap[detail.ProductId.Value].Name,
-                    productMap[detail.ProductId.Value].Brand,
+                    GetProductName(productMap, detail.ProductId.Value),
+                    GetProductBrand(productMap, detail.ProductId.Value),
                     detail.Quantity,
                     detail.UnitPrice,
-                    detail.TotalAmount)).ToList()));
+                    detail.TotalAmount)).ToList(),
+                sale.Payments.Select(payment => new CreateSalePaymentItemResponse(
+                    (int)payment.Method,
+                    payment.Method.ToString(),
+                    payment.Amount,
+                    payment.Reference)).ToList(),
+                sale.TradeIns.Select(tradeIn => new CreateSaleTradeInItemResponse(
+                    tradeIn.ProductId.Value,
+                    GetProductName(productMap, tradeIn.ProductId.Value),
+                    GetProductBrand(productMap, tradeIn.ProductId.Value),
+                    tradeIn.Quantity,
+                    tradeIn.Amount)).ToList()));
     }
 
     private static string? BuildCustomerDocument(Customer customer)
@@ -264,5 +336,76 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
         return customer.DocumentType is null || string.IsNullOrWhiteSpace(customer.DocumentNumber)
             ? null
             : $"{customer.DocumentType} {customer.DocumentNumber}";
+    }
+
+    private static string GetProductName(IDictionary<Guid, Product> productMap, Guid productId)
+    {
+        return productMap.TryGetValue(productId, out var product)
+            ? product.Name
+            : "Deleted product";
+    }
+
+    private static string GetProductBrand(IDictionary<Guid, Product> productMap, Guid productId)
+    {
+        return productMap.TryGetValue(productId, out var product)
+            ? product.Brand
+            : "Unknown";
+    }
+
+    private static List<SalePayment> BuildPayments(IReadOnlyList<CreateSalePaymentItemRequest> paymentRequests)
+    {
+        return paymentRequests
+            .GroupBy(payment => payment.IdPaymentMethod)
+            .Select(group =>
+            {
+                if (!Enum.IsDefined(typeof(SalePaymentMethod), group.Key))
+                {
+                    throw new ArgumentException($"The payment method '{group.Key}' is invalid.");
+                }
+
+                var method = (SalePaymentMethod)group.Key;
+                var amount = group.Sum(item => item.Amount);
+                var reference = group.Select(item => item.Reference).FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));
+                return SalePayment.Create(method, amount, reference);
+            })
+            .ToList();
+    }
+
+    private async Task<Result<List<SaleTradeIn>>> BuildTradeInsAsync(
+        IReadOnlyList<CreateSaleTradeInItemRequest> tradeInRequests,
+        IDictionary<Guid, Product> productMap,
+        CompanyId companyId,
+        CancellationToken cancellationToken)
+    {
+        var groupedTradeIns = tradeInRequests
+            .GroupBy(tradeIn => tradeIn.ProductId)
+            .Select(group => new
+            {
+                ProductId = group.Key,
+                Quantity = group.Sum(item => item.Quantity),
+                Amount = group.Sum(item => item.Amount)
+            })
+            .ToList();
+
+        var tradeIns = new List<SaleTradeIn>();
+
+        foreach (var tradeIn in groupedTradeIns)
+        {
+            var product = await _productRepository.GetByIdAsync(
+                new ProductId(tradeIn.ProductId),
+                companyId,
+                cancellationToken);
+
+            if (product is null)
+            {
+                return Result<List<SaleTradeIn>>.Failure(
+                    Error.NotFound("Sales.Create.TradeInProductNotFound", $"The trade-in product '{tradeIn.ProductId}' was not found."));
+            }
+
+            productMap[product.Id.Value] = product;
+            tradeIns.Add(SaleTradeIn.Create(product.Id, tradeIn.Quantity, tradeIn.Amount));
+        }
+
+        return Result<List<SaleTradeIn>>.Success(tradeIns);
     }
 }

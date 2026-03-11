@@ -54,8 +54,8 @@ public sealed class ListSalesHandler : IRequestHandler<ListSalesQuery, Result<IR
             cancellationToken);
 
         var productIds = sales
-            .SelectMany(sale => sale.Details)
-            .Select(detail => detail.ProductId.Value)
+            .SelectMany(sale => sale.Details.Select(detail => detail.ProductId.Value)
+                .Concat(sale.TradeIns.Select(tradeIn => tradeIn.ProductId.Value)))
             .Distinct()
             .ToList();
 
@@ -133,6 +133,10 @@ public sealed class ListSalesHandler : IRequestHandler<ListSalesQuery, Result<IR
                         (int)sale.SaleStatus,
                         sale.SaleStatus.ToString(),
                         sale.TotalAmount,
+                        sale.MonetaryPaidAmount,
+                        sale.TradeInAmount,
+                        sale.SettledAmount,
+                        sale.PendingAmount,
                         sale.CreatedAt,
                         sale.PaidAt,
                         sale.UpdatedAt,
@@ -147,6 +151,21 @@ public sealed class ListSalesHandler : IRequestHandler<ListSalesQuery, Result<IR
                                 detail.Quantity,
                                 detail.UnitPrice,
                                 detail.TotalAmount);
+                        }).ToList(),
+                        sale.Payments.Select(payment => new ListSalesPaymentItemResponse(
+                            (int)payment.Method,
+                            payment.Method.ToString(),
+                            payment.Amount,
+                            payment.Reference)).ToList(),
+                        sale.TradeIns.Select(tradeIn =>
+                        {
+                            productMap.TryGetValue(tradeIn.ProductId.Value, out var product);
+                            return new ListSalesTradeInItemResponse(
+                                tradeIn.ProductId.Value,
+                                product?.Name ?? "Deleted product",
+                                product?.Brand ?? "Unknown",
+                                tradeIn.Quantity,
+                                tradeIn.Amount);
                         }).ToList());
                 })
                 .ToList());

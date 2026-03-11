@@ -248,6 +248,9 @@ namespace eiti.Infrastructure.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
+                    b.Property<bool>("IsWhatsAppEnabled")
+                        .HasColumnType("bit");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -257,6 +260,10 @@ namespace eiti.Infrastructure.Migrations
                         .IsRequired()
                         .HasMaxLength(255)
                         .HasColumnType("nvarchar(255)");
+
+                    b.Property<string>("WhatsAppSenderPhone")
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
 
                     b.HasKey("Id");
 
@@ -546,6 +553,9 @@ namespace eiti.Infrastructure.Migrations
                     b.Property<Guid>("CompanyId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<decimal>("CostPrice")
+                        .HasColumnType("decimal(18,2)");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
@@ -565,6 +575,9 @@ namespace eiti.Infrastructure.Migrations
                         .IsRequired()
                         .HasMaxLength(80)
                         .HasColumnType("nvarchar(80)");
+
+                    b.Property<decimal?>("UnitPrice")
+                        .HasColumnType("decimal(18,2)");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("datetime2");
@@ -662,6 +675,47 @@ namespace eiti.Infrastructure.Migrations
                     b.HasIndex("ProductId");
 
                     b.ToTable("SaleDetails", (string)null);
+                });
+
+            modelBuilder.Entity("eiti.Domain.Sales.SalePayment", b =>
+                {
+                    b.Property<Guid>("SaleId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("Method")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("Reference")
+                        .HasMaxLength(120)
+                        .HasColumnType("nvarchar(120)");
+
+                    b.HasKey("SaleId", "Method");
+
+                    b.ToTable("SalePayments", (string)null);
+                });
+
+            modelBuilder.Entity("eiti.Domain.Sales.SaleTradeIn", b =>
+                {
+                    b.Property<Guid>("SaleId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("ProductId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<int>("Quantity")
+                        .HasColumnType("int");
+
+                    b.HasKey("SaleId", "ProductId");
+
+                    b.HasIndex("ProductId");
+
+                    b.ToTable("SaleTradeIns", (string)null);
                 });
 
             modelBuilder.Entity("eiti.Domain.Stock.BranchProductStock", b =>
@@ -1071,6 +1125,30 @@ namespace eiti.Infrastructure.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("eiti.Domain.Sales.SalePayment", b =>
+                {
+                    b.HasOne("eiti.Domain.Sales.Sale", null)
+                        .WithMany("Payments")
+                        .HasForeignKey("SaleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("eiti.Domain.Sales.SaleTradeIn", b =>
+                {
+                    b.HasOne("eiti.Domain.Products.Product", null)
+                        .WithMany()
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("eiti.Domain.Sales.Sale", null)
+                        .WithMany("TradeIns")
+                        .HasForeignKey("SaleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("eiti.Domain.Stock.BranchProductStock", b =>
                 {
                     b.HasOne("eiti.Domain.Branches.Branch", null)
@@ -1145,6 +1223,10 @@ namespace eiti.Infrastructure.Migrations
             modelBuilder.Entity("eiti.Domain.Sales.Sale", b =>
                 {
                     b.Navigation("Details");
+
+                    b.Navigation("Payments");
+
+                    b.Navigation("TradeIns");
                 });
 
             modelBuilder.Entity("eiti.Domain.Users.User", b =>

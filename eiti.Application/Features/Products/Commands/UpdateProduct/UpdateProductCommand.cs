@@ -10,5 +10,8 @@ public sealed record UpdateProductCommand(
     string Brand,
     string Name,
     string? Description,
-    decimal Price
+    decimal? Price,
+    decimal? PublicPrice,
+    decimal CostPrice,
+    decimal? UnitPrice
 ) : IRequest<Result<UpdateProductResponse>>;

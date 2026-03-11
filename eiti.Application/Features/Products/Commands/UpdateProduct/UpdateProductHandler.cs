@@ -89,6 +89,12 @@ public sealed class UpdateProductHandler
                     "Another product with the same SKU already exists."));
         }
 
+        var resolvedPublicPriceResult = ResolvePublicPrice(request.Price, request.PublicPrice);
+        if (!resolvedPublicPriceResult.IsSuccess)
+        {
+            return Result<UpdateProductResponse>.Failure(resolvedPublicPriceResult.Error!);
+        }
+
         try
         {
             product.Update(
@@ -97,7 +103,9 @@ public sealed class UpdateProductHandler
                 request.Brand,
                 request.Name,
                 request.Description,
-                request.Price);
+                resolvedPublicPriceResult.Value,
+                request.CostPrice,
+                request.UnitPrice);
         }
         catch (ArgumentException ex)
         {
@@ -116,10 +124,36 @@ public sealed class UpdateProductHandler
                 product.Name,
                 product.Description,
                 product.Price,
+                product.Price,
+                product.CostPrice,
+                product.UnitPrice,
                 0,
                 0,
                 0,
                 product.CreatedAt,
                 product.UpdatedAt));
+    }
+
+    private static Result<decimal> ResolvePublicPrice(decimal? legacyPrice, decimal? publicPrice)
+    {
+        if (legacyPrice.HasValue && publicPrice.HasValue && legacyPrice.Value != publicPrice.Value)
+        {
+            return Result<decimal>.Failure(
+                Error.Validation(
+                    "Products.Update.PriceConflict",
+                    "When both price and public price are provided, they must be equal."));
+        }
+
+        var resolved = publicPrice ?? legacyPrice;
+
+        if (!resolved.HasValue)
+        {
+            return Result<decimal>.Failure(
+                Error.Validation(
+                    "Products.Update.PublicPriceRequired",
+                    "Either price or public price is required."));
+        }
+
+        return Result<decimal>.Success(resolved.Value);
     }
 }

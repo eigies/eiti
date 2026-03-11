@@ -4,6 +4,7 @@ using eiti.Application.Abstractions.Services;
 using eiti.Application.Common;
 using eiti.Application.Common.Authorization;
 using eiti.Domain.Cash;
+using eiti.Domain.Companies;
 using eiti.Domain.Customers;
 using eiti.Domain.Products;
 using eiti.Domain.Sales;
@@ -49,7 +50,8 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
 
     public async Task<Result<UpdateSaleResponse>> Handle(UpdateSaleCommand request, CancellationToken cancellationToken)
     {
-        if (!_currentUserService.IsAuthenticated || _currentUserService.CompanyId is null)
+        var companyId = _currentUserService.CompanyId;
+        if (!_currentUserService.IsAuthenticated || companyId is null)
         {
             return Result<UpdateSaleResponse>.Failure(
                 Error.Unauthorized("Sales.Update.Unauthorized", "The current user is not authenticated."));
@@ -62,7 +64,7 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
         }
 
         var sale = await _saleRepository.GetByIdAsync(new SaleId(request.Id), cancellationToken);
-        if (sale is null || sale.CompanyId != _currentUserService.CompanyId)
+        if (sale is null || sale.CompanyId != companyId)
         {
             return Result<UpdateSaleResponse>.Failure(
                 Error.NotFound("Sales.Update.NotFound", "The requested sale was not found."));
@@ -79,7 +81,7 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
         Customer? customer = null;
         if (request.CustomerId.HasValue)
         {
-            customer = await _customerRepository.GetByIdAsync(new CustomerId(request.CustomerId.Value), _currentUserService.CompanyId, cancellationToken);
+            customer = await _customerRepository.GetByIdAsync(new CustomerId(request.CustomerId.Value), companyId, cancellationToken);
             if (customer is null)
             {
                 return Result<UpdateSaleResponse>.Failure(
@@ -101,6 +103,14 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
             })
             .ToList();
 
+        var requestedStatus = (SaleStatus)request.IdSaleStatus;
+
+        if (requestedStatus == SaleStatus.Paid && !_currentUserService.HasPermission(PermissionCodes.SalesPay))
+        {
+            return Result<UpdateSaleResponse>.Failure(
+                Error.Forbidden("Sales.Update.PaymentForbidden", "The current user does not have permission to charge sales."));
+        }
+
         var productMap = new Dictionary<Guid, Product>();
         var saleDetails = new List<SaleDetail>();
         var stockMap = new Dictionary<Guid, BranchProductStock>();
@@ -109,7 +119,7 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
         {
             var product = await _productRepository.GetByIdAsync(
                 new ProductId(detail.ProductId),
-                _currentUserService.CompanyId,
+                companyId,
                 cancellationToken);
 
             if (product is null)
@@ -122,7 +132,7 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
             var stock = await _branchProductStockRepository.GetOrCreateAsync(
                 sale.BranchId,
                 product.Id,
-                _currentUserService.CompanyId,
+                companyId,
                 cancellationToken);
 
             stockMap[product.Id.Value] = stock;
@@ -134,7 +144,7 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
             var stock = await _branchProductStockRepository.GetOrCreateAsync(
                 sale.BranchId,
                 new ProductId(currentDetail.ProductId),
-                _currentUserService.CompanyId,
+                companyId,
                 cancellationToken);
 
             try
@@ -154,7 +164,7 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
 
             await _stockMovementRepository.AddAsync(
                 StockMovement.Create(
-                    _currentUserService.CompanyId,
+                    companyId,
                     sale.BranchId,
                     stock.ProductId,
                     stock.Id,
@@ -167,31 +177,41 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
                 cancellationToken);
         }
 
-        var requestedStatus = (SaleStatus)request.IdSaleStatus;
+        IReadOnlyList<SalePayment> salePayments = sale.Payments.ToList();
+        IReadOnlyList<SaleTradeIn> saleTradeIns = sale.TradeIns.ToList();
 
-        if (requestedStatus == SaleStatus.Paid && !_currentUserService.HasPermission(PermissionCodes.SalesPay))
+        if (requestedStatus != SaleStatus.Cancel)
         {
-            return Result<UpdateSaleResponse>.Failure(
-                Error.Forbidden("Sales.Update.PaymentForbidden", "The current user does not have permission to charge sales."));
+            try
+            {
+                salePayments = BuildPayments(request.Payments);
+            }
+            catch (ArgumentException ex)
+            {
+                return Result<UpdateSaleResponse>.Failure(
+                    Error.Validation("Sales.Update.InvalidPayments", ex.Message));
+            }
+
+            var tradeInsResult = await BuildTradeInsAsync(request.TradeIns, productMap, companyId, cancellationToken);
+            if (!tradeInsResult.IsSuccess)
+            {
+                return Result<UpdateSaleResponse>.Failure(tradeInsResult.Error);
+            }
+
+            saleTradeIns = tradeInsResult.Value;
         }
 
         try
         {
             if (requestedStatus == SaleStatus.Paid)
             {
-                if (_currentUserService.UserId is null || request.CashDrawerId is null)
-                {
-                    return Result<UpdateSaleResponse>.Failure(
-                        Error.Validation("Sales.Update.CashDrawerRequired", "A cash drawer is required to mark the sale as paid."));
-                }
-
                 foreach (var detail in groupedDetails)
                 {
                     var stock = stockMap[detail.ProductId];
                     stock.Reserve(detail.Quantity);
                     await _stockMovementRepository.AddAsync(
                         StockMovement.Create(
-                            _currentUserService.CompanyId,
+                            companyId,
                             sale.BranchId,
                             stock.ProductId,
                             stock.Id,
@@ -204,22 +224,38 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
                         cancellationToken);
                 }
 
-                sale.Update(customer?.Id, SaleStatus.OnHold, request.HasDelivery, saleDetails);
+                sale.Update(customer?.Id, SaleStatus.OnHold, request.HasDelivery, saleDetails, salePayments, saleTradeIns);
 
-                var session = await _cashSessionRepository.GetOpenForBranchAsync(
-                    sale.BranchId,
-                    new CashDrawerId(request.CashDrawerId.Value),
-                    _currentUserService.CompanyId,
-                    cancellationToken);
+                var cashAmount = sale.GetPaymentAmount(SalePaymentMethod.Cash);
+                CashSession? session = null;
 
-                if (session is null)
+                if (cashAmount > 0)
                 {
-                    return Result<UpdateSaleResponse>.Failure(
-                        Error.Conflict("Sales.Update.CashSessionRequired", "An open cash session is required for the selected cash drawer."));
+                    if (_currentUserService.UserId is null || request.CashDrawerId is null)
+                    {
+                        return Result<UpdateSaleResponse>.Failure(
+                            Error.Validation("Sales.Update.CashDrawerRequired", "A cash drawer is required when cash amount is greater than zero."));
+                    }
+
+                    session = await _cashSessionRepository.GetOpenForBranchAsync(
+                        sale.BranchId,
+                        new CashDrawerId(request.CashDrawerId.Value),
+                        companyId,
+                        cancellationToken);
+
+                    if (session is null)
+                    {
+                        return Result<UpdateSaleResponse>.Failure(
+                            Error.Conflict("Sales.Update.CashSessionRequired", "An open cash session is required for the selected cash drawer."));
+                    }
                 }
 
-                sale.MarkAsPaid(session.Id);
-                session.RegisterSaleIncome(sale.TotalAmount, sale.Id.Value, _currentUserService.UserId);
+                sale.MarkAsPaid(session?.Id);
+
+                if (cashAmount > 0)
+                {
+                    session!.RegisterSaleIncome(cashAmount, sale.Id.Value, _currentUserService.UserId!);
+                }
 
                 foreach (var detail in groupedDetails)
                 {
@@ -227,7 +263,7 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
                     stock.ConfirmSaleOut(detail.Quantity);
                     await _stockMovementRepository.AddAsync(
                         StockMovement.Create(
-                            _currentUserService.CompanyId,
+                            companyId,
                             sale.BranchId,
                             stock.ProductId,
                             stock.Id,
@@ -239,13 +275,43 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
                             _currentUserService.UserId),
                         cancellationToken);
                 }
+
+                foreach (var tradeIn in sale.TradeIns)
+                {
+                    var stock = await _branchProductStockRepository.GetOrCreateAsync(
+                        sale.BranchId,
+                        tradeIn.ProductId,
+                        companyId,
+                        cancellationToken);
+
+                    stock.ApplyManualEntry(tradeIn.Quantity);
+                    await _stockMovementRepository.AddAsync(
+                        StockMovement.Create(
+                            companyId,
+                            sale.BranchId,
+                            stock.ProductId,
+                            stock.Id,
+                            StockMovementType.TradeInIn,
+                            tradeIn.Quantity,
+                            "Sale",
+                            sale.Id.Value,
+                            "Stock received from product trade-in.",
+                            _currentUserService.UserId),
+                        cancellationToken);
+                }
             }
             else if (requestedStatus == SaleStatus.Cancel)
             {
                 var currentDetailsSnapshot = currentGroupedDetails.Select(detail =>
                     SaleDetail.Create(new ProductId(detail.ProductId), detail.Quantity, detail.UnitPrice)).ToList();
 
-                sale.Update(customer?.Id, requestedStatus, request.HasDelivery, currentDetailsSnapshot);
+                sale.Update(
+                    customer?.Id,
+                    requestedStatus,
+                    request.HasDelivery,
+                    currentDetailsSnapshot,
+                    sale.Payments.ToList(),
+                    sale.TradeIns.ToList());
             }
             else
             {
@@ -255,7 +321,7 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
                     stock.Reserve(detail.Quantity);
                     await _stockMovementRepository.AddAsync(
                         StockMovement.Create(
-                            _currentUserService.CompanyId,
+                            companyId,
                             sale.BranchId,
                             stock.ProductId,
                             stock.Id,
@@ -268,14 +334,14 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
                         cancellationToken);
                 }
 
-                sale.Update(customer?.Id, requestedStatus, request.HasDelivery, saleDetails);
+                sale.Update(customer?.Id, requestedStatus, request.HasDelivery, saleDetails, salePayments, saleTradeIns);
             }
 
             if (requestedStatus == SaleStatus.Cancel && existingTransportAssignmentId is not null)
             {
                 var assignment = await _saleTransportAssignmentRepository.GetByIdAsync(
                     existingTransportAssignmentId,
-                    _currentUserService.CompanyId,
+                    companyId,
                     cancellationToken);
 
                 if (assignment is not null && assignment.Status != SaleTransportStatus.Delivered)
@@ -311,17 +377,32 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
                 (int)sale.SaleStatus,
                 sale.SaleStatus.ToString(),
                 sale.TotalAmount,
+                sale.MonetaryPaidAmount,
+                sale.TradeInAmount,
+                sale.SettledAmount,
+                sale.PendingAmount,
                 sale.CreatedAt,
                 sale.PaidAt,
                 sale.UpdatedAt,
                 sale.IsModified,
                 sale.Details.Select(detail => new UpdateSaleDetailItemResponse(
                     detail.ProductId.Value,
-                    productMap[detail.ProductId.Value].Name,
-                    productMap[detail.ProductId.Value].Brand,
+                    GetProductName(productMap, detail.ProductId.Value),
+                    GetProductBrand(productMap, detail.ProductId.Value),
                     detail.Quantity,
                     detail.UnitPrice,
-                    detail.TotalAmount)).ToList()));
+                    detail.TotalAmount)).ToList(),
+                sale.Payments.Select(payment => new UpdateSalePaymentItemResponse(
+                    (int)payment.Method,
+                    payment.Method.ToString(),
+                    payment.Amount,
+                    payment.Reference)).ToList(),
+                sale.TradeIns.Select(tradeIn => new UpdateSaleTradeInItemResponse(
+                    tradeIn.ProductId.Value,
+                    GetProductName(productMap, tradeIn.ProductId.Value),
+                    GetProductBrand(productMap, tradeIn.ProductId.Value),
+                    tradeIn.Quantity,
+                    tradeIn.Amount)).ToList()));
     }
 
     private static string? BuildCustomerDocument(Customer customer)
@@ -329,5 +410,76 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
         return customer.DocumentType is null || string.IsNullOrWhiteSpace(customer.DocumentNumber)
             ? null
             : $"{customer.DocumentType} {customer.DocumentNumber}";
+    }
+
+    private static string GetProductName(IDictionary<Guid, Product> productMap, Guid productId)
+    {
+        return productMap.TryGetValue(productId, out var product)
+            ? product.Name
+            : "Deleted product";
+    }
+
+    private static string GetProductBrand(IDictionary<Guid, Product> productMap, Guid productId)
+    {
+        return productMap.TryGetValue(productId, out var product)
+            ? product.Brand
+            : "Unknown";
+    }
+
+    private static List<SalePayment> BuildPayments(IReadOnlyList<UpdateSalePaymentItemRequest> paymentRequests)
+    {
+        return paymentRequests
+            .GroupBy(payment => payment.IdPaymentMethod)
+            .Select(group =>
+            {
+                if (!Enum.IsDefined(typeof(SalePaymentMethod), group.Key))
+                {
+                    throw new ArgumentException($"The payment method '{group.Key}' is invalid.");
+                }
+
+                var method = (SalePaymentMethod)group.Key;
+                var amount = group.Sum(item => item.Amount);
+                var reference = group.Select(item => item.Reference).FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));
+                return SalePayment.Create(method, amount, reference);
+            })
+            .ToList();
+    }
+
+    private async Task<Result<List<SaleTradeIn>>> BuildTradeInsAsync(
+        IReadOnlyList<UpdateSaleTradeInItemRequest> tradeInRequests,
+        IDictionary<Guid, Product> productMap,
+        CompanyId companyId,
+        CancellationToken cancellationToken)
+    {
+        var groupedTradeIns = tradeInRequests
+            .GroupBy(tradeIn => tradeIn.ProductId)
+            .Select(group => new
+            {
+                ProductId = group.Key,
+                Quantity = group.Sum(item => item.Quantity),
+                Amount = group.Sum(item => item.Amount)
+            })
+            .ToList();
+
+        var tradeIns = new List<SaleTradeIn>();
+
+        foreach (var tradeIn in groupedTradeIns)
+        {
+            var product = await _productRepository.GetByIdAsync(
+                new ProductId(tradeIn.ProductId),
+                companyId,
+                cancellationToken);
+
+            if (product is null)
+            {
+                return Result<List<SaleTradeIn>>.Failure(
+                    Error.NotFound("Sales.Update.TradeInProductNotFound", $"The trade-in product '{tradeIn.ProductId}' was not found."));
+            }
+
+            productMap[product.Id.Value] = product;
+            tradeIns.Add(SaleTradeIn.Create(product.Id, tradeIn.Quantity, tradeIn.Amount));
+        }
+
+        return Result<List<SaleTradeIn>>.Success(tradeIns);
     }
 }

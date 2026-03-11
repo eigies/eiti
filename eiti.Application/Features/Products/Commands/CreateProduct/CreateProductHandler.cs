@@ -69,6 +69,11 @@ public sealed class CreateProductHandler
         }
 
         Product product;
+        var resolvedPublicPriceResult = ResolvePublicPrice(request.Price, request.PublicPrice);
+        if (!resolvedPublicPriceResult.IsSuccess)
+        {
+            return Result<CreateProductResponse>.Failure(resolvedPublicPriceResult.Error!);
+        }
 
         try
         {
@@ -79,7 +84,9 @@ public sealed class CreateProductHandler
                 request.Brand,
                 request.Name,
                 request.Description,
-                request.Price);
+                resolvedPublicPriceResult.Value,
+                request.CostPrice,
+                request.UnitPrice);
         }
         catch (ArgumentException ex)
         {
@@ -108,9 +115,35 @@ public sealed class CreateProductHandler
                 product.Name,
                 product.Description,
                 product.Price,
+                product.Price,
+                product.CostPrice,
+                product.UnitPrice,
                 0,
                 0,
                 0,
                 product.CreatedAt));
+    }
+
+    private static Result<decimal> ResolvePublicPrice(decimal? legacyPrice, decimal? publicPrice)
+    {
+        if (legacyPrice.HasValue && publicPrice.HasValue && legacyPrice.Value != publicPrice.Value)
+        {
+            return Result<decimal>.Failure(
+                Error.Validation(
+                    "Products.Create.PriceConflict",
+                    "When both price and public price are provided, they must be equal."));
+        }
+
+        var resolved = publicPrice ?? legacyPrice;
+
+        if (!resolved.HasValue)
+        {
+            return Result<decimal>.Failure(
+                Error.Validation(
+                    "Products.Create.PublicPriceRequired",
+                    "Either price or public price is required."));
+        }
+
+        return Result<decimal>.Success(resolved.Value);
     }
 }

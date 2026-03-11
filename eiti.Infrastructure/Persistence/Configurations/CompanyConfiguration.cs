@@ -32,6 +32,13 @@ public sealed class CompanyConfiguration : IEntityTypeConfiguration<Company>
             .HasMaxLength(255)
             .IsRequired();
 
+        builder.Property(company => company.IsWhatsAppEnabled)
+            .IsRequired();
+
+        builder.Property(company => company.WhatsAppSenderPhone)
+            .HasMaxLength(30)
+            .IsRequired(false);
+
         builder.Property(company => company.CreatedAt).IsRequired();
 
         builder.HasIndex(company => company.PrimaryDomain).IsUnique();

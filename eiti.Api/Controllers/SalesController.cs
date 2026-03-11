@@ -2,6 +2,7 @@ using eiti.Api.Extensions;
 using eiti.Application.Features.SaleTransport;
 using eiti.Application.Features.Sales.Commands.CreateSale;
 using eiti.Application.Features.Sales.Commands.DeleteSale;
+using eiti.Application.Features.Sales.Commands.SendSaleWhatsApp;
 using eiti.Application.Features.Sales.Commands.UpdateSale;
 using eiti.Application.Features.Sales.Queries.ListSales;
 using MediatR;
@@ -97,6 +98,14 @@ public sealed class SalesController : ControllerBase
         var result = await _sender.Send(new DeleteSaleTransportCommand(id), cancellationToken);
         return result.ToActionResult();
     }
+
+    [HttpPost("{id:guid}/send-whatsapp")]
+    public async Task<IActionResult> SendSaleWhatsApp(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await _sender.Send(new SendSaleWhatsAppCommand(id), cancellationToken);
+        return result.ToActionResult();
+    }
 }
 
 public sealed record UpdateSaleTransportStatusRequest(int Status);
+

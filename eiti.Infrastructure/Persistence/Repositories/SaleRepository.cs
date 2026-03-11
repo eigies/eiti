@@ -27,6 +27,8 @@ public sealed class SaleRepository : ISaleRepository
     {
         return await _context.Sales
             .Include(sale => sale.Details)
+            .Include(sale => sale.Payments)
+            .Include(sale => sale.TradeIns)
             .FirstOrDefaultAsync(sale => sale.Id == id, cancellationToken);
     }
 
@@ -44,6 +46,8 @@ public sealed class SaleRepository : ISaleRepository
     {
         var query = _context.Sales
             .Include(sale => sale.Details)
+            .Include(sale => sale.Payments)
+            .Include(sale => sale.TradeIns)
             .Where(sale => sale.CompanyId == companyId);
 
         if (dateFrom.HasValue)

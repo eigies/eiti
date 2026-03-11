@@ -6,5 +6,6 @@ public enum StockMovementType
     ManualAdjustment = 2,
     Reserve = 3,
     ReleaseReservation = 4,
-    SaleOut = 5
+    SaleOut = 5,
+    TradeInIn = 6
 }

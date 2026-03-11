@@ -9,5 +9,8 @@ public sealed record CreateProductCommand(
     string Brand,
     string Name,
     string? Description,
-    decimal Price
+    decimal? Price,
+    decimal? PublicPrice,
+    decimal CostPrice,
+    decimal? UnitPrice
 ) : IRequest<Result<CreateProductResponse>>;
