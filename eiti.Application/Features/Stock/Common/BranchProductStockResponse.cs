@@ -11,6 +11,7 @@ public sealed record BranchProductStockResponse(
     decimal PublicPrice,
     decimal CostPrice,
     decimal? UnitPrice,
+    bool AllowsManualValueInSale,
     int OnHandQuantity,
     int ReservedQuantity,
     int AvailableQuantity,

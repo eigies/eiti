@@ -11,6 +11,7 @@ public sealed record UpdateProductResponse(
     decimal PublicPrice,
     decimal CostPrice,
     decimal? UnitPrice,
+    bool AllowsManualValueInSale,
     int TotalOnHandQuantity,
     int TotalReservedQuantity,
     int TotalAvailableQuantity,

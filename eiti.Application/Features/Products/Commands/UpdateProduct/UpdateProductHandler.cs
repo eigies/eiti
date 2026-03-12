@@ -89,7 +89,10 @@ public sealed class UpdateProductHandler
                     "Another product with the same SKU already exists."));
         }
 
-        var resolvedPublicPriceResult = ResolvePublicPrice(request.Price, request.PublicPrice);
+        var resolvedPublicPriceResult = ResolvePublicPrice(
+            request.Price,
+            request.PublicPrice,
+            request.AllowsManualValueInSale);
         if (!resolvedPublicPriceResult.IsSuccess)
         {
             return Result<UpdateProductResponse>.Failure(resolvedPublicPriceResult.Error!);
@@ -105,7 +108,8 @@ public sealed class UpdateProductHandler
                 request.Description,
                 resolvedPublicPriceResult.Value,
                 request.CostPrice,
-                request.UnitPrice);
+                request.UnitPrice,
+                request.AllowsManualValueInSale);
         }
         catch (ArgumentException ex)
         {
@@ -127,6 +131,7 @@ public sealed class UpdateProductHandler
                 product.Price,
                 product.CostPrice,
                 product.UnitPrice,
+                product.AllowsManualValueInSale,
                 0,
                 0,
                 0,
@@ -134,7 +139,10 @@ public sealed class UpdateProductHandler
                 product.UpdatedAt));
     }
 
-    private static Result<decimal> ResolvePublicPrice(decimal? legacyPrice, decimal? publicPrice)
+    private static Result<decimal> ResolvePublicPrice(
+        decimal? legacyPrice,
+        decimal? publicPrice,
+        bool allowsManualValueInSale)
     {
         if (legacyPrice.HasValue && publicPrice.HasValue && legacyPrice.Value != publicPrice.Value)
         {
@@ -152,6 +160,14 @@ public sealed class UpdateProductHandler
                 Error.Validation(
                     "Products.Update.PublicPriceRequired",
                     "Either price or public price is required."));
+        }
+
+        if (!allowsManualValueInSale && resolved.Value <= 0)
+        {
+            return Result<decimal>.Failure(
+                Error.Validation(
+                    "Products.Update.PublicPriceMustBePositive",
+                    "Public price must be greater than zero unless manual value in sale is allowed."));
         }
 
         return Result<decimal>.Success(resolved.Value);

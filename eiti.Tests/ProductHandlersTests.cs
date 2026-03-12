@@ -53,9 +53,115 @@ public sealed class ProductHandlersTests
                 product.Brand == "Contoso" &&
                 product.Name == "Notebook" &&
                 product.Price == 99.50m &&
+                product.AllowsManualValueInSale == false &&
                 product.CostPrice == 60m &&
                 product.UnitPrice == 9.95m),
             It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task CreateProduct_ShouldAllowZeroPublicPrice_WhenManualValueInSaleIsEnabled()
+    {
+        var companyId = CompanyId.New();
+
+        var currentUserService = new Mock<ICurrentUserService>();
+        var productRepository = new Mock<IProductRepository>();
+        var companyOnboardingRepository = new Mock<ICompanyOnboardingRepository>();
+        var unitOfWork = new Mock<IUnitOfWork>();
+
+        currentUserService.SetupGet(service => service.IsAuthenticated).Returns(true);
+        currentUserService.SetupGet(service => service.CompanyId).Returns(companyId);
+
+        productRepository
+            .Setup(repository => repository.NameExistsAsync(
+                companyId,
+                "Usado recibido",
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+
+        productRepository
+            .Setup(repository => repository.CodeExistsAsync(
+                companyId,
+                "TRADE-001",
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+
+        productRepository
+            .Setup(repository => repository.SkuExistsAsync(
+                companyId,
+                "TRADE-001",
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+
+        var handler = new CreateProductHandler(
+            currentUserService.Object,
+            productRepository.Object,
+            companyOnboardingRepository.Object,
+            unitOfWork.Object);
+
+        var result = await handler.Handle(
+            new CreateProductCommand("TRADE-001", "TRADE-001", "Generico", "Usado recibido", null, 0m, null, 0m, null, true),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.PublicPrice.Should().Be(0m);
+        result.Value.AllowsManualValueInSale.Should().BeTrue();
+
+        productRepository.Verify(repository => repository.AddAsync(
+            It.Is<Product>(product =>
+                product.CompanyId == companyId &&
+                product.Name == "Usado recibido" &&
+                product.Price == 0m &&
+                product.AllowsManualValueInSale),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task CreateProduct_ShouldRejectZeroPublicPrice_WhenManualValueInSaleIsDisabled()
+    {
+        var companyId = CompanyId.New();
+
+        var currentUserService = new Mock<ICurrentUserService>();
+        var productRepository = new Mock<IProductRepository>();
+        var companyOnboardingRepository = new Mock<ICompanyOnboardingRepository>();
+        var unitOfWork = new Mock<IUnitOfWork>();
+
+        currentUserService.SetupGet(service => service.IsAuthenticated).Returns(true);
+        currentUserService.SetupGet(service => service.CompanyId).Returns(companyId);
+
+        productRepository
+            .Setup(repository => repository.NameExistsAsync(
+                companyId,
+                "Producto invalido",
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+
+        productRepository
+            .Setup(repository => repository.CodeExistsAsync(
+                companyId,
+                "BAD-001",
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+
+        productRepository
+            .Setup(repository => repository.SkuExistsAsync(
+                companyId,
+                "BAD-001",
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+
+        var handler = new CreateProductHandler(
+            currentUserService.Object,
+            productRepository.Object,
+            companyOnboardingRepository.Object,
+            unitOfWork.Object);
+
+        var result = await handler.Handle(
+            new CreateProductCommand("BAD-001", "BAD-001", "Generico", "Producto invalido", null, 0m, null, 0m, null),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.Error!.Code.Should().Be("Products.Create.PublicPriceMustBePositive");
     }
 
     [Fact]

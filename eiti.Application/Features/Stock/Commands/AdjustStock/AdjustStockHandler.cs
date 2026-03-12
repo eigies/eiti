@@ -140,6 +140,7 @@ public sealed class AdjustStockHandler : IRequestHandler<AdjustStockCommand, Res
                 product.Price,
                 product.CostPrice,
                 product.UnitPrice,
+                product.AllowsManualValueInSale,
                 stock.OnHandQuantity,
                 stock.ReservedQuantity,
                 stock.AvailableQuantity,

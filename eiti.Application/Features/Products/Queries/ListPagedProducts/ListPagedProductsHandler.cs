@@ -77,6 +77,7 @@ public sealed class ListPagedProductsHandler
                     product.Price,
                     product.CostPrice,
                     product.UnitPrice,
+                    product.AllowsManualValueInSale,
                     product.CreatedAt,
                     product.UpdatedAt,
                     totals?.OnHand ?? 0,

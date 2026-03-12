@@ -63,6 +63,7 @@ public sealed class GetBranchProductStockHandler : IRequestHandler<GetBranchProd
                 product.Price,
                 product.CostPrice,
                 product.UnitPrice,
+                product.AllowsManualValueInSale,
                 stock?.OnHandQuantity ?? 0,
                 stock?.ReservedQuantity ?? 0,
                 stock?.AvailableQuantity ?? 0,

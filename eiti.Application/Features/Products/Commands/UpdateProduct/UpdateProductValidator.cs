@@ -54,5 +54,15 @@ public sealed class UpdateProductValidator : AbstractValidator<UpdateProductComm
         RuleFor(x => x)
             .Must(x => !x.Price.HasValue || !x.PublicPrice.HasValue || x.Price.Value == x.PublicPrice.Value)
             .WithMessage("When both price and public price are provided, they must be equal.");
+
+        RuleFor(x => x)
+            .Must(x =>
+            {
+                var resolvedPrice = x.PublicPrice ?? x.Price;
+                return !resolvedPrice.HasValue
+                    || x.AllowsManualValueInSale
+                    || resolvedPrice.Value > 0;
+            })
+            .WithMessage("Product public price must be greater than zero unless manual value in sale is allowed.");
     }
 }

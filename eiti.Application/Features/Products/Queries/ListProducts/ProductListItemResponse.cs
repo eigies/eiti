@@ -11,6 +11,7 @@ public sealed record ProductListItemResponse(
     decimal PublicPrice,
     decimal CostPrice,
     decimal? UnitPrice,
+    bool AllowsManualValueInSale,
     DateTime CreatedAt,
     DateTime? UpdatedAt,
     int TotalOnHandQuantity,

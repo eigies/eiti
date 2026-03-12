@@ -476,6 +476,14 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
                     Error.NotFound("Sales.Update.TradeInProductNotFound", $"The trade-in product '{tradeIn.ProductId}' was not found."));
             }
 
+            if (!product.AllowsManualValueInSale)
+            {
+                return Result<List<SaleTradeIn>>.Failure(
+                    Error.Validation(
+                        "Sales.Update.TradeInManualValueNotAllowed",
+                        $"The product '{product.Name}' does not allow manual value in sale and cannot be used as a trade-in."));
+            }
+
             productMap[product.Id.Value] = product;
             tradeIns.Add(SaleTradeIn.Create(product.Id, tradeIn.Quantity, tradeIn.Amount));
         }

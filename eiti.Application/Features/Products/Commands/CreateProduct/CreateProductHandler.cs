@@ -69,7 +69,10 @@ public sealed class CreateProductHandler
         }
 
         Product product;
-        var resolvedPublicPriceResult = ResolvePublicPrice(request.Price, request.PublicPrice);
+        var resolvedPublicPriceResult = ResolvePublicPrice(
+            request.Price,
+            request.PublicPrice,
+            request.AllowsManualValueInSale);
         if (!resolvedPublicPriceResult.IsSuccess)
         {
             return Result<CreateProductResponse>.Failure(resolvedPublicPriceResult.Error!);
@@ -86,7 +89,8 @@ public sealed class CreateProductHandler
                 request.Description,
                 resolvedPublicPriceResult.Value,
                 request.CostPrice,
-                request.UnitPrice);
+                request.UnitPrice,
+                request.AllowsManualValueInSale);
         }
         catch (ArgumentException ex)
         {
@@ -118,13 +122,17 @@ public sealed class CreateProductHandler
                 product.Price,
                 product.CostPrice,
                 product.UnitPrice,
+                product.AllowsManualValueInSale,
                 0,
                 0,
                 0,
                 product.CreatedAt));
     }
 
-    private static Result<decimal> ResolvePublicPrice(decimal? legacyPrice, decimal? publicPrice)
+    private static Result<decimal> ResolvePublicPrice(
+        decimal? legacyPrice,
+        decimal? publicPrice,
+        bool allowsManualValueInSale)
     {
         if (legacyPrice.HasValue && publicPrice.HasValue && legacyPrice.Value != publicPrice.Value)
         {
@@ -142,6 +150,14 @@ public sealed class CreateProductHandler
                 Error.Validation(
                     "Products.Create.PublicPriceRequired",
                     "Either price or public price is required."));
+        }
+
+        if (!allowsManualValueInSale && resolved.Value <= 0)
+        {
+            return Result<decimal>.Failure(
+                Error.Validation(
+                    "Products.Create.PublicPriceMustBePositive",
+                    "Public price must be greater than zero unless manual value in sale is allowed."));
         }
 
         return Result<decimal>.Success(resolved.Value);

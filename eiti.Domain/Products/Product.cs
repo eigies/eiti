@@ -14,6 +14,7 @@ public sealed class Product : AggregateRoot<ProductId>
     public decimal Price { get; private set; }
     public decimal CostPrice { get; private set; }
     public decimal? UnitPrice { get; private set; }
+    public bool AllowsManualValueInSale { get; private set; }
     public DateTime CreatedAt { get; private set; }
     public DateTime? UpdatedAt { get; private set; }
 
@@ -32,6 +33,7 @@ public sealed class Product : AggregateRoot<ProductId>
         decimal publicPrice,
         decimal costPrice,
         decimal? unitPrice,
+        bool allowsManualValueInSale,
         DateTime createdAt)
         : base(id)
     {
@@ -44,6 +46,7 @@ public sealed class Product : AggregateRoot<ProductId>
         Price = publicPrice;
         CostPrice = costPrice;
         UnitPrice = unitPrice;
+        AllowsManualValueInSale = allowsManualValueInSale;
         CreatedAt = createdAt;
     }
 
@@ -56,7 +59,8 @@ public sealed class Product : AggregateRoot<ProductId>
         string? description,
         decimal publicPrice,
         decimal costPrice,
-        decimal? unitPrice)
+        decimal? unitPrice,
+        bool allowsManualValueInSale = false)
     {
         var normalizedCode = NormalizeCode(code);
         var normalizedSku = NormalizeSku(sku);
@@ -64,20 +68,7 @@ public sealed class Product : AggregateRoot<ProductId>
         var normalizedName = NormalizeName(name);
         var normalizedDescription = NormalizeDescription(description);
 
-        if (publicPrice < 0)
-        {
-            throw new ArgumentException("Public price cannot be negative.", nameof(publicPrice));
-        }
-
-        if (costPrice < 0)
-        {
-            throw new ArgumentException("Cost price cannot be negative.", nameof(costPrice));
-        }
-
-        if (unitPrice.HasValue && unitPrice.Value < 0)
-        {
-            throw new ArgumentException("Unit price cannot be negative.", nameof(unitPrice));
-        }
+        ValidatePricing(publicPrice, costPrice, unitPrice, allowsManualValueInSale);
 
         return new Product(
             ProductId.New(),
@@ -90,6 +81,7 @@ public sealed class Product : AggregateRoot<ProductId>
             publicPrice,
             costPrice,
             unitPrice,
+            allowsManualValueInSale,
             DateTime.UtcNow);
     }
 
@@ -101,7 +93,8 @@ public sealed class Product : AggregateRoot<ProductId>
         string? description,
         decimal publicPrice,
         decimal costPrice,
-        decimal? unitPrice)
+        decimal? unitPrice,
+        bool allowsManualValueInSale = false)
     {
         var normalizedCode = NormalizeCode(code);
         var normalizedSku = NormalizeSku(sku);
@@ -109,9 +102,36 @@ public sealed class Product : AggregateRoot<ProductId>
         var normalizedName = NormalizeName(name);
         var normalizedDescription = NormalizeDescription(description);
 
+        ValidatePricing(publicPrice, costPrice, unitPrice, allowsManualValueInSale);
+
+        Code = normalizedCode;
+        Sku = normalizedSku;
+        Brand = normalizedBrand;
+        Name = normalizedName;
+        Description = normalizedDescription;
+        Price = publicPrice;
+        CostPrice = costPrice;
+        UnitPrice = unitPrice;
+        AllowsManualValueInSale = allowsManualValueInSale;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    private static void ValidatePricing(
+        decimal publicPrice,
+        decimal costPrice,
+        decimal? unitPrice,
+        bool allowsManualValueInSale)
+    {
         if (publicPrice < 0)
         {
             throw new ArgumentException("Public price cannot be negative.", nameof(publicPrice));
+        }
+
+        if (!allowsManualValueInSale && publicPrice <= 0)
+        {
+            throw new ArgumentException(
+                "Public price must be greater than zero unless the product allows manual value in sale.",
+                nameof(publicPrice));
         }
 
         if (costPrice < 0)
@@ -123,16 +143,6 @@ public sealed class Product : AggregateRoot<ProductId>
         {
             throw new ArgumentException("Unit price cannot be negative.", nameof(unitPrice));
         }
-
-        Code = normalizedCode;
-        Sku = normalizedSku;
-        Brand = normalizedBrand;
-        Name = normalizedName;
-        Description = normalizedDescription;
-        Price = publicPrice;
-        CostPrice = costPrice;
-        UnitPrice = unitPrice;
-        UpdatedAt = DateTime.UtcNow;
     }
 
     private static string NormalizeBrand(string value)
