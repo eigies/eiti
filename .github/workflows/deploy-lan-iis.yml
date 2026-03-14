@@ -12,6 +12,12 @@ jobs:
       - name: Checkout backend
         uses: actions/checkout@v4
 
+      - name: Update local backend
+        shell: pwsh
+        run: |
+          git -C C:\eiti fetch origin
+          git -C C:\eiti reset --hard origin/main
+
       - name: Update frontend
         shell: pwsh
         run: |
@@ -24,3 +30,29 @@ jobs:
           & "$env:GITHUB_WORKSPACE\.agents\skills\deploy-lan-iis\scripts\deploy.ps1" `
             -ConnectionString "${{ secrets.DEPLOY_CONNECTION_STRING }}" `
             -SkipPrecheck
+
+      - name: Start ngrok tunnel
+        id: ngrok
+        shell: pwsh
+        run: |
+          $publicUrl = & "$env:GITHUB_WORKSPACE\.agents\skills\deploy-lan-iis\scripts\start-ngrok-tunnel.ps1" `
+            -LocalUrl 'http://127.0.0.1:80' `
+            -ToolRoot 'C:\eiti\tools\ngrok' `
+            -NgrokExe 'C:\Users\eitip\AppData\Local\Microsoft\WinGet\Packages\Ngrok.Ngrok_Microsoft.Winget.Source_8wekyb3d8bbwe\ngrok.exe' `
+            -Authtoken "${{ secrets.NGROK_AUTHTOKEN }}"
+          "public_url=$publicUrl" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "## Public URL`n`n$publicUrl" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+
+      - name: Notify Telegram
+        shell: pwsh
+        run: |
+          $message = @"
+          Eiti deploy completed.
+          URL: ${{ steps.ngrok.outputs.public_url }}
+          Commit: ${{ github.sha }}
+          Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          "@
+          & "$env:GITHUB_WORKSPACE\.agents\skills\deploy-lan-iis\scripts\send-telegram.ps1" `
+            -BotToken "${{ secrets.TELEGRAM_BOT_TOKEN }}" `
+            -ChatId "${{ secrets.TELEGRAM_CHAT_ID }}" `
+            -Message $message

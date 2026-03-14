@@ -6,6 +6,8 @@ description: Deploy Eiti API, frontend, and database migrations to a Windows IIS
 Use scripts in this skill:
 - `scripts/precheck.ps1`
 - `scripts/deploy.ps1`
+- `scripts/start-ngrok-tunnel.ps1`
+- `scripts/send-telegram.ps1`
 - `scripts/start-quick-tunnel.ps1`
 
 Run from `C:\Eiti\eiti`:
@@ -80,3 +82,9 @@ The workflow runs `git fetch/reset` on `C:\eiti-front`. The server needs credent
 | Frontend source | `C:\eiti-front` |
 | API publish | `C:\inetpub\eiti\api` |
 | Front publish | `C:\inetpub\eiti\front` |
+
+### Credentials Telegram
+Store these as repository secrets instead of plaintext:
+- `TELEGRAM_BOT_TOKEN`
+- `TELEGRAM_CHAT_ID`
+- `NGROK_AUTHTOKEN`
