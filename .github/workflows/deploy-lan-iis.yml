@@ -13,19 +13,19 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Update local backend
-        shell: pwsh
+        shell: powershell
         run: |
           git -C C:\eiti fetch origin
           git -C C:\eiti reset --hard origin/main
 
       - name: Update frontend
-        shell: pwsh
+        shell: powershell
         run: |
           git -C C:\eiti-front fetch origin
           git -C C:\eiti-front reset --hard origin/main
 
       - name: Deploy
-        shell: pwsh
+        shell: powershell
         run: |
           & "$env:GITHUB_WORKSPACE\.agents\skills\deploy-lan-iis\scripts\deploy.ps1" `
             -ConnectionString "${{ secrets.DEPLOY_CONNECTION_STRING }}" `
@@ -33,7 +33,7 @@ jobs:
 
       - name: Start ngrok tunnel
         id: ngrok
-        shell: pwsh
+        shell: powershell
         run: |
           $publicUrl = & "$env:GITHUB_WORKSPACE\.agents\skills\deploy-lan-iis\scripts\start-ngrok-tunnel.ps1" `
             -LocalUrl 'http://127.0.0.1:80' `
@@ -44,7 +44,7 @@ jobs:
           "## Public URL`n`n$publicUrl" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
 
       - name: Notify Telegram
-        shell: pwsh
+        shell: powershell
         run: |
           $message = @"
           Eiti deploy completed.
