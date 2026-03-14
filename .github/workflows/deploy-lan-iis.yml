@@ -1,0 +1,26 @@
+name: Deploy LAN IIS
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, windows, iis]
+
+    steps:
+      - name: Checkout backend
+        uses: actions/checkout@v4
+
+      - name: Update frontend
+        shell: pwsh
+        run: |
+          git -C C:\eiti-front fetch origin
+          git -C C:\eiti-front reset --hard origin/main
+
+      - name: Deploy
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE\.agents\skills\deploy-lan-iis\scripts\deploy.ps1" `
+            -ConnectionString "${{ secrets.DEPLOY_CONNECTION_STRING }}" `
+            -SkipPrecheck

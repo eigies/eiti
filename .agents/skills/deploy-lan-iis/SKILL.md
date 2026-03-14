@@ -36,3 +36,47 @@ Quick Tunnel notes:
 - It returns a `https://*.trycloudflare.com` URL.
 - The URL is temporary and usually changes if the process stops or the PC restarts.
 - This is suitable for testing, not for stable production access.
+
+## CI/CD: Auto-deploy on push to main
+
+Push to `main` → GitHub Actions → self-hosted runner on the server → `deploy.ps1` runs automatically.
+
+### One-time setup on the server PC
+
+**1. Get a runner registration token**
+Go to: https://github.com/eigies/eiti/settings/actions/runners → New self-hosted runner → copy the token.
+
+**2. Run setup-runner.ps1 as Administrator**
+
+```powershell
+& "C:\eiti\.agents\skills\deploy-lan-iis\scripts\setup-runner.ps1" -Token "<token-from-github>"
+```
+
+This downloads the runner, registers it with labels `self-hosted,windows,iis`, installs it as a Windows service running as `LocalSystem` (required for IIS), and starts it.
+
+The runner registration token expires in 1 hour — generate it right before running the script.
+
+**3. Add the GitHub secret**
+Go to: https://github.com/eigies/eiti/settings/secrets/actions → New repository secret.
+- Name: `DEPLOY_CONNECTION_STRING`
+- Value: the production connection string
+
+**4. Ensure git credentials for the frontend repo**
+The workflow runs `git fetch/reset` on `C:\eiti-front`. The server needs credentials configured to pull that repo (SSH key or Windows Credential Manager).
+
+### How it works
+
+- Workflow file: `.github/workflows/deploy-lan-iis.yml`
+- Triggers on push to `main` only
+- The runner checks out the backend into its workspace
+- Updates `C:\eiti-front` to `origin/main` (hard reset, no merge conflicts)
+- Calls `deploy.ps1 -SkipPrecheck` — precheck skipped since the server is already set up
+- Deploy logs visible at: https://github.com/eigies/eiti/actions
+
+### Server paths assumed by the workflow
+
+| Resource | Path |
+|---|---|
+| Frontend source | `C:\eiti-front` |
+| API publish | `C:\inetpub\eiti\api` |
+| Front publish | `C:\inetpub\eiti\front` |
