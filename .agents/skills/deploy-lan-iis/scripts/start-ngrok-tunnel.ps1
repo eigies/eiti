@@ -3,6 +3,7 @@ param(
     [string]$LocalUrl = 'http://127.0.0.1:80',
     [string]$ToolRoot = 'C:\eiti\tools\ngrok',
     [string]$NgrokExe = 'C:\Users\eitip\AppData\Local\Microsoft\WinGet\Packages\Ngrok.Ngrok_Microsoft.Winget.Source_8wekyb3d8bbwe\ngrok.exe',
+    [string]$TaskName = 'EitiNgrokTunnel',
     [Parameter(Mandatory)]
     [string]$Authtoken
 )
@@ -11,6 +12,20 @@ $ErrorActionPreference = 'Stop'
 
 function Write-Step([string]$Message) { Write-Host "`n=== $Message ===" -ForegroundColor Cyan }
 function Write-Ok([string]$Message) { Write-Host "[OK] $Message" -ForegroundColor Green }
+function Remove-NgrokTask([string]$Name) {
+    $task = Get-ScheduledTask -TaskName $Name -ErrorAction SilentlyContinue
+    if (-not $task) {
+        return
+    }
+
+    try {
+        Stop-ScheduledTask -TaskName $Name -ErrorAction SilentlyContinue
+    }
+    catch {
+    }
+
+    Unregister-ScheduledTask -TaskName $Name -Confirm:$false
+}
 
 if (-not (Test-Path $NgrokExe)) {
     throw "ngrok executable not found at '$NgrokExe'."
@@ -29,6 +44,7 @@ $addr = if ($localUri.Port -gt 0) {
 $configPath = Join-Path $ToolRoot 'ngrok-ci.yml'
 $stdoutLog = Join-Path $ToolRoot 'ngrok.log'
 $stderrLog = Join-Path $ToolRoot 'ngrok.err.log'
+$runnerScript = Join-Path $PSScriptRoot 'run-ngrok-task.ps1'
 
 @"
 version: "2"
@@ -41,14 +57,25 @@ tunnels:
 
 Get-Process ngrok -ErrorAction SilentlyContinue | Stop-Process -Force
 Remove-Item $stdoutLog, $stderrLog -ErrorAction SilentlyContinue
+Remove-NgrokTask -Name $TaskName
 
 Write-Step 'Start ngrok tunnel'
-Start-Process `
-    -FilePath $NgrokExe `
-    -ArgumentList @('start', '--all', '--config', $configPath, '--log', 'stdout', '--log-format', 'json') `
-    -RedirectStandardOutput $stdoutLog `
-    -RedirectStandardError $stderrLog `
-    -WindowStyle Hidden
+$actionArgs = @(
+    '-ExecutionPolicy', 'Bypass',
+    '-File', $runnerScript,
+    '-NgrokExe', $NgrokExe,
+    '-ConfigPath', $configPath,
+    '-StdoutLog', $stdoutLog,
+    '-StderrLog', $stderrLog
+)
+$quotedActionArgs = $actionArgs | ForEach-Object {
+    if ($_ -match '\s') { '"{0}"' -f $_ } else { $_ }
+}
+$action = New-ScheduledTaskAction -Execute 'PowerShell.exe' -Argument ($quotedActionArgs -join ' ')
+$principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
+$settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
+Register-ScheduledTask -TaskName $TaskName -Action $action -Principal $principal -Settings $settings -Force | Out-Null
+Start-ScheduledTask -TaskName $TaskName
 
 $publicUrl = $null
 for ($i = 0; $i -lt 45; $i++) {
@@ -75,6 +102,7 @@ if (-not $publicUrl) {
 
 Write-Step 'Tunnel ready'
 Write-Host "Public URL: $publicUrl"
+Write-Host "Task name: $TaskName"
 Write-Host "Stdout log: $stdoutLog"
 Write-Host "Stderr log: $stderrLog"
 Write-Ok 'ngrok tunnel is running.'
