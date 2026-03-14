@@ -26,6 +26,21 @@ function Assert-LastExitCode([string]$Action) {
         throw "$Action failed with exit code $LASTEXITCODE"
     }
 }
+function Ensure-DotNetEf([string]$ToolPath) {
+    Ensure-Directory $ToolPath
+    $exePath = Join-Path $ToolPath 'dotnet-ef.exe'
+    if (Test-Path $exePath) {
+        return $exePath
+    }
+
+    dotnet tool install dotnet-ef --tool-path $ToolPath
+    Assert-LastExitCode -Action 'dotnet tool install dotnet-ef'
+    if (-not (Test-Path $exePath)) {
+        throw "dotnet-ef was installed but '$exePath' was not found."
+    }
+
+    return $exePath
+}
 function Resolve-FirstExistingPath([string[]]$Candidates, [string]$Label) {
     foreach ($candidate in $Candidates) {
         if ([string]::IsNullOrWhiteSpace($candidate)) { continue }
@@ -240,7 +255,8 @@ if (-not $SkipMigrations) {
         'C:\Eiti\eiti\eiti.Infrastructure\eiti.Infrastructure.csproj',
         'C:\eiti\eiti.Infrastructure\eiti.Infrastructure.csproj'
     ) -Label 'Infrastructure project path'
-    dotnet ef database update --project $infraProjectPath --startup-project $ApiProjectPath --context ApplicationDbContext --configuration Release
+    $dotnetEfPath = Ensure-DotNetEf -ToolPath 'C:\eiti\tools\dotnet-ef'
+    & $dotnetEfPath database update --project $infraProjectPath --startup-project $ApiProjectPath --context ApplicationDbContext --configuration Release
     Assert-LastExitCode -Action 'dotnet ef database update'
     Remove-Item Env:\ConnectionStrings__DefaultConnection -ErrorAction SilentlyContinue
 }
