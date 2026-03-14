@@ -33,7 +33,7 @@ function Ensure-DotNetEf([string]$ToolPath) {
         return $exePath
     }
 
-    dotnet tool install dotnet-ef --tool-path $ToolPath
+    dotnet tool install dotnet-ef --tool-path $ToolPath | Out-Null
     Assert-LastExitCode -Action 'dotnet tool install dotnet-ef'
     if (-not (Test-Path $exePath)) {
         throw "dotnet-ef was installed but '$exePath' was not found."
