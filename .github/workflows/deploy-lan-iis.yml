@@ -15,6 +15,11 @@ jobs:
       - name: Checkout backend
         uses: actions/checkout@v4
 
+      - name: Trust local repositories
+        run: |
+          git config --global --add safe.directory C:/eiti
+          git config --global --add safe.directory C:/eiti-front
+
       - name: Update local backend
         run: |
           git -C C:\eiti fetch origin
