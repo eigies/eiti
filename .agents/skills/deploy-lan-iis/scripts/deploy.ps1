@@ -68,6 +68,9 @@ if (-not $SkipPrecheck) {
 function Ensure-Admin {
     $id = [Security.Principal.WindowsIdentity]::GetCurrent()
     $principal = New-Object Security.Principal.WindowsPrincipal($id)
+    if ($id.User -and $id.User.IsWellKnown([Security.Principal.WellKnownSidType]::LocalSystemSid)) {
+        return
+    }
     if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
         throw 'Run as Administrator.'
     }
