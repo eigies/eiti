@@ -55,33 +55,37 @@ jobs:
           $prevSha = "${{ steps.backend.outputs.prev_sha }}"
           $sendScript = "$env:GITHUB_WORKSPACE\.agents\skills\deploy-lan-iis\scripts\send-telegram.ps1"
           $changelogScript = "$env:GITHUB_WORKSPACE\.agents\skills\deploy-lan-iis\scripts\build-changelog.ps1"
+          $publicUrl = "${{ steps.ngrok.outputs.public_url }}"
+          $ownerChatId = "${{ secrets.TELEGRAM_OWNER_CHAT_ID }}"
 
-          # — Mensaje para el cliente —
           $clientChangelog = & $changelogScript -RepoPath 'C:\eiti' -FromSha $prevSha
-          $clientMessage = @"
-Eiti actualizado correctamente.
-
-$clientChangelog
-
-URL: ${{ steps.ngrok.outputs.public_url }}
-"@
+          $clientMessage = @(
+            'Eiti actualizado correctamente.',
+            '',
+            $clientChangelog,
+            '',
+            "URL: $publicUrl"
+          ) -join "`n"
           & $sendScript `
             -BotToken "${{ secrets.TELEGRAM_BOT_TOKEN }}" `
             -ChatId "${{ secrets.TELEGRAM_CHAT_ID }}" `
             -Message $clientMessage
 
-          # — Mensaje para el owner —
-          $ownerChangelog = & $changelogScript -RepoPath 'C:\eiti' -FromSha $prevSha -Detailed
-          $ownerMessage = @"
-[Deploy OK] eiti/main
-
-$ownerChangelog
-
-URL: ${{ steps.ngrok.outputs.public_url }}
-Commit: ${{ github.sha }}
-Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-"@
-          & $sendScript `
-            -BotToken "${{ secrets.TELEGRAM_BOT_TOKEN }}" `
-            -ChatId "${{ secrets.TELEGRAM_OWNER_CHAT_ID }}" `
-            -Message $ownerMessage
+          if (-not [string]::IsNullOrWhiteSpace($ownerChatId)) {
+            $ownerChangelog = & $changelogScript -RepoPath 'C:\eiti' -FromSha $prevSha -Detailed
+            $ownerMessage = @(
+              '[Deploy OK] eiti/main',
+              '',
+              $ownerChangelog,
+              '',
+              "URL: $publicUrl",
+              "Commit: ${{ github.sha }}",
+              "Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            ) -join "`n"
+            & $sendScript `
+              -BotToken "${{ secrets.TELEGRAM_BOT_TOKEN }}" `
+              -ChatId $ownerChatId `
+              -Message $ownerMessage
+          } else {
+            Write-Host '[WARN] TELEGRAM_OWNER_CHAT_ID is empty. Skipping owner notification.'
+          }
