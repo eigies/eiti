@@ -23,8 +23,17 @@ jobs:
       - name: Update local backend
         id: backend
         run: |
-          $prevSha = git -C C:\eiti rev-parse HEAD
+          $deployStateDir = 'C:\eiti-deploy-state'
+          $lastSuccessFile = Join-Path $deployStateDir 'backend-last-successful-sha.txt'
+          $prevSha = ''
+          if (Test-Path $lastSuccessFile) {
+            $prevSha = (Get-Content $lastSuccessFile -Raw).Trim()
+          }
+          if ([string]::IsNullOrWhiteSpace($prevSha)) {
+            $prevSha = git -C C:\eiti rev-parse HEAD
+          }
           "prev_sha=$prevSha" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "last_success_file=$lastSuccessFile" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
           git -C C:\eiti fetch origin
           git -C C:\eiti reset --hard origin/main
 
@@ -89,3 +98,13 @@ jobs:
           } else {
             Write-Host '[WARN] TELEGRAM_OWNER_CHAT_ID is empty. Skipping owner notification.'
           }
+
+      - name: Persist deployed backend SHA
+        if: ${{ success() }}
+        run: |
+          $lastSuccessFile = "${{ steps.backend.outputs.last_success_file }}"
+          $lastSuccessDir = Split-Path -Parent $lastSuccessFile
+          if (-not (Test-Path $lastSuccessDir)) {
+            New-Item -ItemType Directory -Path $lastSuccessDir -Force | Out-Null
+          }
+          Set-Content -Path $lastSuccessFile -Value "${{ github.sha }}" -Encoding ascii
