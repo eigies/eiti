@@ -9,7 +9,7 @@ namespace eiti.Tests;
 public sealed class SaleSettlementTests
 {
     [Fact]
-    public void MarkAsPaid_ShouldFail_WhenSettlementIsNotExact()
+    public void MarkAsPaid_ShouldFail_WhenSettlementIsBelow()
     {
         var sale = CreateBaseSale(
             [SalePayment.Create(SalePaymentMethod.Transfer, 50m, null)],
@@ -18,7 +18,21 @@ public sealed class SaleSettlementTests
         var act = () => sale.MarkAsPaid(null);
 
         act.Should().Throw<InvalidOperationException>()
-            .WithMessage("*must match the total amount*");
+            .WithMessage("*must cover the total amount*");
+    }
+
+    [Fact]
+    public void MarkAsPaid_ShouldSucceed_WhenSettlementExceedsTotal()
+    {
+        var sale = CreateBaseSale(
+            [SalePayment.Create(SalePaymentMethod.Transfer, 150m, "TRX-002")],
+            [],
+            allowOverpayment: true);
+
+        sale.MarkAsPaid(null);
+
+        sale.SaleStatus.Should().Be(SaleStatus.Paid);
+        sale.ChangeAmount.Should().Be(50m);
     }
 
     [Fact]
@@ -49,7 +63,7 @@ public sealed class SaleSettlementTests
     }
 
     [Fact]
-    public void Update_ShouldFail_WhenSettlementExceedsTotal()
+    public void Update_ShouldFail_WhenOnHoldSettlementExceedsTotal()
     {
         var sale = CreateBaseSale(
             [SalePayment.Create(SalePaymentMethod.Transfer, 100m, null)],
@@ -73,7 +87,8 @@ public sealed class SaleSettlementTests
 
     private static Sale CreateBaseSale(
         IReadOnlyList<SalePayment> payments,
-        IReadOnlyList<SaleTradeIn> tradeIns)
+        IReadOnlyList<SaleTradeIn> tradeIns,
+        bool allowOverpayment = false)
     {
         var companyId = CompanyId.New();
         var branchId = BranchId.New();
@@ -87,6 +102,7 @@ public sealed class SaleSettlementTests
             saleStatus: SaleStatus.OnHold,
             details: [SaleDetail.Create(product.Id, 1, product.Price)],
             payments: payments,
-            tradeIns: tradeIns);
+            tradeIns: tradeIns,
+            allowOverpayment: allowOverpayment);
     }
 }

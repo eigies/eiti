@@ -6,4 +6,5 @@ public sealed record GetCurrentCompanyResponse(
     string PrimaryDomain,
     bool IsWhatsAppEnabled,
     string? WhatsAppSenderPhone,
+    decimal? DefaultNoDeliverySurcharge,
     DateTime CreatedAt);

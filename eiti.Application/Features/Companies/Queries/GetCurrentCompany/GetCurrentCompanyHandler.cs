@@ -50,6 +50,7 @@ public sealed class GetCurrentCompanyHandler
                 company.PrimaryDomain.Value,
                 company.IsWhatsAppEnabled,
                 company.WhatsAppSenderPhone,
+                company.DefaultNoDeliverySurcharge,
                 company.CreatedAt));
     }
 }

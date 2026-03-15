@@ -21,7 +21,10 @@ jobs:
           git config --global --add safe.directory C:/eiti-front
 
       - name: Update local backend
+        id: backend
         run: |
+          $prevSha = git -C C:\eiti rev-parse HEAD
+          "prev_sha=$prevSha" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
           git -C C:\eiti fetch origin
           git -C C:\eiti reset --hard origin/main
 
@@ -49,13 +52,36 @@ jobs:
 
       - name: Notify Telegram
         run: |
-          $message = @"
-          Eiti deploy completed.
-          URL: ${{ steps.ngrok.outputs.public_url }}
-          Commit: ${{ github.sha }}
-          Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          "@
-          & "$env:GITHUB_WORKSPACE\.agents\skills\deploy-lan-iis\scripts\send-telegram.ps1" `
+          $prevSha = "${{ steps.backend.outputs.prev_sha }}"
+          $sendScript = "$env:GITHUB_WORKSPACE\.agents\skills\deploy-lan-iis\scripts\send-telegram.ps1"
+          $changelogScript = "$env:GITHUB_WORKSPACE\.agents\skills\deploy-lan-iis\scripts\build-changelog.ps1"
+
+          # — Mensaje para el cliente —
+          $clientChangelog = & $changelogScript -RepoPath 'C:\eiti' -FromSha $prevSha
+          $clientMessage = @"
+Eiti actualizado correctamente.
+
+$clientChangelog
+
+URL: ${{ steps.ngrok.outputs.public_url }}
+"@
+          & $sendScript `
             -BotToken "${{ secrets.TELEGRAM_BOT_TOKEN }}" `
             -ChatId "${{ secrets.TELEGRAM_CHAT_ID }}" `
-            -Message $message
+            -Message $clientMessage
+
+          # — Mensaje para el owner —
+          $ownerChangelog = & $changelogScript -RepoPath 'C:\eiti' -FromSha $prevSha -Detailed
+          $ownerMessage = @"
+[Deploy OK] eiti/main
+
+$ownerChangelog
+
+URL: ${{ steps.ngrok.outputs.public_url }}
+Commit: ${{ github.sha }}
+Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+"@
+          & $sendScript `
+            -BotToken "${{ secrets.TELEGRAM_BOT_TOKEN }}" `
+            -ChatId "${{ secrets.TELEGRAM_OWNER_CHAT_ID }}" `
+            -Message $ownerMessage

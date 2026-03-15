@@ -12,7 +12,8 @@ public sealed record UpdateSaleCommand(
     Guid? CashDrawerId,
     IReadOnlyList<UpdateSaleDetailItemRequest> Details,
     IReadOnlyList<UpdateSalePaymentItemRequest> Payments,
-    IReadOnlyList<UpdateSaleTradeInItemRequest> TradeIns
+    IReadOnlyList<UpdateSaleTradeInItemRequest> TradeIns,
+    decimal? NoDeliverySurchargeTotal = null
 ) : IRequest<Result<UpdateSaleResponse>>, IRequirePermissions
 {
     public IReadOnlyCollection<string> RequiredPermissions => [PermissionCodes.SalesUpdate];
@@ -20,7 +21,8 @@ public sealed record UpdateSaleCommand(
 
 public sealed record UpdateSaleDetailItemRequest(
     Guid ProductId,
-    int Quantity);
+    int Quantity,
+    decimal? UnitPrice = null);
 
 public sealed record UpdateSalePaymentItemRequest(
     int IdPaymentMethod,

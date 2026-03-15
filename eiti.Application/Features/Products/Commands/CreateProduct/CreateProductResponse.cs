@@ -12,6 +12,7 @@ public sealed record CreateProductResponse(
     decimal CostPrice,
     decimal? UnitPrice,
     bool AllowsManualValueInSale,
+    decimal? NoDeliverySurcharge,
     int TotalOnHandQuantity,
     int TotalReservedQuantity,
     int TotalAvailableQuantity,

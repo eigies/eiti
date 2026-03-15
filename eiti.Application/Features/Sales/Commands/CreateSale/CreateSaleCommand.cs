@@ -12,7 +12,8 @@ public sealed record CreateSaleCommand(
     Guid? CashDrawerId,
     IReadOnlyList<CreateSaleDetailItemRequest> Details,
     IReadOnlyList<CreateSalePaymentItemRequest> Payments,
-    IReadOnlyList<CreateSaleTradeInItemRequest> TradeIns
+    IReadOnlyList<CreateSaleTradeInItemRequest> TradeIns,
+    decimal? NoDeliverySurchargeTotal = null
 ) : IRequest<Result<CreateSaleResponse>>, IRequirePermissions
 {
     public IReadOnlyCollection<string> RequiredPermissions => [PermissionCodes.SalesCreate];
@@ -20,7 +21,8 @@ public sealed record CreateSaleCommand(
 
 public sealed record CreateSaleDetailItemRequest(
     Guid ProductId,
-    int Quantity);
+    int Quantity,
+    decimal? UnitPrice = null);
 
 public sealed record CreateSalePaymentItemRequest(
     int IdPaymentMethod,

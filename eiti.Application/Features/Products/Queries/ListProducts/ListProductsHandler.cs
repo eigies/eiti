@@ -70,6 +70,7 @@ public sealed class ListProductsHandler
                     product.CostPrice,
                     product.UnitPrice,
                     product.AllowsManualValueInSale,
+                    product.NoDeliverySurcharge,
                     product.CreatedAt,
                     product.UpdatedAt,
                     totals?.OnHand ?? 0,

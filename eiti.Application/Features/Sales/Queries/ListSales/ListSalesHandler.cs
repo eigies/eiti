@@ -132,6 +132,7 @@ public sealed class ListSalesHandler : IRequestHandler<ListSalesQuery, Result<IR
                         assignmentMap.TryGetValue(sale.Id.Value, out assignment) ? assignment.Status.ToString() : null,
                         (int)sale.SaleStatus,
                         sale.SaleStatus.ToString(),
+                        sale.NoDeliverySurchargeTotal,
                         sale.TotalAmount,
                         sale.MonetaryPaidAmount,
                         sale.TradeInAmount,

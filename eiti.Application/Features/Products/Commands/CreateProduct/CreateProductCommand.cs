@@ -13,5 +13,6 @@ public sealed record CreateProductCommand(
     decimal? PublicPrice,
     decimal CostPrice,
     decimal? UnitPrice,
-    bool AllowsManualValueInSale = false
+    bool AllowsManualValueInSale = false,
+    decimal? NoDeliverySurcharge = null
 ) : IRequest<Result<CreateProductResponse>>;

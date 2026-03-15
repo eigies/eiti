@@ -39,6 +39,10 @@ public sealed class CompanyConfiguration : IEntityTypeConfiguration<Company>
             .HasMaxLength(30)
             .IsRequired(false);
 
+        builder.Property(company => company.DefaultNoDeliverySurcharge)
+            .HasColumnType("decimal(18,2)")
+            .IsRequired(false);
+
         builder.Property(company => company.CreatedAt).IsRequired();
 
         builder.HasIndex(company => company.PrimaryDomain).IsUnique();

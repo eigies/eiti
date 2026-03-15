@@ -54,7 +54,7 @@ public sealed class UpdateSaleValidator : AbstractValidator<UpdateSaleCommand>
                     .GreaterThan(0).WithMessage("Trade-in quantity must be greater than zero.");
 
                 tradeIn.RuleFor(x => x.Amount)
-                    .GreaterThan(0m).WithMessage("Trade-in amount must be greater than zero.");
+                    .GreaterThanOrEqualTo(0m).WithMessage("Trade-in amount cannot be negative.");
             });
     }
 }

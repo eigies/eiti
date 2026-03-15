@@ -14,5 +14,6 @@ public sealed record UpdateProductCommand(
     decimal? PublicPrice,
     decimal CostPrice,
     decimal? UnitPrice,
-    bool AllowsManualValueInSale = false
+    bool AllowsManualValueInSale = false,
+    decimal? NoDeliverySurcharge = null
 ) : IRequest<Result<UpdateProductResponse>>;

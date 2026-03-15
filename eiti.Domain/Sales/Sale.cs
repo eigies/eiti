@@ -16,6 +16,7 @@ public sealed class Sale : AggregateRoot<SaleId>
     public bool HasDelivery { get; private set; }
     public SaleTransportAssignmentId? TransportAssignmentId { get; private set; }
     public SaleStatus SaleStatus { get; private set; }
+    public decimal NoDeliverySurchargeTotal { get; private set; }
     public decimal TotalAmount { get; private set; }
     public DateTime CreatedAt { get; private set; }
     public DateTime? PaidAt { get; private set; }
@@ -31,6 +32,7 @@ public sealed class Sale : AggregateRoot<SaleId>
     public decimal TradeInAmount => _tradeIns.Sum(tradeIn => tradeIn.Amount);
     public decimal SettledAmount => MonetaryPaidAmount + TradeInAmount;
     public decimal PendingAmount => NormalizeAmount(TotalAmount - SettledAmount);
+    public decimal ChangeAmount => NormalizeAmount(Math.Max(0m, SettledAmount - TotalAmount));
 
     private Sale()
     {
@@ -43,6 +45,7 @@ public sealed class Sale : AggregateRoot<SaleId>
         CustomerId? customerId,
         bool hasDelivery,
         SaleStatus saleStatus,
+        decimal noDeliverySurchargeTotal,
         DateTime createdAt,
         List<SaleDetail> details)
         : base(id)
@@ -52,6 +55,7 @@ public sealed class Sale : AggregateRoot<SaleId>
         CustomerId = customerId;
         HasDelivery = hasDelivery;
         SaleStatus = saleStatus;
+        NoDeliverySurchargeTotal = noDeliverySurchargeTotal;
         CreatedAt = createdAt;
         _details = details;
 
@@ -60,7 +64,7 @@ public sealed class Sale : AggregateRoot<SaleId>
             detail.AttachToSale(id);
         }
 
-        TotalAmount = _details.Sum(detail => detail.TotalAmount);
+        TotalAmount = _details.Sum(detail => detail.TotalAmount) + noDeliverySurchargeTotal;
     }
 
     public static Sale Create(
@@ -71,11 +75,18 @@ public sealed class Sale : AggregateRoot<SaleId>
         SaleStatus saleStatus,
         IEnumerable<SaleDetail> details,
         IEnumerable<SalePayment>? payments = null,
-        IEnumerable<SaleTradeIn>? tradeIns = null)
+        IEnumerable<SaleTradeIn>? tradeIns = null,
+        bool allowOverpayment = false,
+        decimal noDeliverySurchargeTotal = 0)
     {
         if (saleStatus == SaleStatus.Cancel)
         {
             throw new ArgumentException("A sale cannot be created with Cancel status.", nameof(saleStatus));
+        }
+
+        if (noDeliverySurchargeTotal < 0)
+        {
+            throw new ArgumentException("No-delivery surcharge total cannot be negative.", nameof(noDeliverySurchargeTotal));
         }
 
         var detailList = details.ToList();
@@ -92,13 +103,14 @@ public sealed class Sale : AggregateRoot<SaleId>
             customerId,
             hasDelivery,
             saleStatus,
+            noDeliverySurchargeTotal,
             DateTime.UtcNow,
             detailList);
 
         sale.SetSettlement(
             payments,
             tradeIns,
-            saleStatus == SaleStatus.Paid);
+            allowOverpayment || saleStatus == SaleStatus.Paid);
 
         return sale;
     }
@@ -109,7 +121,9 @@ public sealed class Sale : AggregateRoot<SaleId>
         bool hasDelivery,
         IEnumerable<SaleDetail> details,
         IEnumerable<SalePayment>? payments = null,
-        IEnumerable<SaleTradeIn>? tradeIns = null)
+        IEnumerable<SaleTradeIn>? tradeIns = null,
+        bool allowOverpayment = false,
+        decimal noDeliverySurchargeTotal = 0)
     {
         if (SaleStatus != SaleStatus.OnHold)
         {
@@ -128,6 +142,11 @@ public sealed class Sale : AggregateRoot<SaleId>
             throw new InvalidOperationException("A sale cannot be marked as paid through the generic update operation.");
         }
 
+        if (noDeliverySurchargeTotal < 0)
+        {
+            throw new ArgumentException("No-delivery surcharge total cannot be negative.", nameof(noDeliverySurchargeTotal));
+        }
+
         if (!hasDelivery)
         {
             TransportAssignmentId = null;
@@ -144,8 +163,9 @@ public sealed class Sale : AggregateRoot<SaleId>
         CustomerId = customerId;
         HasDelivery = hasDelivery;
         SaleStatus = saleStatus;
-        TotalAmount = _details.Sum(detail => detail.TotalAmount);
-        SetSettlement(payments, tradeIns, false);
+        NoDeliverySurchargeTotal = noDeliverySurchargeTotal;
+        TotalAmount = _details.Sum(detail => detail.TotalAmount) + noDeliverySurchargeTotal;
+        SetSettlement(payments, tradeIns, allowOverpayment);
         UpdatedAt = DateTime.UtcNow;
         IsModified = true;
     }
@@ -162,7 +182,7 @@ public sealed class Sale : AggregateRoot<SaleId>
             throw new InvalidOperationException("Only sales in OnHold status can be marked as paid.");
         }
 
-        ValidateSettlement(requireExactAmount: true);
+        ValidateSettlement(requireAtLeastTotal: true);
 
         var cashAmount = GetPaymentAmount(SalePaymentMethod.Cash);
         if (cashAmount > 0 && cashSessionId is null)
@@ -206,7 +226,7 @@ public sealed class Sale : AggregateRoot<SaleId>
     private void SetSettlement(
         IEnumerable<SalePayment>? payments,
         IEnumerable<SaleTradeIn>? tradeIns,
-        bool requireExactAmount)
+        bool requireAtLeastTotal)
     {
         var paymentList = (payments ?? []).ToList();
         var tradeInList = (tradeIns ?? []).ToList();
@@ -241,22 +261,22 @@ public sealed class Sale : AggregateRoot<SaleId>
             _tradeIns.Add(tradeIn);
         }
 
-        ValidateSettlement(requireExactAmount);
+        ValidateSettlement(requireAtLeastTotal);
     }
 
-    private void ValidateSettlement(bool requireExactAmount)
+    private void ValidateSettlement(bool requireAtLeastTotal)
     {
         var settledAmount = NormalizeAmount(SettledAmount);
         var totalAmount = NormalizeAmount(TotalAmount);
 
-        if (settledAmount > totalAmount)
+        if (!requireAtLeastTotal && settledAmount > totalAmount)
         {
             throw new InvalidOperationException("The settled amount cannot exceed the total amount.");
         }
 
-        if (requireExactAmount && settledAmount != totalAmount)
+        if (requireAtLeastTotal && settledAmount < totalAmount)
         {
-            throw new InvalidOperationException("The settled amount must match the total amount to mark the sale as paid.");
+            throw new InvalidOperationException("The settled amount must cover the total amount to mark the sale as paid.");
         }
     }
 

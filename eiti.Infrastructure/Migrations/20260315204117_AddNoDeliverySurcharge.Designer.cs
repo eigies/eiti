@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using eiti.Infrastructure.Persistence;
 
@@ -11,9 +12,11 @@ using eiti.Infrastructure.Persistence;
 namespace eiti.Infrastructure.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260315204117_AddNoDeliverySurcharge")]
+    partial class AddNoDeliverySurcharge
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -630,9 +633,6 @@ namespace eiti.Infrastructure.Migrations
 
                     b.Property<bool>("IsModified")
                         .HasColumnType("bit");
-
-                    b.Property<decimal>("NoDeliverySurchargeTotal")
-                        .HasColumnType("decimal(18,2)");
 
                     b.Property<DateTime?>("PaidAt")
                         .HasColumnType("datetime2");

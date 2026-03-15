@@ -91,7 +91,12 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
 
         var groupedDetails = request.Details
             .GroupBy(detail => detail.ProductId)
-            .Select(group => new { ProductId = group.Key, Quantity = group.Sum(item => item.Quantity) })
+            .Select(group => new
+            {
+                ProductId = group.Key,
+                Quantity = group.Sum(item => item.Quantity),
+                UnitPrice = group.FirstOrDefault(i => i.UnitPrice.HasValue)?.UnitPrice
+            })
             .ToList();
         var currentGroupedDetails = sale.Details
             .GroupBy(detail => detail.ProductId.Value)
@@ -136,7 +141,10 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
                 cancellationToken);
 
             stockMap[product.Id.Value] = stock;
-            saleDetails.Add(SaleDetail.Create(product.Id, detail.Quantity, product.Price));
+            var unitPrice = detail.UnitPrice.HasValue && detail.UnitPrice.Value >= 0
+                ? detail.UnitPrice.Value
+                : product.Price;
+            saleDetails.Add(SaleDetail.Create(product.Id, detail.Quantity, unitPrice));
         }
 
         foreach (var currentDetail in currentGroupedDetails)
@@ -224,7 +232,7 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
                         cancellationToken);
                 }
 
-                sale.Update(customer?.Id, SaleStatus.OnHold, request.HasDelivery, saleDetails, salePayments, saleTradeIns);
+                sale.Update(customer?.Id, SaleStatus.OnHold, request.HasDelivery, saleDetails, salePayments, saleTradeIns, allowOverpayment: true, noDeliverySurchargeTotal: request.NoDeliverySurchargeTotal ?? 0);
 
                 var cashAmount = sale.GetPaymentAmount(SalePaymentMethod.Cash);
                 CashSession? session = null;
@@ -334,7 +342,7 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
                         cancellationToken);
                 }
 
-                sale.Update(customer?.Id, requestedStatus, request.HasDelivery, saleDetails, salePayments, saleTradeIns);
+                sale.Update(customer?.Id, requestedStatus, request.HasDelivery, saleDetails, salePayments, saleTradeIns, noDeliverySurchargeTotal: request.NoDeliverySurchargeTotal ?? 0);
             }
 
             if (requestedStatus == SaleStatus.Cancel && existingTransportAssignmentId is not null)
@@ -376,11 +384,13 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
                 sale.TransportAssignmentId?.Value,
                 (int)sale.SaleStatus,
                 sale.SaleStatus.ToString(),
+                sale.NoDeliverySurchargeTotal,
                 sale.TotalAmount,
                 sale.MonetaryPaidAmount,
                 sale.TradeInAmount,
                 sale.SettledAmount,
                 sale.PendingAmount,
+                sale.ChangeAmount,
                 sale.CreatedAt,
                 sale.PaidAt,
                 sale.UpdatedAt,

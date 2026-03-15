@@ -60,6 +60,10 @@ public sealed class ProductConfiguration : IEntityTypeConfiguration<Product>
         builder.Property(product => product.AllowsManualValueInSale)
             .IsRequired();
 
+        builder.Property(product => product.NoDeliverySurcharge)
+            .HasColumnType("decimal(18,2)")
+            .IsRequired(false);
+
         builder.Property(product => product.CreatedAt).IsRequired();
         builder.Property(product => product.UpdatedAt).IsRequired(false);
 

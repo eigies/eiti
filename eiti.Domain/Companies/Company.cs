@@ -8,6 +8,7 @@ public sealed class Company : AggregateRoot<CompanyId>
     public CompanyDomain PrimaryDomain { get; private set; }
     public bool IsWhatsAppEnabled { get; private set; }
     public string? WhatsAppSenderPhone { get; private set; }
+    public decimal? DefaultNoDeliverySurcharge { get; private set; }
     public DateTime CreatedAt { get; private set; }
 
     private Company()
@@ -58,7 +59,8 @@ public sealed class Company : AggregateRoot<CompanyId>
         CompanyName name,
         CompanyDomain primaryDomain,
         bool isWhatsAppEnabled,
-        string? whatsAppSenderPhone)
+        string? whatsAppSenderPhone,
+        decimal? defaultNoDeliverySurcharge = null)
     {
         var normalizedSenderPhone = NormalizeSenderPhone(whatsAppSenderPhone);
         if (isWhatsAppEnabled && string.IsNullOrWhiteSpace(normalizedSenderPhone))
@@ -72,6 +74,7 @@ public sealed class Company : AggregateRoot<CompanyId>
         PrimaryDomain = primaryDomain;
         IsWhatsAppEnabled = isWhatsAppEnabled;
         WhatsAppSenderPhone = normalizedSenderPhone;
+        DefaultNoDeliverySurcharge = defaultNoDeliverySurcharge;
     }
 
     private static string? NormalizeSenderPhone(string? value)

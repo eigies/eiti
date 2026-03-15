@@ -7,5 +7,6 @@ public sealed record UpdateCurrentCompanyCommand(
     string Name,
     string PrimaryDomain,
     bool? IsWhatsAppEnabled,
-    string? WhatsAppSenderPhone
+    string? WhatsAppSenderPhone,
+    decimal? DefaultNoDeliverySurcharge = null
 ) : IRequest<Result<UpdateCurrentCompanyResponse>>;

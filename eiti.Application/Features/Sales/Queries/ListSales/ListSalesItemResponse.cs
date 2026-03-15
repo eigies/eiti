@@ -16,6 +16,7 @@ public sealed record ListSalesItemResponse(
     string? TransportStatusName,
     int IdSaleStatus,
     string SaleStatus,
+    decimal NoDeliverySurchargeTotal,
     decimal TotalAmount,
     decimal MonetaryPaidAmount,
     decimal TradeInAmount,

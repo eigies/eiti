@@ -15,6 +15,7 @@ public sealed class Product : AggregateRoot<ProductId>
     public decimal CostPrice { get; private set; }
     public decimal? UnitPrice { get; private set; }
     public bool AllowsManualValueInSale { get; private set; }
+    public decimal? NoDeliverySurcharge { get; private set; }
     public DateTime CreatedAt { get; private set; }
     public DateTime? UpdatedAt { get; private set; }
 
@@ -34,6 +35,7 @@ public sealed class Product : AggregateRoot<ProductId>
         decimal costPrice,
         decimal? unitPrice,
         bool allowsManualValueInSale,
+        decimal? noDeliverySurcharge,
         DateTime createdAt)
         : base(id)
     {
@@ -47,6 +49,7 @@ public sealed class Product : AggregateRoot<ProductId>
         CostPrice = costPrice;
         UnitPrice = unitPrice;
         AllowsManualValueInSale = allowsManualValueInSale;
+        NoDeliverySurcharge = noDeliverySurcharge;
         CreatedAt = createdAt;
     }
 
@@ -60,7 +63,8 @@ public sealed class Product : AggregateRoot<ProductId>
         decimal publicPrice,
         decimal costPrice,
         decimal? unitPrice,
-        bool allowsManualValueInSale = false)
+        bool allowsManualValueInSale = false,
+        decimal? noDeliverySurcharge = null)
     {
         var normalizedCode = NormalizeCode(code);
         var normalizedSku = NormalizeSku(sku);
@@ -82,6 +86,7 @@ public sealed class Product : AggregateRoot<ProductId>
             costPrice,
             unitPrice,
             allowsManualValueInSale,
+            noDeliverySurcharge,
             DateTime.UtcNow);
     }
 
@@ -94,7 +99,8 @@ public sealed class Product : AggregateRoot<ProductId>
         decimal publicPrice,
         decimal costPrice,
         decimal? unitPrice,
-        bool allowsManualValueInSale = false)
+        bool allowsManualValueInSale = false,
+        decimal? noDeliverySurcharge = null)
     {
         var normalizedCode = NormalizeCode(code);
         var normalizedSku = NormalizeSku(sku);
@@ -113,6 +119,7 @@ public sealed class Product : AggregateRoot<ProductId>
         CostPrice = costPrice;
         UnitPrice = unitPrice;
         AllowsManualValueInSale = allowsManualValueInSale;
+        NoDeliverySurcharge = noDeliverySurcharge;
         UpdatedAt = DateTime.UtcNow;
     }
 

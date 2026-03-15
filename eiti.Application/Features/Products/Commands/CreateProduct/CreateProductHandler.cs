@@ -90,7 +90,8 @@ public sealed class CreateProductHandler
                 resolvedPublicPriceResult.Value,
                 request.CostPrice,
                 request.UnitPrice,
-                request.AllowsManualValueInSale);
+                request.AllowsManualValueInSale,
+                request.NoDeliverySurcharge);
         }
         catch (ArgumentException ex)
         {
@@ -123,6 +124,7 @@ public sealed class CreateProductHandler
                 product.CostPrice,
                 product.UnitPrice,
                 product.AllowsManualValueInSale,
+                product.NoDeliverySurcharge,
                 0,
                 0,
                 0,

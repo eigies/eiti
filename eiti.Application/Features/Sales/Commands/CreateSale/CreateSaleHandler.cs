@@ -97,7 +97,12 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
 
         var groupedDetails = request.Details
             .GroupBy(detail => detail.ProductId)
-            .Select(group => new { ProductId = group.Key, Quantity = group.Sum(item => item.Quantity) })
+            .Select(group => new
+            {
+                ProductId = group.Key,
+                Quantity = group.Sum(item => item.Quantity),
+                UnitPrice = group.FirstOrDefault(i => i.UnitPrice.HasValue)?.UnitPrice
+            })
             .ToList();
 
         var productMap = new Dictionary<Guid, Product>();
@@ -125,7 +130,10 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
                 cancellationToken);
 
             stockMap[product.Id.Value] = stock;
-            saleDetails.Add(SaleDetail.Create(product.Id, detail.Quantity, product.Price));
+            var unitPrice = detail.UnitPrice.HasValue && detail.UnitPrice.Value >= 0
+                ? detail.UnitPrice.Value
+                : product.Price;
+            saleDetails.Add(SaleDetail.Create(product.Id, detail.Quantity, unitPrice));
         }
 
         foreach (var detail in groupedDetails)
@@ -193,7 +201,9 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
                 requestedStatus == SaleStatus.Paid ? SaleStatus.OnHold : requestedStatus,
                 saleDetails,
                 salePayments,
-                saleTradeIns);
+                saleTradeIns,
+                allowOverpayment: requestedStatus == SaleStatus.Paid,
+                noDeliverySurchargeTotal: request.NoDeliverySurchargeTotal ?? 0);
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
         {
@@ -302,11 +312,13 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
                 sale.TransportAssignmentId?.Value,
                 (int)sale.SaleStatus,
                 sale.SaleStatus.ToString(),
+                sale.NoDeliverySurchargeTotal,
                 sale.TotalAmount,
                 sale.MonetaryPaidAmount,
                 sale.TradeInAmount,
                 sale.SettledAmount,
                 sale.PendingAmount,
+                sale.ChangeAmount,
                 sale.CreatedAt,
                 sale.PaidAt,
                 sale.UpdatedAt,

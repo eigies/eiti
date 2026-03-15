@@ -77,9 +77,11 @@ public sealed class UpdateCurrentCompanyHandler
         var isWhatsAppEnabled = request.IsWhatsAppEnabled ?? company.IsWhatsAppEnabled;
         var whatsAppSenderPhone = request.WhatsAppSenderPhone ?? company.WhatsAppSenderPhone;
 
+        var defaultNoDeliverySurcharge = request.DefaultNoDeliverySurcharge ?? company.DefaultNoDeliverySurcharge;
+
         try
         {
-            company.Update(companyName, companyDomain, isWhatsAppEnabled, whatsAppSenderPhone);
+            company.Update(companyName, companyDomain, isWhatsAppEnabled, whatsAppSenderPhone, defaultNoDeliverySurcharge);
         }
         catch (ArgumentException ex)
         {
@@ -96,6 +98,7 @@ public sealed class UpdateCurrentCompanyHandler
                 company.PrimaryDomain.Value,
                 company.IsWhatsAppEnabled,
                 company.WhatsAppSenderPhone,
+                company.DefaultNoDeliverySurcharge,
                 company.CreatedAt));
     }
 }

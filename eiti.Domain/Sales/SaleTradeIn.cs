@@ -23,9 +23,9 @@ public sealed class SaleTradeIn
             throw new ArgumentException("Trade-in quantity must be greater than zero.", nameof(quantity));
         }
 
-        if (amount <= 0)
+        if (amount < 0)
         {
-            throw new ArgumentException("Trade-in amount must be greater than zero.", nameof(amount));
+            throw new ArgumentException("Trade-in amount cannot be negative.", nameof(amount));
         }
 
         ProductId = productId;
