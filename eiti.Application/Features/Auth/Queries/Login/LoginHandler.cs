@@ -35,27 +35,16 @@ public sealed class LoginHandler
     {
         User? user = null;
 
-        try
+        if (Username.IsValid(request.UsernameOrEmail))
         {
             var username = Username.Create(request.UsernameOrEmail);
             user = await _userRepository.GetByUsernameAsync(username, cancellationToken);
         }
-        catch
-        {
-            // Try as email.
-        }
 
-        if (user is null)
+        if (user is null && Email.IsValid(request.UsernameOrEmail))
         {
-            try
-            {
-                var email = Email.Create(request.UsernameOrEmail);
-                user = await _userRepository.GetByEmailAsync(email, cancellationToken);
-            }
-            catch
-            {
-                // Invalid input for both username and email.
-            }
+            var email = Email.Create(request.UsernameOrEmail);
+            user = await _userRepository.GetByEmailAsync(email, cancellationToken);
         }
 
         if (user is null)

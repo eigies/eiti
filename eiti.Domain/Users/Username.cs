@@ -36,5 +36,8 @@ public sealed class Username : ValueObject
         yield return Value;
     }
 
+    public static bool IsValid(string value) =>
+        !string.IsNullOrWhiteSpace(value) && value.Length >= 3 && value.Length <= 50;
+
     public override string ToString() => Value;
 }

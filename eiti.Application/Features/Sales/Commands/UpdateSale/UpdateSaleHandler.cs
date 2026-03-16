@@ -141,9 +141,17 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
                 cancellationToken);
 
             stockMap[product.Id.Value] = stock;
-            var unitPrice = detail.UnitPrice.HasValue && detail.UnitPrice.Value >= 0
-                ? detail.UnitPrice.Value
-                : product.Price;
+            decimal unitPrice;
+            if (detail.UnitPrice.HasValue &&
+                detail.UnitPrice.Value >= 0 &&
+                _currentUserService.HasPermission(PermissionCodes.SalesPriceOverride))
+            {
+                unitPrice = detail.UnitPrice.Value;
+            }
+            else
+            {
+                unitPrice = product.Price;
+            }
             saleDetails.Add(SaleDetail.Create(product.Id, detail.Quantity, unitPrice));
         }
 

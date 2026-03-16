@@ -38,3 +38,8 @@ coverage/
 # OS
 .DS_Store
 Thumbs.db
+
+# Internal review & analysis (kept locally, not for repo)
+.claude/
+DOCUMENTATION_REPORT.md
+DOCUMENTATION_EXAMPLES.md

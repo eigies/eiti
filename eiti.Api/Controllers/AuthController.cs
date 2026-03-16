@@ -4,6 +4,7 @@ using eiti.Application.Features.Auth.Queries.Login;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace eiti.Api.Controllers;
 
@@ -20,6 +21,7 @@ public sealed class AuthController : ControllerBase
 
     [HttpPost("register")]
     [AllowAnonymous]
+    [EnableRateLimiting("register")]
     public async Task<IActionResult> Register(
         [FromBody] RegisterCommand command,
         CancellationToken cancellationToken)
@@ -30,6 +32,7 @@ public sealed class AuthController : ControllerBase
 
     [HttpPost("login")]
     [AllowAnonymous]
+    [EnableRateLimiting("login")]
     public async Task<IActionResult> Login(
         [FromBody] LoginQuery query,
         CancellationToken cancellationToken)

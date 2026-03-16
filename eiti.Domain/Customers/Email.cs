@@ -36,5 +36,8 @@ public sealed class Email : ValueObject
         yield return Value;
     }
 
+    public static bool IsValid(string value) =>
+        !string.IsNullOrWhiteSpace(value) && EmailRegex.IsMatch(value);
+
     public override string ToString() => Value;
 }

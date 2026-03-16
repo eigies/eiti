@@ -21,6 +21,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\eiti.Api\eiti.Api.csproj" />
     <ProjectReference Include="..\eiti.Application\eiti.Application.csproj" />
     <ProjectReference Include="..\eiti.Domain\eiti.Domain.csproj" />
   </ItemGroup>

@@ -16,4 +16,6 @@ public static class PermissionCodes
     public const string CashHistoryExport = "cash.history.export";
 
     public const string UsersManage = "users.manage";
+
+    public const string SalesPriceOverride = "sales.override_price";
 }
