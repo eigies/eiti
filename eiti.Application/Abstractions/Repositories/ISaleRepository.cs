@@ -21,4 +21,8 @@ public interface ISaleRepository
         DateTime? dateTo,
         int? idSaleStatus,
         CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<SalePayment>> GetPaymentsBySaleIdsAsync(
+        IEnumerable<Guid> saleIds,
+        CancellationToken cancellationToken = default);
 }

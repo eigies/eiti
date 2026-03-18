@@ -1,5 +1,6 @@
 using eiti.Application.Common;
 using eiti.Application.Common.Authorization;
+using eiti.Domain.Sales;
 using MediatR;
 
 namespace eiti.Application.Features.Sales.Commands.UpdateSale;
@@ -13,7 +14,8 @@ public sealed record UpdateSaleCommand(
     IReadOnlyList<UpdateSaleDetailItemRequest> Details,
     IReadOnlyList<UpdateSalePaymentItemRequest> Payments,
     IReadOnlyList<UpdateSaleTradeInItemRequest> TradeIns,
-    decimal? NoDeliverySurchargeTotal = null
+    decimal? NoDeliverySurchargeTotal = null,
+    SaleSourceChannel? SourceChannel = null
 ) : IRequest<Result<UpdateSaleResponse>>, IRequirePermissions
 {
     public IReadOnlyCollection<string> RequiredPermissions => [PermissionCodes.SalesUpdate];

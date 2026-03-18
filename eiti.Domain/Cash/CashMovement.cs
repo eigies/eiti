@@ -14,6 +14,7 @@ public sealed class CashMovement : Entity<CashMovementId>
     public Guid? ReferenceId { get; private set; }
     public string Description { get; private set; }
     public UserId CreatedByUserId { get; private set; }
+    public Guid? TransferCounterpartSessionId { get; private set; }
 
     private CashMovement()
     {
@@ -28,7 +29,8 @@ public sealed class CashMovement : Entity<CashMovementId>
         string? referenceType,
         Guid? referenceId,
         string description,
-        UserId createdByUserId)
+        UserId createdByUserId,
+        Guid? transferCounterpartSessionId = null)
         : base(id)
     {
         if (amount <= 0)
@@ -45,6 +47,7 @@ public sealed class CashMovement : Entity<CashMovementId>
         ReferenceId = referenceId;
         Description = NormalizeRequired(description, 255, "Description");
         CreatedByUserId = createdByUserId;
+        TransferCounterpartSessionId = transferCounterpartSessionId;
     }
 
     public static CashMovement Create(
@@ -55,7 +58,8 @@ public sealed class CashMovement : Entity<CashMovementId>
         string? referenceType,
         Guid? referenceId,
         string description,
-        UserId createdByUserId)
+        UserId createdByUserId,
+        Guid? transferCounterpartSessionId = null)
     {
         return new CashMovement(
             CashMovementId.New(),
@@ -66,7 +70,8 @@ public sealed class CashMovement : Entity<CashMovementId>
             referenceType,
             referenceId,
             description,
-            createdByUserId);
+            createdByUserId,
+            transferCounterpartSessionId);
     }
 
     private static string NormalizeRequired(string value, int maxLength, string field)

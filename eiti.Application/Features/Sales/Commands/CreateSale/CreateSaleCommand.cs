@@ -1,5 +1,6 @@
 using eiti.Application.Common;
 using eiti.Application.Common.Authorization;
+using eiti.Domain.Sales;
 using MediatR;
 
 namespace eiti.Application.Features.Sales.Commands.CreateSale;
@@ -13,7 +14,8 @@ public sealed record CreateSaleCommand(
     IReadOnlyList<CreateSaleDetailItemRequest> Details,
     IReadOnlyList<CreateSalePaymentItemRequest> Payments,
     IReadOnlyList<CreateSaleTradeInItemRequest> TradeIns,
-    decimal? NoDeliverySurchargeTotal = null
+    decimal? NoDeliverySurchargeTotal = null,
+    SaleSourceChannel? SourceChannel = null
 ) : IRequest<Result<CreateSaleResponse>>, IRequirePermissions
 {
     public IReadOnlyCollection<string> RequiredPermissions => [PermissionCodes.SalesCreate];

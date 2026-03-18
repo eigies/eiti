@@ -12,7 +12,9 @@ public sealed class GetCashSessionSummaryHandler : IRequestHandler<GetCashSessio
     private readonly ICurrentUserService _currentUserService;
     private readonly ICashSessionRepository _cashSessionRepository;
 
-    public GetCashSessionSummaryHandler(ICurrentUserService currentUserService, ICashSessionRepository cashSessionRepository)
+    public GetCashSessionSummaryHandler(
+        ICurrentUserService currentUserService,
+        ICashSessionRepository cashSessionRepository)
     {
         _currentUserService = currentUserService;
         _cashSessionRepository = cashSessionRepository;

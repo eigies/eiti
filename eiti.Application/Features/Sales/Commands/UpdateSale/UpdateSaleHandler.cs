@@ -368,6 +368,8 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
                 Error.Conflict("Sales.Update.NotEditable", ex.Message));
         }
 
+        sale.SetSourceChannel(request.SourceChannel);
+
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return Result<UpdateSaleResponse>.Success(

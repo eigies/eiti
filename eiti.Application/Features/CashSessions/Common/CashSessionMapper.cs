@@ -1,11 +1,23 @@
 using eiti.Domain.Cash;
+using eiti.Domain.Sales;
 
 namespace eiti.Application.Features.CashSessions.Common;
 
 internal static class CashSessionMapper
 {
-    public static CashSessionResponse Map(CashSession session)
+    private static readonly Dictionary<SalePaymentMethod, string> MethodNames = new()
     {
+        { SalePaymentMethod.Cash,     "Efectivo" },
+        { SalePaymentMethod.Transfer, "Transferencia" },
+        { SalePaymentMethod.Card,     "Tarjeta" },
+        { SalePaymentMethod.Check,    "Cheque" },
+        { SalePaymentMethod.Other,    "Otros" }
+    };
+
+    public static CashSessionResponse Map(CashSession session, IReadOnlyList<SalePayment>? payments = null)
+    {
+        var breakdown = BuildBreakdown(payments ?? []);
+
         return new CashSessionResponse(
             session.Id.Value,
             session.BranchId.Value,
@@ -32,7 +44,8 @@ internal static class CashSessionMapper
                     movement.Description,
                     movement.ReferenceType,
                     movement.ReferenceId))
-                .ToList());
+                .ToList(),
+            breakdown);
     }
 
     public static CashSessionSummaryResponse MapSummary(CashSession session)
@@ -53,5 +66,18 @@ internal static class CashSessionMapper
             session.ExpectedClosingAmount,
             session.ActualClosingAmount,
             session.Difference);
+    }
+
+    private static IReadOnlyList<PaymentMethodBreakdownItem> BuildBreakdown(IReadOnlyList<SalePayment> payments)
+    {
+        return payments
+            .GroupBy(payment => payment.Method)
+            .Select(group => new PaymentMethodBreakdownItem(
+                (int)group.Key,
+                MethodNames.GetValueOrDefault(group.Key, group.Key.ToString()),
+                group.Sum(payment => payment.Amount)))
+            .Where(item => item.Amount > 0)
+            .OrderBy(item => item.Method)
+            .ToList();
     }
 }

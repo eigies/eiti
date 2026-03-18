@@ -1,5 +1,6 @@
 using eiti.Api.Extensions;
 using eiti.Application.Features.CashSessions.Commands.CloseCashSession;
+using eiti.Application.Features.CashSessions.Commands.CreateCashTransfer;
 using eiti.Application.Features.CashSessions.Commands.CreateCashWithdrawal;
 using eiti.Application.Features.CashSessions.Commands.OpenCashSession;
 using eiti.Application.Features.CashSessions.Queries.GetCashSessionSummary;
@@ -41,6 +42,13 @@ public sealed class CashSessionsController : ControllerBase
     public async Task<IActionResult> Withdraw(Guid id, [FromBody] CreateCashWithdrawalCommand command, CancellationToken cancellationToken)
     {
         var result = await _sender.Send(command with { Id = id }, cancellationToken);
+        return result.ToActionResult();
+    }
+
+    [HttpPost("transfers")]
+    public async Task<IActionResult> Transfer([FromBody] CreateCashTransferCommand command, CancellationToken cancellationToken)
+    {
+        var result = await _sender.Send(command, cancellationToken);
         return result.ToActionResult();
     }
 

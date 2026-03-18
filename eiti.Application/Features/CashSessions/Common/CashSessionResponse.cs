@@ -13,4 +13,5 @@ public sealed record CashSessionResponse(
     decimal? ActualClosingAmount,
     decimal Difference,
     string? Notes,
-    IReadOnlyList<CashSessionMovementResponse> Movements);
+    IReadOnlyList<CashSessionMovementResponse> Movements,
+    IReadOnlyList<PaymentMethodBreakdownItem> PaymentBreakdown);

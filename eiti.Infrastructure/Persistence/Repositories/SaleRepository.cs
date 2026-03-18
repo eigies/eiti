@@ -69,4 +69,15 @@ public sealed class SaleRepository : ISaleRepository
             .OrderByDescending(sale => sale.CreatedAt)
             .ToListAsync(cancellationToken);
     }
+
+    public async Task<IReadOnlyList<SalePayment>> GetPaymentsBySaleIdsAsync(
+        IEnumerable<Guid> saleIds,
+        CancellationToken cancellationToken = default)
+    {
+        var ids = saleIds.Select(id => new SaleId(id)).ToList();
+
+        return await _context.SalePayments
+            .Where(payment => ids.Contains(payment.SaleId))
+            .ToListAsync(cancellationToken);
+    }
 }

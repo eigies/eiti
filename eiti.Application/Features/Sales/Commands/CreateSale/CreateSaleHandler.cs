@@ -300,6 +300,8 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
             }
         }
 
+        sale.SetSourceChannel(request.SourceChannel);
+
         await _saleRepository.AddAsync(sale, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 

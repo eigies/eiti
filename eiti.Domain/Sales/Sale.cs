@@ -22,6 +22,7 @@ public sealed class Sale : AggregateRoot<SaleId>
     public DateTime? PaidAt { get; private set; }
     public DateTime? UpdatedAt { get; private set; }
     public bool IsModified { get; private set; }
+    public SaleSourceChannel? SourceChannel { get; private set; }
     private readonly List<SaleDetail> _details = [];
     private readonly List<SalePayment> _payments = [];
     private readonly List<SaleTradeIn> _tradeIns = [];
@@ -222,6 +223,8 @@ public sealed class Sale : AggregateRoot<SaleId>
         UpdatedAt = DateTime.UtcNow;
         IsModified = true;
     }
+
+    public void SetSourceChannel(SaleSourceChannel? channel) => SourceChannel = channel;
 
     private void SetSettlement(
         IEnumerable<SalePayment>? payments,

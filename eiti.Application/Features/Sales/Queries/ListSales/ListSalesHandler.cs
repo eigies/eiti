@@ -140,6 +140,7 @@ public sealed class ListSalesHandler : IRequestHandler<ListSalesQuery, Result<IR
                         sale.PaidAt,
                         sale.UpdatedAt,
                         sale.IsModified,
+                        sale.SourceChannel,
                         sale.Details.Select(detail =>
                         {
                             productMap.TryGetValue(detail.ProductId.Value, out var product);

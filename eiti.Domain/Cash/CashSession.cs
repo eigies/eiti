@@ -121,6 +121,51 @@ public sealed class CashSession : AggregateRoot<CashSessionId>
             createdByUserId);
     }
 
+    public void RegisterTransferOut(
+        decimal amount,
+        Guid targetSessionId,
+        string description,
+        UserId createdByUserId)
+    {
+        EnsureOpen();
+
+        if (ExpectedClosingAmount - amount < 0)
+        {
+            throw new InvalidOperationException("Cash transfer out cannot leave a negative expected balance.");
+        }
+
+        _movements.Add(CashMovement.Create(
+            Id,
+            CashMovementType.CashTransferOut,
+            CashMovementDirection.Out,
+            amount,
+            "Transfer",
+            null,
+            description,
+            createdByUserId,
+            targetSessionId));
+    }
+
+    public void RegisterTransferIn(
+        decimal amount,
+        Guid sourceSessionId,
+        string description,
+        UserId createdByUserId)
+    {
+        EnsureOpen();
+
+        _movements.Add(CashMovement.Create(
+            Id,
+            CashMovementType.CashTransferIn,
+            CashMovementDirection.In,
+            amount,
+            "Transfer",
+            null,
+            description,
+            createdByUserId,
+            sourceSessionId));
+    }
+
     public void Close(
         decimal actualClosingAmount,
         UserId closedByUserId,

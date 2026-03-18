@@ -59,6 +59,10 @@ public sealed class SaleConfiguration : IEntityTypeConfiguration<Sale>
             .IsRequired();
 
         builder.Property(sale => sale.HasDelivery).IsRequired();
+        builder.Property(sale => sale.SourceChannel)
+            .HasColumnName("SourceChannel")
+            .HasConversion<int?>()
+            .IsRequired(false);
         builder.Property(sale => sale.NoDeliverySurchargeTotal).HasColumnType("decimal(18,2)").IsRequired();
         builder.Property(sale => sale.TotalAmount).HasColumnType("decimal(18,2)").IsRequired();
         builder.Property(sale => sale.CreatedAt).IsRequired();

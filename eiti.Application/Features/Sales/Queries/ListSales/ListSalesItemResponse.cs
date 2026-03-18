@@ -1,3 +1,5 @@
+using eiti.Domain.Sales;
+
 namespace eiti.Application.Features.Sales.Queries.ListSales;
 
 public sealed record ListSalesItemResponse(
@@ -26,6 +28,7 @@ public sealed record ListSalesItemResponse(
     DateTime? PaidAt,
     DateTime? UpdatedAt,
     bool IsModified,
+    SaleSourceChannel? SourceChannel,
     IReadOnlyList<ListSalesDetailItemResponse> Details,
     IReadOnlyList<ListSalesPaymentItemResponse> Payments,
     IReadOnlyList<ListSalesTradeInItemResponse> TradeIns);
