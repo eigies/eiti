@@ -50,10 +50,9 @@ public sealed class UpsertDriverProfileHandler : IRequestHandler<UpsertDriverPro
 
     public async Task<Result<DriverResponse>> Handle(UpsertDriverProfileCommand request, CancellationToken cancellationToken)
     {
-        if (!_currentUserService.IsAuthenticated || _currentUserService.CompanyId is null)
-        {
-            return Result<DriverResponse>.Failure(Error.Unauthorized("Drivers.Upsert.Unauthorized", "The current user is not authenticated."));
-        }
+        var authCheck = _currentUserService.EnsureAuthenticated();
+        if (authCheck.IsFailure)
+            return Result<DriverResponse>.Failure(authCheck.Error);
 
         var employee = await _employeeRepository.GetByIdAsync(new EmployeeId(request.EmployeeId), _currentUserService.CompanyId, cancellationToken);
         if (employee is null)
@@ -110,10 +109,9 @@ public sealed class GetDriverHandler : IRequestHandler<GetDriverQuery, Result<Dr
 
     public async Task<Result<DriverResponse>> Handle(GetDriverQuery request, CancellationToken cancellationToken)
     {
-        if (!_currentUserService.IsAuthenticated || _currentUserService.CompanyId is null)
-        {
-            return Result<DriverResponse>.Failure(Error.Unauthorized("Drivers.Get.Unauthorized", "The current user is not authenticated."));
-        }
+        var authCheck = _currentUserService.EnsureAuthenticated();
+        if (authCheck.IsFailure)
+            return Result<DriverResponse>.Failure(authCheck.Error);
 
         var employee = await _employeeRepository.GetByIdAsync(new EmployeeId(request.EmployeeId), _currentUserService.CompanyId, cancellationToken);
         var profile = employee is null ? null : await _driverProfileRepository.GetByEmployeeIdAsync(employee.Id, _currentUserService.CompanyId, cancellationToken);
@@ -139,10 +137,9 @@ public sealed class ListDriversHandler : IRequestHandler<ListDriversQuery, Resul
 
     public async Task<Result<IReadOnlyList<DriverResponse>>> Handle(ListDriversQuery request, CancellationToken cancellationToken)
     {
-        if (!_currentUserService.IsAuthenticated || _currentUserService.CompanyId is null)
-        {
-            return Result<IReadOnlyList<DriverResponse>>.Failure(Error.Unauthorized("Drivers.List.Unauthorized", "The current user is not authenticated."));
-        }
+        var authCheck = _currentUserService.EnsureAuthenticated();
+        if (authCheck.IsFailure)
+            return Result<IReadOnlyList<DriverResponse>>.Failure(authCheck.Error);
 
         var employees = await _employeeRepository.ListDriversByCompanyAsync(_currentUserService.CompanyId, cancellationToken);
         var profiles = await _driverProfileRepository.ListByCompanyAsync(_currentUserService.CompanyId, cancellationToken);

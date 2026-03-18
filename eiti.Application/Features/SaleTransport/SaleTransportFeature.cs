@@ -54,10 +54,9 @@ public sealed class CreateSaleTransportHandler : IRequestHandler<CreateSaleTrans
 
     public async Task<Result<SaleTransportResponse>> Handle(CreateSaleTransportCommand request, CancellationToken cancellationToken)
     {
-        if (!_currentUserService.IsAuthenticated || _currentUserService.CompanyId is null || _currentUserService.UserId is null)
-        {
-            return Result<SaleTransportResponse>.Failure(Error.Unauthorized("SaleTransport.Create.Unauthorized", "The current user is not authenticated."));
-        }
+        var authCheck = _currentUserService.EnsureAuthenticatedWithContext();
+        if (authCheck.IsFailure)
+            return Result<SaleTransportResponse>.Failure(authCheck.Error);
 
         var sale = await _saleRepository.GetByIdAsync(new SaleId(request.SaleId), cancellationToken);
         if (sale is null || sale.CompanyId != _currentUserService.CompanyId)
@@ -108,10 +107,9 @@ public sealed class UpdateSaleTransportHandler : IRequestHandler<UpdateSaleTrans
 
     public async Task<Result<SaleTransportResponse>> Handle(UpdateSaleTransportCommand request, CancellationToken cancellationToken)
     {
-        if (!_currentUserService.IsAuthenticated || _currentUserService.CompanyId is null)
-        {
-            return Result<SaleTransportResponse>.Failure(Error.Unauthorized("SaleTransport.Update.Unauthorized", "The current user is not authenticated."));
-        }
+        var authCheck = _currentUserService.EnsureAuthenticated();
+        if (authCheck.IsFailure)
+            return Result<SaleTransportResponse>.Failure(authCheck.Error);
 
         var sale = await _saleRepository.GetByIdAsync(new SaleId(request.SaleId), cancellationToken);
         var assignment = sale is null ? null : await _saleTransportAssignmentRepository.GetBySaleIdAsync(sale.Id, _currentUserService.CompanyId, cancellationToken);
@@ -161,10 +159,9 @@ public sealed class UpdateSaleTransportStatusHandler : IRequestHandler<UpdateSal
 
     public async Task<Result<SaleTransportResponse>> Handle(UpdateSaleTransportStatusCommand request, CancellationToken cancellationToken)
     {
-        if (!_currentUserService.IsAuthenticated || _currentUserService.CompanyId is null)
-        {
-            return Result<SaleTransportResponse>.Failure(Error.Unauthorized("SaleTransport.UpdateStatus.Unauthorized", "The current user is not authenticated."));
-        }
+        var authCheck = _currentUserService.EnsureAuthenticated();
+        if (authCheck.IsFailure)
+            return Result<SaleTransportResponse>.Failure(authCheck.Error);
 
         if (!Enum.IsDefined(typeof(SaleTransportStatus), request.Status))
         {
@@ -229,10 +226,9 @@ public sealed class DeleteSaleTransportHandler : IRequestHandler<DeleteSaleTrans
 
     public async Task<Result> Handle(DeleteSaleTransportCommand request, CancellationToken cancellationToken)
     {
-        if (!_currentUserService.IsAuthenticated || _currentUserService.CompanyId is null)
-        {
-            return Result.Failure(Error.Unauthorized("SaleTransport.Delete.Unauthorized", "The current user is not authenticated."));
-        }
+        var authCheck = _currentUserService.EnsureAuthenticated();
+        if (authCheck.IsFailure)
+            return Result.Failure(authCheck.Error);
 
         var sale = await _saleRepository.GetByIdAsync(new SaleId(request.SaleId), cancellationToken);
         var assignment = sale is null ? null : await _saleTransportAssignmentRepository.GetBySaleIdAsync(sale.Id, _currentUserService.CompanyId, cancellationToken);
@@ -272,10 +268,9 @@ public sealed class GetSaleTransportHandler : IRequestHandler<GetSaleTransportQu
 
     public async Task<Result<SaleTransportResponse>> Handle(GetSaleTransportQuery request, CancellationToken cancellationToken)
     {
-        if (!_currentUserService.IsAuthenticated || _currentUserService.CompanyId is null)
-        {
-            return Result<SaleTransportResponse>.Failure(Error.Unauthorized("SaleTransport.Get.Unauthorized", "The current user is not authenticated."));
-        }
+        var authCheck = _currentUserService.EnsureAuthenticated();
+        if (authCheck.IsFailure)
+            return Result<SaleTransportResponse>.Failure(authCheck.Error);
 
         var sale = await _saleRepository.GetByIdAsync(new SaleId(request.SaleId), cancellationToken);
         var assignment = sale is null ? null : await _saleTransportAssignmentRepository.GetBySaleIdAsync(sale.Id, _currentUserService.CompanyId, cancellationToken);

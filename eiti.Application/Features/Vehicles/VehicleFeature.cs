@@ -109,10 +109,9 @@ public sealed class CreateVehicleHandler : IRequestHandler<CreateVehicleCommand,
 
     public async Task<Result<VehicleResponse>> Handle(CreateVehicleCommand request, CancellationToken cancellationToken)
     {
-        if (!_currentUserService.IsAuthenticated || _currentUserService.CompanyId is null)
-        {
-            return Result<VehicleResponse>.Failure(Error.Unauthorized("Vehicles.Create.Unauthorized", "The current user is not authenticated."));
-        }
+        var authCheck = _currentUserService.EnsureAuthenticated();
+        if (authCheck.IsFailure)
+            return Result<VehicleResponse>.Failure(authCheck.Error);
 
         var branchId = await VehicleRules.ResolveBranchAsync(request.BranchId, _currentUserService.CompanyId, _branchRepository, cancellationToken);
         if (request.BranchId.HasValue && branchId is null)
@@ -174,10 +173,9 @@ public sealed class UpdateVehicleHandler : IRequestHandler<UpdateVehicleCommand,
 
     public async Task<Result<VehicleResponse>> Handle(UpdateVehicleCommand request, CancellationToken cancellationToken)
     {
-        if (!_currentUserService.IsAuthenticated || _currentUserService.CompanyId is null)
-        {
-            return Result<VehicleResponse>.Failure(Error.Unauthorized("Vehicles.Update.Unauthorized", "The current user is not authenticated."));
-        }
+        var authCheck = _currentUserService.EnsureAuthenticated();
+        if (authCheck.IsFailure)
+            return Result<VehicleResponse>.Failure(authCheck.Error);
 
         var vehicle = await _vehicleRepository.GetByIdAsync(new VehicleId(request.Id), _currentUserService.CompanyId, cancellationToken);
         if (vehicle is null)
@@ -249,10 +247,9 @@ public sealed class AssignVehicleDriverHandler : IRequestHandler<AssignVehicleDr
 
     public async Task<Result<VehicleResponse>> Handle(AssignVehicleDriverCommand request, CancellationToken cancellationToken)
     {
-        if (!_currentUserService.IsAuthenticated || _currentUserService.CompanyId is null)
-        {
-            return Result<VehicleResponse>.Failure(Error.Unauthorized("Vehicles.AssignDriver.Unauthorized", "The current user is not authenticated."));
-        }
+        var authCheck = _currentUserService.EnsureAuthenticated();
+        if (authCheck.IsFailure)
+            return Result<VehicleResponse>.Failure(authCheck.Error);
 
         var vehicle = await _vehicleRepository.GetByIdAsync(new VehicleId(request.Id), _currentUserService.CompanyId, cancellationToken);
         if (vehicle is null)
@@ -287,10 +284,9 @@ public sealed class UnassignVehicleDriverHandler : IRequestHandler<UnassignVehic
 
     public async Task<Result<VehicleResponse>> Handle(UnassignVehicleDriverCommand request, CancellationToken cancellationToken)
     {
-        if (!_currentUserService.IsAuthenticated || _currentUserService.CompanyId is null)
-        {
-            return Result<VehicleResponse>.Failure(Error.Unauthorized("Vehicles.UnassignDriver.Unauthorized", "The current user is not authenticated."));
-        }
+        var authCheck = _currentUserService.EnsureAuthenticated();
+        if (authCheck.IsFailure)
+            return Result<VehicleResponse>.Failure(authCheck.Error);
 
         var vehicle = await _vehicleRepository.GetByIdAsync(new VehicleId(request.Id), _currentUserService.CompanyId, cancellationToken);
         if (vehicle is null)
@@ -321,10 +317,9 @@ public sealed class DeactivateVehicleHandler : IRequestHandler<DeactivateVehicle
 
     public async Task<Result<VehicleResponse>> Handle(DeactivateVehicleCommand request, CancellationToken cancellationToken)
     {
-        if (!_currentUserService.IsAuthenticated || _currentUserService.CompanyId is null)
-        {
-            return Result<VehicleResponse>.Failure(Error.Unauthorized("Vehicles.Deactivate.Unauthorized", "The current user is not authenticated."));
-        }
+        var authCheck = _currentUserService.EnsureAuthenticated();
+        if (authCheck.IsFailure)
+            return Result<VehicleResponse>.Failure(authCheck.Error);
 
         var vehicle = await _vehicleRepository.GetByIdAsync(new VehicleId(request.Id), _currentUserService.CompanyId, cancellationToken);
         if (vehicle is null)
@@ -354,10 +349,9 @@ public sealed class GetVehicleHandler : IRequestHandler<GetVehicleQuery, Result<
 
     public async Task<Result<VehicleResponse>> Handle(GetVehicleQuery request, CancellationToken cancellationToken)
     {
-        if (!_currentUserService.IsAuthenticated || _currentUserService.CompanyId is null)
-        {
-            return Result<VehicleResponse>.Failure(Error.Unauthorized("Vehicles.Get.Unauthorized", "The current user is not authenticated."));
-        }
+        var authCheck = _currentUserService.EnsureAuthenticated();
+        if (authCheck.IsFailure)
+            return Result<VehicleResponse>.Failure(authCheck.Error);
 
         var vehicle = await _vehicleRepository.GetByIdAsync(new VehicleId(request.Id), _currentUserService.CompanyId, cancellationToken);
         if (vehicle is null)
@@ -385,10 +379,9 @@ public sealed class ListVehiclesHandler : IRequestHandler<ListVehiclesQuery, Res
 
     public async Task<Result<IReadOnlyList<VehicleResponse>>> Handle(ListVehiclesQuery request, CancellationToken cancellationToken)
     {
-        if (!_currentUserService.IsAuthenticated || _currentUserService.CompanyId is null)
-        {
-            return Result<IReadOnlyList<VehicleResponse>>.Failure(Error.Unauthorized("Vehicles.List.Unauthorized", "The current user is not authenticated."));
-        }
+        var authCheck = _currentUserService.EnsureAuthenticated();
+        if (authCheck.IsFailure)
+            return Result<IReadOnlyList<VehicleResponse>>.Failure(authCheck.Error);
 
         var vehicles = await _vehicleRepository.ListByCompanyAsync(_currentUserService.CompanyId, cancellationToken);
         var employeeMap = new Dictionary<Guid, Employee>();
@@ -434,10 +427,9 @@ public sealed class CreateFleetLogHandler : IRequestHandler<CreateFleetLogComman
 
     public async Task<Result<FleetLogResponse>> Handle(CreateFleetLogCommand request, CancellationToken cancellationToken)
     {
-        if (!_currentUserService.IsAuthenticated || _currentUserService.CompanyId is null || _currentUserService.UserId is null)
-        {
-            return Result<FleetLogResponse>.Failure(Error.Unauthorized("FleetLogs.Create.Unauthorized", "The current user is not authenticated."));
-        }
+        var authCheck = _currentUserService.EnsureAuthenticatedWithContext();
+        if (authCheck.IsFailure)
+            return Result<FleetLogResponse>.Failure(authCheck.Error);
 
         if (!Enum.IsDefined(typeof(FleetLogType), request.Type))
         {
@@ -500,10 +492,9 @@ public sealed class ListFleetLogsHandler : IRequestHandler<ListFleetLogsQuery, R
 
     public async Task<Result<IReadOnlyList<FleetLogResponse>>> Handle(ListFleetLogsQuery request, CancellationToken cancellationToken)
     {
-        if (!_currentUserService.IsAuthenticated || _currentUserService.CompanyId is null)
-        {
-            return Result<IReadOnlyList<FleetLogResponse>>.Failure(Error.Unauthorized("FleetLogs.List.Unauthorized", "The current user is not authenticated."));
-        }
+        var authCheck = _currentUserService.EnsureAuthenticated();
+        if (authCheck.IsFailure)
+            return Result<IReadOnlyList<FleetLogResponse>>.Failure(authCheck.Error);
 
         FleetLogType? type = null;
         if (request.Type.HasValue)

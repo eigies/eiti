@@ -28,13 +28,9 @@ public sealed class UpdateCurrentCompanyHandler
         UpdateCurrentCompanyCommand request,
         CancellationToken cancellationToken)
     {
-        if (!_currentUserService.IsAuthenticated || _currentUserService.CompanyId is null)
-        {
-            return Result<UpdateCurrentCompanyResponse>.Failure(
-                Error.Unauthorized(
-                    "Companies.UpdateCurrent.Unauthorized",
-                    "The current user is not authenticated."));
-        }
+        var authCheck = _currentUserService.EnsureAuthenticated();
+        if (authCheck.IsFailure)
+            return Result<UpdateCurrentCompanyResponse>.Failure(authCheck.Error);
 
         var company = await _companyRepository.GetByIdAsync(
             _currentUserService.CompanyId,

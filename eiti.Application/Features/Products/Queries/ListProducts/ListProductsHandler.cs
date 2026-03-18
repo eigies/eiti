@@ -26,13 +26,9 @@ public sealed class ListProductsHandler
         ListProductsQuery request,
         CancellationToken cancellationToken)
     {
-        if (!_currentUserService.IsAuthenticated || _currentUserService.CompanyId is null)
-        {
-            return Result<IReadOnlyList<ProductListItemResponse>>.Failure(
-                Error.Unauthorized(
-                    "Products.List.Unauthorized",
-                    "The current user is not authenticated."));
-        }
+        var authCheck = _currentUserService.EnsureAuthenticated();
+        if (authCheck.IsFailure)
+            return Result<IReadOnlyList<ProductListItemResponse>>.Failure(authCheck.Error);
 
         var products = await _productRepository.GetByCompanyIdAsync(
             _currentUserService.CompanyId,

@@ -64,10 +64,9 @@ public sealed class CreateEmployeeHandler : IRequestHandler<CreateEmployeeComman
 
     public async Task<Result<EmployeeResponse>> Handle(CreateEmployeeCommand request, CancellationToken cancellationToken)
     {
-        if (!_currentUserService.IsAuthenticated || _currentUserService.CompanyId is null)
-        {
-            return Result<EmployeeResponse>.Failure(Error.Unauthorized("Employees.Create.Unauthorized", "The current user is not authenticated."));
-        }
+        var authCheck = _currentUserService.EnsureAuthenticated();
+        if (authCheck.IsFailure)
+            return Result<EmployeeResponse>.Failure(authCheck.Error);
 
         if (!Enum.IsDefined(typeof(EmployeeRole), request.EmployeeRole))
         {
@@ -130,10 +129,9 @@ public sealed class UpdateEmployeeHandler : IRequestHandler<UpdateEmployeeComman
 
     public async Task<Result<EmployeeResponse>> Handle(UpdateEmployeeCommand request, CancellationToken cancellationToken)
     {
-        if (!_currentUserService.IsAuthenticated || _currentUserService.CompanyId is null)
-        {
-            return Result<EmployeeResponse>.Failure(Error.Unauthorized("Employees.Update.Unauthorized", "The current user is not authenticated."));
-        }
+        var authCheck = _currentUserService.EnsureAuthenticated();
+        if (authCheck.IsFailure)
+            return Result<EmployeeResponse>.Failure(authCheck.Error);
 
         var employee = await _employeeRepository.GetByIdAsync(new EmployeeId(request.Id), _currentUserService.CompanyId, cancellationToken);
         if (employee is null)
@@ -193,10 +191,9 @@ public sealed class DeactivateEmployeeHandler : IRequestHandler<DeactivateEmploy
 
     public async Task<Result<EmployeeResponse>> Handle(DeactivateEmployeeCommand request, CancellationToken cancellationToken)
     {
-        if (!_currentUserService.IsAuthenticated || _currentUserService.CompanyId is null)
-        {
-            return Result<EmployeeResponse>.Failure(Error.Unauthorized("Employees.Deactivate.Unauthorized", "The current user is not authenticated."));
-        }
+        var authCheck = _currentUserService.EnsureAuthenticated();
+        if (authCheck.IsFailure)
+            return Result<EmployeeResponse>.Failure(authCheck.Error);
 
         var employee = await _employeeRepository.GetByIdAsync(new EmployeeId(request.Id), _currentUserService.CompanyId, cancellationToken);
         if (employee is null)
@@ -223,10 +220,9 @@ public sealed class GetEmployeeHandler : IRequestHandler<GetEmployeeQuery, Resul
 
     public async Task<Result<EmployeeResponse>> Handle(GetEmployeeQuery request, CancellationToken cancellationToken)
     {
-        if (!_currentUserService.IsAuthenticated || _currentUserService.CompanyId is null)
-        {
-            return Result<EmployeeResponse>.Failure(Error.Unauthorized("Employees.Get.Unauthorized", "The current user is not authenticated."));
-        }
+        var authCheck = _currentUserService.EnsureAuthenticated();
+        if (authCheck.IsFailure)
+            return Result<EmployeeResponse>.Failure(authCheck.Error);
 
         var employee = await _employeeRepository.GetByIdAsync(new EmployeeId(request.Id), _currentUserService.CompanyId, cancellationToken);
         return employee is null
@@ -248,10 +244,9 @@ public sealed class ListEmployeesHandler : IRequestHandler<ListEmployeesQuery, R
 
     public async Task<Result<IReadOnlyList<EmployeeResponse>>> Handle(ListEmployeesQuery request, CancellationToken cancellationToken)
     {
-        if (!_currentUserService.IsAuthenticated || _currentUserService.CompanyId is null)
-        {
-            return Result<IReadOnlyList<EmployeeResponse>>.Failure(Error.Unauthorized("Employees.List.Unauthorized", "The current user is not authenticated."));
-        }
+        var authCheck = _currentUserService.EnsureAuthenticated();
+        if (authCheck.IsFailure)
+            return Result<IReadOnlyList<EmployeeResponse>>.Failure(authCheck.Error);
 
         var items = await _employeeRepository.ListByCompanyAsync(_currentUserService.CompanyId, cancellationToken);
         return Result<IReadOnlyList<EmployeeResponse>>.Success(items.Select(EmployeeMappings.Map).ToList());
@@ -271,10 +266,9 @@ public sealed class ListDriverEmployeesHandler : IRequestHandler<ListDriverEmplo
 
     public async Task<Result<IReadOnlyList<EmployeeResponse>>> Handle(ListDriverEmployeesQuery request, CancellationToken cancellationToken)
     {
-        if (!_currentUserService.IsAuthenticated || _currentUserService.CompanyId is null)
-        {
-            return Result<IReadOnlyList<EmployeeResponse>>.Failure(Error.Unauthorized("Employees.ListDrivers.Unauthorized", "The current user is not authenticated."));
-        }
+        var authCheck = _currentUserService.EnsureAuthenticated();
+        if (authCheck.IsFailure)
+            return Result<IReadOnlyList<EmployeeResponse>>.Failure(authCheck.Error);
 
         var items = await _employeeRepository.ListDriversByCompanyAsync(_currentUserService.CompanyId, cancellationToken);
         return Result<IReadOnlyList<EmployeeResponse>>.Success(items.Select(EmployeeMappings.Map).ToList());

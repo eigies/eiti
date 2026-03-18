@@ -50,38 +50,37 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
 
     public async Task<Result<CreateSaleResponse>> Handle(CreateSaleCommand request, CancellationToken cancellationToken)
     {
+        var authCheck = _currentUserService.EnsureAuthenticated();
+        if (authCheck.IsFailure)
+            return Result<CreateSaleResponse>.Failure(authCheck.Error);
+
         var companyId = _currentUserService.CompanyId;
-        if (!_currentUserService.IsAuthenticated || companyId is null)
+        if (companyId is null)
         {
-            return Result<CreateSaleResponse>.Failure(
-                Error.Unauthorized("Sales.Create.Unauthorized", "The current user is not authenticated."));
+            return Result<CreateSaleResponse>.Failure(CreateSaleErrors.Unauthorized);
         }
 
         if (!Enum.IsDefined(typeof(SaleStatus), request.IdSaleStatus))
         {
-            return Result<CreateSaleResponse>.Failure(
-                Error.Validation("Sales.Create.InvalidStatus", "The selected sale status is invalid."));
+            return Result<CreateSaleResponse>.Failure(CreateSaleErrors.InvalidStatus);
         }
 
         var requestedStatus = (SaleStatus)request.IdSaleStatus;
 
         if (requestedStatus == SaleStatus.Paid && !_currentUserService.HasPermission(PermissionCodes.SalesPay))
         {
-            return Result<CreateSaleResponse>.Failure(
-                Error.Forbidden("Sales.Create.PaymentForbidden", "The current user does not have permission to charge sales."));
+            return Result<CreateSaleResponse>.Failure(CreateSaleErrors.PaymentForbidden);
         }
 
         if (requestedStatus == SaleStatus.Cancel)
         {
-            return Result<CreateSaleResponse>.Failure(
-                Error.Validation("Sales.Create.CancelNotAllowed", "A sale cannot be created with Cancel status."));
+            return Result<CreateSaleResponse>.Failure(CreateSaleErrors.CancelNotAllowed);
         }
 
         var branch = await _branchRepository.GetByIdAsync(new BranchId(request.BranchId), companyId, cancellationToken);
         if (branch is null)
         {
-            return Result<CreateSaleResponse>.Failure(
-                Error.NotFound("Sales.Create.BranchNotFound", "The requested branch was not found."));
+            return Result<CreateSaleResponse>.Failure(CreateSaleErrors.BranchNotFound);
         }
 
         Customer? customer = null;
@@ -90,8 +89,7 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
             customer = await _customerRepository.GetByIdAsync(new CustomerId(request.CustomerId.Value), companyId, cancellationToken);
             if (customer is null)
             {
-                return Result<CreateSaleResponse>.Failure(
-                    Error.NotFound("Sales.Create.CustomerNotFound", "The selected customer was not found."));
+                return Result<CreateSaleResponse>.Failure(CreateSaleErrors.CustomerNotFound);
             }
         }
 
@@ -228,8 +226,7 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
             {
                 if (_currentUserService.UserId is null || request.CashDrawerId is null)
                 {
-                    return Result<CreateSaleResponse>.Failure(
-                        Error.Validation("Sales.Create.CashDrawerRequired", "A cash drawer is required when cash amount is greater than zero."));
+                    return Result<CreateSaleResponse>.Failure(CreateSaleErrors.CashDrawerRequired);
                 }
 
                 session = await _cashSessionRepository.GetOpenForBranchAsync(
@@ -240,8 +237,7 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
 
                 if (session is null)
                 {
-                    return Result<CreateSaleResponse>.Failure(
-                        Error.Conflict("Sales.Create.CashSessionRequired", "An open cash session is required for the selected cash drawer."));
+                    return Result<CreateSaleResponse>.Failure(CreateSaleErrors.CashSessionRequired);
                 }
             }
 

@@ -33,11 +33,9 @@ public sealed class CompleteInitialCashOpenHandler : IRequestHandler<CompleteIni
 
     public async Task<Result<CashSessionResponse>> Handle(CompleteInitialCashOpenCommand request, CancellationToken cancellationToken)
     {
-        if (!_currentUserService.IsAuthenticated || _currentUserService.CompanyId is null || _currentUserService.UserId is null)
-        {
-            return Result<CashSessionResponse>.Failure(
-                Error.Unauthorized("Onboarding.CompleteInitialCashOpen.Unauthorized", "The current user is not authenticated."));
-        }
+        var authCheck = _currentUserService.EnsureAuthenticatedWithContext();
+        if (authCheck.IsFailure)
+            return Result<CashSessionResponse>.Failure(authCheck.Error);
 
         var drawer = await _cashDrawerRepository.GetByIdAsync(new CashDrawerId(request.CashDrawerId), _currentUserService.CompanyId, cancellationToken);
 

@@ -20,10 +20,9 @@ public sealed class GetCurrentCashSessionHandler : IRequestHandler<GetCurrentCas
 
     public async Task<Result<CashSessionResponse>> Handle(GetCurrentCashSessionQuery request, CancellationToken cancellationToken)
     {
-        if (!_currentUserService.IsAuthenticated || _currentUserService.CompanyId is null)
-        {
-            return Result<CashSessionResponse>.Failure(Error.Unauthorized("CashSessions.Current.Unauthorized", "The current user is not authenticated."));
-        }
+        var authCheck = _currentUserService.EnsureAuthenticated();
+        if (authCheck.IsFailure)
+            return Result<CashSessionResponse>.Failure(authCheck.Error);
 
         var session = await _cashSessionRepository.GetOpenByDrawerAsync(new CashDrawerId(request.CashDrawerId), _currentUserService.CompanyId, cancellationToken);
 

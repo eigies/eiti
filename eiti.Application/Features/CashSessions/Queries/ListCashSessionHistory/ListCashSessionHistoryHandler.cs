@@ -20,10 +20,9 @@ public sealed class ListCashSessionHistoryHandler : IRequestHandler<ListCashSess
 
     public async Task<Result<IReadOnlyList<CashSessionResponse>>> Handle(ListCashSessionHistoryQuery request, CancellationToken cancellationToken)
     {
-        if (!_currentUserService.IsAuthenticated || _currentUserService.CompanyId is null)
-        {
-            return Result<IReadOnlyList<CashSessionResponse>>.Failure(Error.Unauthorized("CashSessions.History.Unauthorized", "The current user is not authenticated."));
-        }
+        var authCheck = _currentUserService.EnsureAuthenticated();
+        if (authCheck.IsFailure)
+            return Result<IReadOnlyList<CashSessionResponse>>.Failure(authCheck.Error);
 
         var from = request.From?.Date;
         var to = request.To?.Date.AddDays(1).AddTicks(-1);

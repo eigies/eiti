@@ -27,13 +27,9 @@ public sealed class DeleteProductHandler : IRequestHandler<DeleteProductCommand,
         DeleteProductCommand request,
         CancellationToken cancellationToken)
     {
-        if (!_currentUserService.IsAuthenticated || _currentUserService.CompanyId is null)
-        {
-            return Result.Failure(
-                Error.Unauthorized(
-                    "Products.Delete.Unauthorized",
-                    "The current user is not authenticated."));
-        }
+        var authCheck = _currentUserService.EnsureAuthenticated();
+        if (authCheck.IsFailure)
+            return Result.Failure(authCheck.Error);
 
         var product = await _productRepository.GetByIdAsync(
             new ProductId(request.Id),

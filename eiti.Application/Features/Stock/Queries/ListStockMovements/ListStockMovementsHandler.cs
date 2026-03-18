@@ -29,11 +29,9 @@ public sealed class ListStockMovementsHandler : IRequestHandler<ListStockMovemen
 
     public async Task<Result<IReadOnlyList<StockMovementResponse>>> Handle(ListStockMovementsQuery request, CancellationToken cancellationToken)
     {
-        if (!_currentUserService.IsAuthenticated || _currentUserService.CompanyId is null)
-        {
-            return Result<IReadOnlyList<StockMovementResponse>>.Failure(
-                Error.Unauthorized("Stock.Movements.Unauthorized", "The current user is not authenticated."));
-        }
+        var authCheck = _currentUserService.EnsureAuthenticated();
+        if (authCheck.IsFailure)
+            return Result<IReadOnlyList<StockMovementResponse>>.Failure(authCheck.Error);
 
         var branch = await _branchRepository.GetByIdAsync(new BranchId(request.BranchId), _currentUserService.CompanyId, cancellationToken);
         if (branch is null)

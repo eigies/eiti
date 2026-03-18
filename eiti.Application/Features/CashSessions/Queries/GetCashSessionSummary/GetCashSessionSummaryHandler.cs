@@ -20,10 +20,9 @@ public sealed class GetCashSessionSummaryHandler : IRequestHandler<GetCashSessio
 
     public async Task<Result<CashSessionSummaryResponse>> Handle(GetCashSessionSummaryQuery request, CancellationToken cancellationToken)
     {
-        if (!_currentUserService.IsAuthenticated || _currentUserService.CompanyId is null)
-        {
-            return Result<CashSessionSummaryResponse>.Failure(Error.Unauthorized("CashSessions.Summary.Unauthorized", "The current user is not authenticated."));
-        }
+        var authCheck = _currentUserService.EnsureAuthenticated();
+        if (authCheck.IsFailure)
+            return Result<CashSessionSummaryResponse>.Failure(authCheck.Error);
 
         var session = await _cashSessionRepository.GetByIdAsync(new CashSessionId(request.Id), _currentUserService.CompanyId, cancellationToken);
 

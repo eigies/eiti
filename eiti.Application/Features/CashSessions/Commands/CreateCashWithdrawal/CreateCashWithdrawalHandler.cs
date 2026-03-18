@@ -26,10 +26,9 @@ public sealed class CreateCashWithdrawalHandler : IRequestHandler<CreateCashWith
 
     public async Task<Result<CashSessionResponse>> Handle(CreateCashWithdrawalCommand request, CancellationToken cancellationToken)
     {
-        if (!_currentUserService.IsAuthenticated || _currentUserService.CompanyId is null || _currentUserService.UserId is null)
-        {
-            return Result<CashSessionResponse>.Failure(Error.Unauthorized("CashSessions.Withdraw.Unauthorized", "The current user is not authenticated."));
-        }
+        var authCheck = _currentUserService.EnsureAuthenticatedWithContext();
+        if (authCheck.IsFailure)
+            return Result<CashSessionResponse>.Failure(authCheck.Error);
 
         var session = await _cashSessionRepository.GetByIdAsync(new CashSessionId(request.Id), _currentUserService.CompanyId, cancellationToken);
 

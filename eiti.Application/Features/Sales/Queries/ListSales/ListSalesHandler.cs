@@ -40,11 +40,9 @@ public sealed class ListSalesHandler : IRequestHandler<ListSalesQuery, Result<IR
 
     public async Task<Result<IReadOnlyList<ListSalesItemResponse>>> Handle(ListSalesQuery request, CancellationToken cancellationToken)
     {
-        if (!_currentUserService.IsAuthenticated || _currentUserService.CompanyId is null)
-        {
-            return Result<IReadOnlyList<ListSalesItemResponse>>.Failure(
-                Error.Unauthorized("Sales.List.Unauthorized", "The current user is not authenticated."));
-        }
+        var authCheck = _currentUserService.EnsureAuthenticated();
+        if (authCheck.IsFailure)
+            return Result<IReadOnlyList<ListSalesItemResponse>>.Failure(authCheck.Error);
 
         var sales = await _saleRepository.ListByCompanyAsync(
             _currentUserService.CompanyId,

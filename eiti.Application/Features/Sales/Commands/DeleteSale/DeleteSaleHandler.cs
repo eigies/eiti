@@ -27,13 +27,9 @@ public sealed class DeleteSaleHandler : IRequestHandler<DeleteSaleCommand, Resul
         DeleteSaleCommand request,
         CancellationToken cancellationToken)
     {
-        if (!_currentUserService.IsAuthenticated || _currentUserService.CompanyId is null)
-        {
-            return Result.Failure(
-                Error.Unauthorized(
-                    "Sales.Delete.Unauthorized",
-                    "The current user is not authenticated."));
-        }
+        var authCheck = _currentUserService.EnsureAuthenticated();
+        if (authCheck.IsFailure)
+            return Result.Failure(authCheck.Error);
 
         var sale = await _saleRepository.GetByIdAsync(new SaleId(request.Id), cancellationToken);
 

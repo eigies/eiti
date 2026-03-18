@@ -26,16 +26,15 @@ public sealed class CloseCashSessionHandler : IRequestHandler<CloseCashSessionCo
 
     public async Task<Result<CashSessionResponse>> Handle(CloseCashSessionCommand request, CancellationToken cancellationToken)
     {
-        if (!_currentUserService.IsAuthenticated || _currentUserService.CompanyId is null || _currentUserService.UserId is null)
-        {
-            return Result<CashSessionResponse>.Failure(Error.Unauthorized("CashSessions.Close.Unauthorized", "The current user is not authenticated."));
-        }
+        var authCheck = _currentUserService.EnsureAuthenticatedWithContext();
+        if (authCheck.IsFailure)
+            return Result<CashSessionResponse>.Failure(authCheck.Error);
 
         var session = await _cashSessionRepository.GetByIdAsync(new CashSessionId(request.Id), _currentUserService.CompanyId, cancellationToken);
 
         if (session is null)
         {
-            return Result<CashSessionResponse>.Failure(Error.NotFound("CashSessions.Close.NotFound", "The requested cash session was not found."));
+            return Result<CashSessionResponse>.Failure(CloseCashSessionErrors.NotFound);
         }
 
         try

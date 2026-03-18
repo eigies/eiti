@@ -25,10 +25,9 @@ public sealed class ListCashDrawersHandler : IRequestHandler<ListCashDrawersQuer
 
     public async Task<Result<IReadOnlyList<CashDrawerResponse>>> Handle(ListCashDrawersQuery request, CancellationToken cancellationToken)
     {
-        if (!_currentUserService.IsAuthenticated || _currentUserService.CompanyId is null)
-        {
-            return Result<IReadOnlyList<CashDrawerResponse>>.Failure(Error.Unauthorized("CashDrawers.List.Unauthorized", "The current user is not authenticated."));
-        }
+        var authCheck = _currentUserService.EnsureAuthenticated();
+        if (authCheck.IsFailure)
+            return Result<IReadOnlyList<CashDrawerResponse>>.Failure(authCheck.Error);
 
         var branch = await _branchRepository.GetByIdAsync(new BranchId(request.BranchId), _currentUserService.CompanyId, cancellationToken);
 

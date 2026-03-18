@@ -6,6 +6,9 @@
 /artifacts/
 /publish/
 
+# MCP config (contains secrets)
+.mcp.json
+
 # User and IDE files
 .vs/
 .idea/

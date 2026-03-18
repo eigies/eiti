@@ -30,11 +30,9 @@ public sealed class UpdateCustomerHandler : IRequestHandler<UpdateCustomerComman
 
     public async Task<Result<UpdateCustomerResponse>> Handle(UpdateCustomerCommand request, CancellationToken cancellationToken)
     {
-        if (!_currentUserService.IsAuthenticated || _currentUserService.CompanyId is null)
-        {
-            return Result<UpdateCustomerResponse>.Failure(
-                Error.Unauthorized("Customer.Update.Unauthorized", "El usuario actual no esta autenticado."));
-        }
+        var authCheck = _currentUserService.EnsureAuthenticated();
+        if (authCheck.IsFailure)
+            return Result<UpdateCustomerResponse>.Failure(authCheck.Error);
 
         var customer = await _customerRepository.GetByIdAsync(new CustomerId(request.Id), _currentUserService.CompanyId, cancellationToken);
         if (customer is null)

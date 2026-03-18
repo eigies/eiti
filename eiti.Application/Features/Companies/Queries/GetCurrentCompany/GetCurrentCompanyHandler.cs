@@ -23,13 +23,9 @@ public sealed class GetCurrentCompanyHandler
         GetCurrentCompanyQuery request,
         CancellationToken cancellationToken)
     {
-        if (!_currentUserService.IsAuthenticated || _currentUserService.CompanyId is null)
-        {
-            return Result<GetCurrentCompanyResponse>.Failure(
-                Error.Unauthorized(
-                    "Companies.GetCurrent.Unauthorized",
-                    "The current user is not authenticated."));
-        }
+        var authCheck = _currentUserService.EnsureAuthenticated();
+        if (authCheck.IsFailure)
+            return Result<GetCurrentCompanyResponse>.Failure(authCheck.Error);
 
         var company = await _companyRepository.GetByIdAsync(
             _currentUserService.CompanyId,

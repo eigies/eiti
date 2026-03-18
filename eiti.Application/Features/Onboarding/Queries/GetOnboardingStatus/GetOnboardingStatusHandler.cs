@@ -26,11 +26,9 @@ public sealed class GetOnboardingStatusHandler : IRequestHandler<GetOnboardingSt
 
     public async Task<Result<OnboardingStatusResponse>> Handle(GetOnboardingStatusQuery request, CancellationToken cancellationToken)
     {
-        if (!_currentUserService.IsAuthenticated || _currentUserService.CompanyId is null)
-        {
-            return Result<OnboardingStatusResponse>.Failure(
-                Error.Unauthorized("Onboarding.Status.Unauthorized", "The current user is not authenticated."));
-        }
+        var authCheck = _currentUserService.EnsureAuthenticated();
+        if (authCheck.IsFailure)
+            return Result<OnboardingStatusResponse>.Failure(authCheck.Error);
 
         var onboarding = await _companyOnboardingRepository.GetByCompanyIdAsync(_currentUserService.CompanyId, cancellationToken);
 

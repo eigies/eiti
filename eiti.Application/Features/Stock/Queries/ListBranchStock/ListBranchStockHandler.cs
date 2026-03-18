@@ -28,11 +28,9 @@ public sealed class ListBranchStockHandler : IRequestHandler<ListBranchStockQuer
 
     public async Task<Result<IReadOnlyList<BranchProductStockResponse>>> Handle(ListBranchStockQuery request, CancellationToken cancellationToken)
     {
-        if (!_currentUserService.IsAuthenticated || _currentUserService.CompanyId is null)
-        {
-            return Result<IReadOnlyList<BranchProductStockResponse>>.Failure(
-                Error.Unauthorized("Stock.List.Unauthorized", "The current user is not authenticated."));
-        }
+        var authCheck = _currentUserService.EnsureAuthenticated();
+        if (authCheck.IsFailure)
+            return Result<IReadOnlyList<BranchProductStockResponse>>.Failure(authCheck.Error);
 
         var branch = await _branchRepository.GetByIdAsync(new BranchId(request.BranchId), _currentUserService.CompanyId, cancellationToken);
         if (branch is null)

@@ -32,10 +32,9 @@ public sealed class CreateProductHandler
         CreateProductCommand request,
         CancellationToken cancellationToken)
     {
-        if (!_currentUserService.IsAuthenticated || _currentUserService.CompanyId is null)
-        {
-            return Result<CreateProductResponse>.Failure(CreateProductErrors.Unauthorized);
-        }
+        var authCheck = _currentUserService.EnsureAuthenticated();
+        if (authCheck.IsFailure)
+            return Result<CreateProductResponse>.Failure(authCheck.Error);
 
         var normalizedName = request.Name.Trim();
         var normalizedCode = request.Code.Trim().ToUpperInvariant();

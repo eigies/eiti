@@ -31,13 +31,9 @@ public sealed class ListPagedProductsHandler
         ListPagedProductsQuery request,
         CancellationToken cancellationToken)
     {
-        if (!_currentUserService.IsAuthenticated || _currentUserService.CompanyId is null)
-        {
-            return Result<PagedProductsResponse>.Failure(
-                Error.Unauthorized(
-                    "Products.ListPaged.Unauthorized",
-                    "The current user is not authenticated."));
-        }
+        var authCheck = _currentUserService.EnsureAuthenticated();
+        if (authCheck.IsFailure)
+            return Result<PagedProductsResponse>.Failure(authCheck.Error);
 
         var pageSize = request.PageSize <= 0
             ? DefaultPageSize

@@ -28,13 +28,9 @@ public sealed class UpdateProductHandler
         UpdateProductCommand request,
         CancellationToken cancellationToken)
     {
-        if (!_currentUserService.IsAuthenticated || _currentUserService.CompanyId is null)
-        {
-            return Result<UpdateProductResponse>.Failure(
-                Error.Unauthorized(
-                    "Products.Update.Unauthorized",
-                    "The current user is not authenticated."));
-        }
+        var authCheck = _currentUserService.EnsureAuthenticated();
+        if (authCheck.IsFailure)
+            return Result<UpdateProductResponse>.Failure(authCheck.Error);
 
         var product = await _productRepository.GetByIdAsync(
             new ProductId(request.Id),

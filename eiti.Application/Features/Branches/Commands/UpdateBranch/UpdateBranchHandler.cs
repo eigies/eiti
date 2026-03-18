@@ -26,10 +26,9 @@ public sealed class UpdateBranchHandler : IRequestHandler<UpdateBranchCommand, R
 
     public async Task<Result<BranchResponse>> Handle(UpdateBranchCommand request, CancellationToken cancellationToken)
     {
-        if (!_currentUserService.IsAuthenticated || _currentUserService.CompanyId is null)
-        {
-            return Result<BranchResponse>.Failure(Error.Unauthorized("Branches.Update.Unauthorized", "The current user is not authenticated."));
-        }
+        var authCheck = _currentUserService.EnsureAuthenticated();
+        if (authCheck.IsFailure)
+            return Result<BranchResponse>.Failure(authCheck.Error);
 
         var branch = await _branchRepository.GetByIdAsync(new BranchId(request.Id), _currentUserService.CompanyId, cancellationToken);
 

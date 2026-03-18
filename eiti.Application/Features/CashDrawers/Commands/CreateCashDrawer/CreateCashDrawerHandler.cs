@@ -34,10 +34,9 @@ public sealed class CreateCashDrawerHandler : IRequestHandler<CreateCashDrawerCo
 
     public async Task<Result<CashDrawerResponse>> Handle(CreateCashDrawerCommand request, CancellationToken cancellationToken)
     {
-        if (!_currentUserService.IsAuthenticated || _currentUserService.CompanyId is null)
-        {
-            return Result<CashDrawerResponse>.Failure(Error.Unauthorized("CashDrawers.Create.Unauthorized", "The current user is not authenticated."));
-        }
+        var authCheck = _currentUserService.EnsureAuthenticated();
+        if (authCheck.IsFailure)
+            return Result<CashDrawerResponse>.Failure(authCheck.Error);
 
         var branch = await _branchRepository.GetByIdAsync(new BranchId(request.BranchId), _currentUserService.CompanyId, cancellationToken);
 

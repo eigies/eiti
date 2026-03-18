@@ -50,30 +50,25 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
 
     public async Task<Result<UpdateSaleResponse>> Handle(UpdateSaleCommand request, CancellationToken cancellationToken)
     {
-        var companyId = _currentUserService.CompanyId;
-        if (!_currentUserService.IsAuthenticated || companyId is null)
-        {
-            return Result<UpdateSaleResponse>.Failure(
-                Error.Unauthorized("Sales.Update.Unauthorized", "The current user is not authenticated."));
-        }
+        var authCheck = _currentUserService.EnsureAuthenticated();
+        if (authCheck.IsFailure)
+            return Result<UpdateSaleResponse>.Failure(authCheck.Error);
+        var companyId = _currentUserService.CompanyId!;
 
         if (!Enum.IsDefined(typeof(SaleStatus), request.IdSaleStatus))
         {
-            return Result<UpdateSaleResponse>.Failure(
-                Error.Validation("Sales.Update.InvalidStatus", "The selected sale status is invalid."));
+            return Result<UpdateSaleResponse>.Failure(UpdateSaleErrors.InvalidStatus);
         }
 
         var sale = await _saleRepository.GetByIdAsync(new SaleId(request.Id), cancellationToken);
         if (sale is null || sale.CompanyId != companyId)
         {
-            return Result<UpdateSaleResponse>.Failure(
-                Error.NotFound("Sales.Update.NotFound", "The requested sale was not found."));
+            return Result<UpdateSaleResponse>.Failure(UpdateSaleErrors.NotFound);
         }
 
         if (sale.SaleStatus != SaleStatus.OnHold)
         {
-            return Result<UpdateSaleResponse>.Failure(
-                Error.Conflict("Sales.Update.NotEditable", "Only sales in OnHold status can be modified."));
+            return Result<UpdateSaleResponse>.Failure(UpdateSaleErrors.NotEditable);
         }
 
         var existingTransportAssignmentId = sale.TransportAssignmentId;
@@ -84,8 +79,7 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
             customer = await _customerRepository.GetByIdAsync(new CustomerId(request.CustomerId.Value), companyId, cancellationToken);
             if (customer is null)
             {
-                return Result<UpdateSaleResponse>.Failure(
-                    Error.NotFound("Sales.Update.CustomerNotFound", "The selected customer was not found."));
+                return Result<UpdateSaleResponse>.Failure(UpdateSaleErrors.CustomerNotFound);
             }
         }
 
@@ -112,8 +106,7 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
 
         if (requestedStatus == SaleStatus.Paid && !_currentUserService.HasPermission(PermissionCodes.SalesPay))
         {
-            return Result<UpdateSaleResponse>.Failure(
-                Error.Forbidden("Sales.Update.PaymentForbidden", "The current user does not have permission to charge sales."));
+            return Result<UpdateSaleResponse>.Failure(UpdateSaleErrors.PaymentForbidden);
         }
 
         var productMap = new Dictionary<Guid, Product>();
@@ -249,8 +242,7 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
                 {
                     if (_currentUserService.UserId is null || request.CashDrawerId is null)
                     {
-                        return Result<UpdateSaleResponse>.Failure(
-                            Error.Validation("Sales.Update.CashDrawerRequired", "A cash drawer is required when cash amount is greater than zero."));
+                        return Result<UpdateSaleResponse>.Failure(UpdateSaleErrors.CashDrawerRequired);
                     }
 
                     session = await _cashSessionRepository.GetOpenForBranchAsync(
@@ -261,8 +253,7 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
 
                     if (session is null)
                     {
-                        return Result<UpdateSaleResponse>.Failure(
-                            Error.Conflict("Sales.Update.CashSessionRequired", "An open cash session is required for the selected cash drawer."));
+                        return Result<UpdateSaleResponse>.Failure(UpdateSaleErrors.CashSessionRequired);
                     }
                 }
 

@@ -40,36 +40,30 @@ public sealed class SendSaleWhatsAppHandler
         SendSaleWhatsAppCommand request,
         CancellationToken cancellationToken)
     {
-        var companyId = _currentUserService.CompanyId;
-        if (!_currentUserService.IsAuthenticated || companyId is null)
-        {
-            return Result<SendSaleWhatsAppResponse>.Failure(
-                Error.Unauthorized("Sales.SendWhatsApp.Unauthorized", "The current user is not authenticated."));
-        }
+        var authCheck = _currentUserService.EnsureAuthenticated();
+        if (authCheck.IsFailure)
+            return Result<SendSaleWhatsAppResponse>.Failure(authCheck.Error);
+        var companyId = _currentUserService.CompanyId!;
 
         if (!_currentUserService.HasPermission(PermissionCodes.SalesPay))
         {
-            return Result<SendSaleWhatsAppResponse>.Failure(
-                Error.Forbidden("Sales.SendWhatsApp.Forbidden", "The current user does not have permission to prepare WhatsApp notifications for sales."));
+            return Result<SendSaleWhatsAppResponse>.Failure(SendSaleWhatsAppErrors.Forbidden);
         }
 
         var sale = await _saleRepository.GetByIdAsync(new SaleId(request.Id), cancellationToken);
         if (sale is null || sale.CompanyId != companyId)
         {
-            return Result<SendSaleWhatsAppResponse>.Failure(
-                Error.NotFound("Sales.SendWhatsApp.NotFound", "The requested sale was not found."));
+            return Result<SendSaleWhatsAppResponse>.Failure(SendSaleWhatsAppErrors.NotFound);
         }
 
         if (sale.SaleStatus != SaleStatus.Paid)
         {
-            return Result<SendSaleWhatsAppResponse>.Failure(
-                Error.Conflict("Sales.SendWhatsApp.NotPaid", "Only paid sales can trigger a WhatsApp notification."));
+            return Result<SendSaleWhatsAppResponse>.Failure(SendSaleWhatsAppErrors.NotPaid);
         }
 
         if (sale.CustomerId is null)
         {
-            return Result<SendSaleWhatsAppResponse>.Failure(
-                Error.Validation("Sales.SendWhatsApp.CustomerRequired", "The sale does not have an associated customer."));
+            return Result<SendSaleWhatsAppResponse>.Failure(SendSaleWhatsAppErrors.CustomerRequired);
         }
 
         var customer = await _customerRepository.GetByIdAsync(
@@ -79,40 +73,34 @@ public sealed class SendSaleWhatsAppHandler
 
         if (customer is null)
         {
-            return Result<SendSaleWhatsAppResponse>.Failure(
-                Error.NotFound("Sales.SendWhatsApp.CustomerNotFound", "The customer associated with this sale was not found."));
+            return Result<SendSaleWhatsAppResponse>.Failure(SendSaleWhatsAppErrors.CustomerNotFound);
         }
 
         if (string.IsNullOrWhiteSpace(customer.Phone))
         {
-            return Result<SendSaleWhatsAppResponse>.Failure(
-                Error.Validation("Sales.SendWhatsApp.CustomerPhoneRequired", "The customer does not have a phone number configured."));
+            return Result<SendSaleWhatsAppResponse>.Failure(SendSaleWhatsAppErrors.CustomerPhoneRequired);
         }
 
         var company = await _companyRepository.GetByIdAsync(companyId, cancellationToken);
         if (company is null)
         {
-            return Result<SendSaleWhatsAppResponse>.Failure(
-                Error.NotFound("Sales.SendWhatsApp.CompanyNotFound", "The current company was not found."));
+            return Result<SendSaleWhatsAppResponse>.Failure(SendSaleWhatsAppErrors.CompanyNotFound);
         }
 
         if (!company.IsWhatsAppEnabled)
         {
-            return Result<SendSaleWhatsAppResponse>.Failure(
-                Error.Conflict("Sales.SendWhatsApp.Disabled", "WhatsApp notifications are disabled for the current company."));
+            return Result<SendSaleWhatsAppResponse>.Failure(SendSaleWhatsAppErrors.Disabled);
         }
 
         if (string.IsNullOrWhiteSpace(company.WhatsAppSenderPhone))
         {
-            return Result<SendSaleWhatsAppResponse>.Failure(
-                Error.Validation("Sales.SendWhatsApp.SenderPhoneRequired", "A WhatsApp sender phone is required for the current company."));
+            return Result<SendSaleWhatsAppResponse>.Failure(SendSaleWhatsAppErrors.SenderPhoneRequired);
         }
 
         var toPhoneDigits = NormalizePhoneForWaMe(customer.Phone);
         if (string.IsNullOrWhiteSpace(toPhoneDigits))
         {
-            return Result<SendSaleWhatsAppResponse>.Failure(
-                Error.Validation("Sales.SendWhatsApp.CustomerPhoneInvalid", "The customer phone number is invalid for WhatsApp."));
+            return Result<SendSaleWhatsAppResponse>.Failure(SendSaleWhatsAppErrors.CustomerPhoneInvalid);
         }
 
         var branch = await _branchRepository.GetByIdAsync(sale.BranchId, companyId, cancellationToken);

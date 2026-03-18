@@ -22,11 +22,9 @@ public sealed class GetCustomerByIdHandler : IRequestHandler<GetCustomerByIdQuer
 
     public async Task<Result<GetCustomerByIdResponse>> Handle(GetCustomerByIdQuery request, CancellationToken cancellationToken)
     {
-        if (!_currentUserService.IsAuthenticated || _currentUserService.CompanyId is null)
-        {
-            return Result<GetCustomerByIdResponse>.Failure(
-                Error.Unauthorized("Customer.GetById.Unauthorized", "El usuario actual no esta autenticado."));
-        }
+        var authCheck = _currentUserService.EnsureAuthenticated();
+        if (authCheck.IsFailure)
+            return Result<GetCustomerByIdResponse>.Failure(authCheck.Error);
 
         var customer = await _customerRepository.GetByIdAsync(new CustomerId(request.Id), _currentUserService.CompanyId, cancellationToken);
 

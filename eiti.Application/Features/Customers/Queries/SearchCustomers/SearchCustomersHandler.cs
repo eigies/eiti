@@ -18,11 +18,9 @@ public sealed class SearchCustomersHandler : IRequestHandler<SearchCustomersQuer
 
     public async Task<Result<IReadOnlyList<SearchCustomersItemResponse>>> Handle(SearchCustomersQuery request, CancellationToken cancellationToken)
     {
-        if (!_currentUserService.IsAuthenticated || _currentUserService.CompanyId is null)
-        {
-            return Result<IReadOnlyList<SearchCustomersItemResponse>>.Failure(
-                Error.Unauthorized("Customer.Search.Unauthorized", "El usuario actual no esta autenticado."));
-        }
+        var authCheck = _currentUserService.EnsureAuthenticated();
+        if (authCheck.IsFailure)
+            return Result<IReadOnlyList<SearchCustomersItemResponse>>.Failure(authCheck.Error);
 
         var customers = await _customerRepository.SearchAsync(
             _currentUserService.CompanyId,

@@ -100,10 +100,9 @@ public sealed class CreateUserHandler : IRequestHandler<CreateUserCommand, Resul
 
     public async Task<Result<UserResponse>> Handle(CreateUserCommand request, CancellationToken cancellationToken)
     {
-        if (!_currentUserService.IsAuthenticated || _currentUserService.CompanyId is null)
-        {
-            return Result<UserResponse>.Failure(Error.Unauthorized("Users.Create.Unauthorized", "The current user is not authenticated."));
-        }
+        var authCheck = _currentUserService.EnsureAuthenticated();
+        if (authCheck.IsFailure)
+            return Result<UserResponse>.Failure(authCheck.Error);
 
         var normalizedRoles = NormalizeRoles(request.RoleCodes);
         if (normalizedRoles.Count == 0)
@@ -199,10 +198,9 @@ public sealed class GetUserHandler : IRequestHandler<GetUserQuery, Result<UserRe
 
     public async Task<Result<UserResponse>> Handle(GetUserQuery request, CancellationToken cancellationToken)
     {
-        if (!_currentUserService.IsAuthenticated || _currentUserService.CompanyId is null)
-        {
-            return Result<UserResponse>.Failure(Error.Unauthorized("Users.Get.Unauthorized", "The current user is not authenticated."));
-        }
+        var authCheck = _currentUserService.EnsureAuthenticated();
+        if (authCheck.IsFailure)
+            return Result<UserResponse>.Failure(authCheck.Error);
 
         var user = await _userRepository.GetByIdAsync(new UserId(request.Id), cancellationToken);
         if (user is null || user.CompanyId != _currentUserService.CompanyId)
@@ -243,10 +241,9 @@ public sealed class GetMyProfileHandler : IRequestHandler<GetMyProfileQuery, Res
 
     public async Task<Result<UserResponse>> Handle(GetMyProfileQuery request, CancellationToken cancellationToken)
     {
-        if (!_currentUserService.IsAuthenticated || _currentUserService.CompanyId is null || _currentUserService.UserId is null)
-        {
-            return Result<UserResponse>.Failure(Error.Unauthorized("Users.Me.Unauthorized", "The current user is not authenticated."));
-        }
+        var authCheck = _currentUserService.EnsureAuthenticatedWithContext();
+        if (authCheck.IsFailure)
+            return Result<UserResponse>.Failure(authCheck.Error);
 
         var user = await _userRepository.GetByIdAsync(_currentUserService.UserId, cancellationToken);
         if (user is null || user.CompanyId != _currentUserService.CompanyId)
@@ -279,10 +276,9 @@ public sealed class ListUsersHandler : IRequestHandler<ListUsersQuery, Result<IR
 
     public async Task<Result<IReadOnlyList<UserResponse>>> Handle(ListUsersQuery request, CancellationToken cancellationToken)
     {
-        if (!_currentUserService.IsAuthenticated || _currentUserService.CompanyId is null)
-        {
-            return Result<IReadOnlyList<UserResponse>>.Failure(Error.Unauthorized("Users.List.Unauthorized", "The current user is not authenticated."));
-        }
+        var authCheck = _currentUserService.EnsureAuthenticated();
+        if (authCheck.IsFailure)
+            return Result<IReadOnlyList<UserResponse>>.Failure(authCheck.Error);
 
         var users = await _userRepository.ListByCompanyAsync(_currentUserService.CompanyId, cancellationToken);
         var employees = await _employeeRepository.ListByCompanyAsync(_currentUserService.CompanyId, cancellationToken);
@@ -321,10 +317,9 @@ public sealed class UpdateUserRolesHandler : IRequestHandler<UpdateUserRolesComm
 
     public async Task<Result<UserResponse>> Handle(UpdateUserRolesCommand request, CancellationToken cancellationToken)
     {
-        if (!_currentUserService.IsAuthenticated || _currentUserService.CompanyId is null)
-        {
-            return Result<UserResponse>.Failure(Error.Unauthorized("Users.Update.Unauthorized", "The current user is not authenticated."));
-        }
+        var authCheck = _currentUserService.EnsureAuthenticated();
+        if (authCheck.IsFailure)
+            return Result<UserResponse>.Failure(authCheck.Error);
 
         var user = await _userRepository.GetByIdAsync(new UserId(request.Id), cancellationToken);
         if (user is null || user.CompanyId != _currentUserService.CompanyId)
@@ -411,10 +406,9 @@ public sealed class SetUserActiveStatusHandler : IRequestHandler<SetUserActiveSt
 
     public async Task<Result<UserResponse>> Handle(SetUserActiveStatusCommand request, CancellationToken cancellationToken)
     {
-        if (!_currentUserService.IsAuthenticated || _currentUserService.CompanyId is null || _currentUserService.UserId is null)
-        {
-            return Result<UserResponse>.Failure(Error.Unauthorized("Users.Status.Unauthorized", "The current user is not authenticated."));
-        }
+        var authCheck = _currentUserService.EnsureAuthenticatedWithContext();
+        if (authCheck.IsFailure)
+            return Result<UserResponse>.Failure(authCheck.Error);
 
         var user = await _userRepository.GetByIdAsync(new UserId(request.Id), cancellationToken);
         if (user is null || user.CompanyId != _currentUserService.CompanyId)
@@ -463,10 +457,9 @@ public sealed class ListUserRoleAuditsHandler : IRequestHandler<ListUserRoleAudi
 
     public async Task<Result<IReadOnlyList<UserRoleAuditResponse>>> Handle(ListUserRoleAuditsQuery request, CancellationToken cancellationToken)
     {
-        if (!_currentUserService.IsAuthenticated || _currentUserService.CompanyId is null || _currentUserService.UserId is null)
-        {
-            return Result<IReadOnlyList<UserRoleAuditResponse>>.Failure(Error.Unauthorized("Users.Audit.Unauthorized", "The current user is not authenticated."));
-        }
+        var authCheck = _currentUserService.EnsureAuthenticatedWithContext();
+        if (authCheck.IsFailure)
+            return Result<IReadOnlyList<UserRoleAuditResponse>>.Failure(authCheck.Error);
 
         var canReadAllAudits = _currentUserService.HasPermission(PermissionCodes.UsersManage);
         UserId? targetUserId = request.UserId.HasValue ? new UserId(request.UserId.Value) : null;

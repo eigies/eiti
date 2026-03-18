@@ -29,11 +29,9 @@ public sealed class CreateCustomerHandler : IRequestHandler<CreateCustomerComman
 
     public async Task<Result<CreateCustomerResponse>> Handle(CreateCustomerCommand request, CancellationToken cancellationToken)
     {
-        if (!_currentUserService.IsAuthenticated || _currentUserService.CompanyId is null)
-        {
-            return Result<CreateCustomerResponse>.Failure(
-                Error.Unauthorized("Customer.Create.Unauthorized", "El usuario actual no esta autenticado."));
-        }
+        var authCheck = _currentUserService.EnsureAuthenticated();
+        if (authCheck.IsFailure)
+            return Result<CreateCustomerResponse>.Failure(authCheck.Error);
 
         Email email;
 

@@ -26,10 +26,9 @@ public sealed class UpdateCashDrawerHandler : IRequestHandler<UpdateCashDrawerCo
 
     public async Task<Result<CashDrawerResponse>> Handle(UpdateCashDrawerCommand request, CancellationToken cancellationToken)
     {
-        if (!_currentUserService.IsAuthenticated || _currentUserService.CompanyId is null)
-        {
-            return Result<CashDrawerResponse>.Failure(Error.Unauthorized("CashDrawers.Update.Unauthorized", "The current user is not authenticated."));
-        }
+        var authCheck = _currentUserService.EnsureAuthenticated();
+        if (authCheck.IsFailure)
+            return Result<CashDrawerResponse>.Failure(authCheck.Error);
 
         var drawer = await _cashDrawerRepository.GetByIdAsync(new CashDrawerId(request.Id), _currentUserService.CompanyId, cancellationToken);
 

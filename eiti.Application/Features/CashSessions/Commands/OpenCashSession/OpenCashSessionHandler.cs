@@ -29,23 +29,22 @@ public sealed class OpenCashSessionHandler : IRequestHandler<OpenCashSessionComm
 
     public async Task<Result<CashSessionResponse>> Handle(OpenCashSessionCommand request, CancellationToken cancellationToken)
     {
-        if (!_currentUserService.IsAuthenticated || _currentUserService.CompanyId is null || _currentUserService.UserId is null)
-        {
-            return Result<CashSessionResponse>.Failure(Error.Unauthorized("CashSessions.Open.Unauthorized", "The current user is not authenticated."));
-        }
+        var authCheck = _currentUserService.EnsureAuthenticatedWithContext();
+        if (authCheck.IsFailure)
+            return Result<CashSessionResponse>.Failure(authCheck.Error);
 
         var drawer = await _cashDrawerRepository.GetByIdAsync(new CashDrawerId(request.CashDrawerId), _currentUserService.CompanyId, cancellationToken);
 
         if (drawer is null || !drawer.IsActive)
         {
-            return Result<CashSessionResponse>.Failure(Error.NotFound("CashSessions.Open.CashDrawerNotFound", "The requested cash drawer was not found."));
+            return Result<CashSessionResponse>.Failure(OpenCashSessionErrors.CashDrawerNotFound);
         }
 
         var existing = await _cashSessionRepository.GetOpenByDrawerAsync(drawer.Id, _currentUserService.CompanyId, cancellationToken);
 
         if (existing is not null)
         {
-            return Result<CashSessionResponse>.Failure(Error.Conflict("CashSessions.Open.AlreadyOpen", "The cash drawer already has an open session."));
+            return Result<CashSessionResponse>.Failure(OpenCashSessionErrors.AlreadyOpen);
         }
 
         CashSession session;

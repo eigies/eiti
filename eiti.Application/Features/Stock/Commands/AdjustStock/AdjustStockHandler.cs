@@ -41,11 +41,9 @@ public sealed class AdjustStockHandler : IRequestHandler<AdjustStockCommand, Res
 
     public async Task<Result<BranchProductStockResponse>> Handle(AdjustStockCommand request, CancellationToken cancellationToken)
     {
-        if (!_currentUserService.IsAuthenticated || _currentUserService.CompanyId is null)
-        {
-            return Result<BranchProductStockResponse>.Failure(
-                Error.Unauthorized("Stock.Adjust.Unauthorized", "The current user is not authenticated."));
-        }
+        var authCheck = _currentUserService.EnsureAuthenticated();
+        if (authCheck.IsFailure)
+            return Result<BranchProductStockResponse>.Failure(authCheck.Error);
 
         var branch = await _branchRepository.GetByIdAsync(new BranchId(request.BranchId), _currentUserService.CompanyId, cancellationToken);
         if (branch is null)
