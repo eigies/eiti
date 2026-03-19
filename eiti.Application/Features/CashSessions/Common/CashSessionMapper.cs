@@ -58,11 +58,16 @@ internal static class CashSessionMapper
             .Where(movement => movement.Type == CashMovementType.CashWithdrawal)
             .Sum(movement => movement.Amount);
 
+        var salesCancellations = session.Movements
+            .Where(movement => movement.Type == CashMovementType.SaleCancellation)
+            .Sum(movement => movement.Amount);
+
         return new CashSessionSummaryResponse(
             session.Id.Value,
             session.OpeningAmount,
             salesIncome,
             withdrawals,
+            salesCancellations,
             session.ExpectedClosingAmount,
             session.ActualClosingAmount,
             session.Difference);

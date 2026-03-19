@@ -205,6 +205,18 @@ public sealed class Sale : AggregateRoot<SaleId>
             .Sum(payment => payment.Amount);
     }
 
+    public void Cancel()
+    {
+        if (SaleStatus == SaleStatus.Cancel)
+        {
+            throw new InvalidOperationException("The sale is already cancelled.");
+        }
+
+        SaleStatus = SaleStatus.Cancel;
+        UpdatedAt = DateTime.UtcNow;
+        IsModified = true;
+    }
+
     public void AssignTransport(SaleTransportAssignmentId transportAssignmentId)
     {
         if (!HasDelivery)

@@ -5,6 +5,7 @@ public sealed record CashSessionSummaryResponse(
     decimal OpeningAmount,
     decimal SalesIncome,
     decimal Withdrawals,
+    decimal SalesCancellations,
     decimal ExpectedClosingAmount,
     decimal? ActualClosingAmount,
     decimal Difference);

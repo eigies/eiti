@@ -29,6 +29,11 @@ public interface ICashSessionRepository
         CompanyId companyId,
         CancellationToken cancellationToken = default);
 
+    Task<CashSession?> GetAnyOpenByBranchAsync(
+        BranchId branchId,
+        CompanyId companyId,
+        CancellationToken cancellationToken = default);
+
     Task AddAsync(
         CashSession cashSession,
         CancellationToken cancellationToken = default);

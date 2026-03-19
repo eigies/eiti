@@ -99,6 +99,22 @@ public sealed class CashSession : AggregateRoot<CashSessionId>
             createdByUserId);
     }
 
+    public void RegisterSaleCancel(
+        decimal totalAmount,
+        Guid saleId,
+        UserId createdByUserId)
+    {
+        EnsureOpen();
+        AddMovement(
+            CashMovementType.SaleCancellation,
+            CashMovementDirection.None,
+            totalAmount,
+            "Sale",
+            saleId,
+            "Venta cancelada",
+            createdByUserId);
+    }
+
     public void RegisterWithdrawal(
         decimal amount,
         string description,
@@ -189,7 +205,9 @@ public sealed class CashSession : AggregateRoot<CashSessionId>
         _movements.Sum(movement =>
             movement.Direction == CashMovementDirection.In
                 ? movement.Amount
-                : -movement.Amount);
+                : movement.Direction == CashMovementDirection.Out
+                    ? -movement.Amount
+                    : 0m);
 
     public decimal Difference =>
         (ActualClosingAmount ?? ExpectedClosingAmount) - ExpectedClosingAmount;

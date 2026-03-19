@@ -1,6 +1,7 @@
 using eiti.Api.Extensions;
 using eiti.Application.Features.SaleTransport;
 using eiti.Application.Features.Sales.Commands.CreateSale;
+using eiti.Application.Features.Sales.Commands.CancelSale;
 using eiti.Application.Features.Sales.Commands.DeleteSale;
 using eiti.Application.Features.Sales.Commands.SendSaleWhatsApp;
 using eiti.Application.Features.Sales.Commands.UpdateSale;
@@ -52,6 +53,15 @@ public sealed class SalesController : ControllerBase
         CancellationToken cancellationToken)
     {
         var result = await _sender.Send(command with { Id = id }, cancellationToken);
+        return result.ToActionResult();
+    }
+
+    [HttpPost("{id:guid}/cancel")]
+    public async Task<IActionResult> CancelSale(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        var result = await _sender.Send(new CancelSaleCommand(id), cancellationToken);
         return result.ToActionResult();
     }
 

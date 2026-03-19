@@ -7,5 +7,6 @@ public enum CashMovementType
     CashWithdrawal = 3,
     ManualAdjustment = 4,
     CashTransferOut = 5,
-    CashTransferIn = 6
+    CashTransferIn = 6,
+    SaleCancellation = 7
 }
