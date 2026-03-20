@@ -1,6 +1,7 @@
 using eiti.Application.Abstractions.Repositories;
 using eiti.Application.Abstractions.Services;
 using eiti.Application.Common;
+using eiti.Domain.Addresses;
 using eiti.Domain.Customers;
 using eiti.Domain.Employees;
 using eiti.Domain.Products;
@@ -19,6 +20,7 @@ public sealed class ListSalesHandler : IRequestHandler<ListSalesQuery, Result<IR
     private readonly ISaleTransportAssignmentRepository _saleTransportAssignmentRepository;
     private readonly IEmployeeRepository _employeeRepository;
     private readonly IVehicleRepository _vehicleRepository;
+    private readonly IAddressRepository _addressRepository;
 
     public ListSalesHandler(
         ICurrentUserService currentUserService,
@@ -27,7 +29,8 @@ public sealed class ListSalesHandler : IRequestHandler<ListSalesQuery, Result<IR
         ICustomerRepository customerRepository,
         ISaleTransportAssignmentRepository saleTransportAssignmentRepository,
         IEmployeeRepository employeeRepository,
-        IVehicleRepository vehicleRepository)
+        IVehicleRepository vehicleRepository,
+        IAddressRepository addressRepository)
     {
         _currentUserService = currentUserService;
         _saleRepository = saleRepository;
@@ -36,6 +39,7 @@ public sealed class ListSalesHandler : IRequestHandler<ListSalesQuery, Result<IR
         _saleTransportAssignmentRepository = saleTransportAssignmentRepository;
         _employeeRepository = employeeRepository;
         _vehicleRepository = vehicleRepository;
+        _addressRepository = addressRepository;
     }
 
     public async Task<Result<IReadOnlyList<ListSalesItemResponse>>> Handle(ListSalesQuery request, CancellationToken cancellationToken)
@@ -89,6 +93,20 @@ public sealed class ListSalesHandler : IRequestHandler<ListSalesQuery, Result<IR
             }
         }
 
+        var addressMap = new Dictionary<Guid, Address>();
+        foreach (var customer in customerMap.Values.Where(c => c.AddressId is not null))
+        {
+            var addressId = customer.AddressId!;
+            if (!addressMap.ContainsKey(addressId.Value))
+            {
+                var address = await _addressRepository.GetByIdAsync(addressId, cancellationToken);
+                if (address is not null)
+                {
+                    addressMap[addressId.Value] = address;
+                }
+            }
+        }
+
         foreach (var assignment in assignments)
         {
             if (!employeeMap.ContainsKey(assignment.DriverEmployeeId.Value))
@@ -114,6 +132,9 @@ public sealed class ListSalesHandler : IRequestHandler<ListSalesQuery, Result<IR
             sales.Select(sale =>
                 {
                     customerMap.TryGetValue(sale.CustomerId?.Value ?? Guid.Empty, out var customer);
+                    var customerAddress = customer?.AddressId is not null && addressMap.TryGetValue(customer.AddressId.Value, out var address)
+                        ? FormatAddress(address)
+                        : null;
                     return new ListSalesItemResponse(
                         sale.Id.Value,
                         sale.BranchId.Value,
@@ -121,6 +142,7 @@ public sealed class ListSalesHandler : IRequestHandler<ListSalesQuery, Result<IR
                         customer?.FullName,
                         customer is null ? null : BuildCustomerDocument(customer),
                         customer?.TaxId,
+                        customerAddress,
                         sale.CashSessionId?.Value,
                         sale.HasDelivery,
                         sale.TransportAssignmentId?.Value,
@@ -176,5 +198,30 @@ public sealed class ListSalesHandler : IRequestHandler<ListSalesQuery, Result<IR
         return customer.DocumentType is null || string.IsNullOrWhiteSpace(customer.DocumentNumber)
             ? null
             : $"{customer.DocumentType} {customer.DocumentNumber}";
+    }
+
+    private static string? FormatAddress(Address address)
+    {
+        var parts = new List<string>();
+
+        if (!string.IsNullOrWhiteSpace(address.Street))
+        {
+            var street = address.Street;
+            if (!string.IsNullOrWhiteSpace(address.StreetNumber))
+                street += $" {address.StreetNumber}";
+            if (!string.IsNullOrWhiteSpace(address.Floor))
+                street += $", Piso {address.Floor}";
+            if (!string.IsNullOrWhiteSpace(address.Apartment))
+                street += $", Depto {address.Apartment}";
+            parts.Add(street);
+        }
+
+        if (!string.IsNullOrWhiteSpace(address.City))
+            parts.Add(address.City);
+
+        if (!string.IsNullOrWhiteSpace(address.StateOrProvince))
+            parts.Add(address.StateOrProvince);
+
+        return parts.Count > 0 ? string.Join(", ", parts) : null;
     }
 }

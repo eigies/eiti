@@ -32,6 +32,7 @@ public sealed record UpsertDriverProfileCommand(
 
 public sealed record GetDriverQuery(Guid EmployeeId) : IRequest<Result<DriverResponse>>;
 public sealed record ListDriversQuery() : IRequest<Result<IReadOnlyList<DriverResponse>>>;
+public sealed record DeleteDriverProfileCommand(Guid EmployeeId) : IRequest<Result>;
 
 public sealed class UpsertDriverProfileHandler : IRequestHandler<UpsertDriverProfileCommand, Result<DriverResponse>>
 {
@@ -151,6 +152,42 @@ public sealed class ListDriversHandler : IRequestHandler<ListDriversQuery, Resul
             .ToList();
 
         return Result<IReadOnlyList<DriverResponse>>.Success(result);
+    }
+}
+
+public sealed class DeleteDriverProfileHandler : IRequestHandler<DeleteDriverProfileCommand, Result>
+{
+    private readonly ICurrentUserService _currentUserService;
+    private readonly IEmployeeRepository _employeeRepository;
+    private readonly IDriverProfileRepository _driverProfileRepository;
+    private readonly IUnitOfWork _unitOfWork;
+
+    public DeleteDriverProfileHandler(ICurrentUserService currentUserService, IEmployeeRepository employeeRepository, IDriverProfileRepository driverProfileRepository, IUnitOfWork unitOfWork)
+    {
+        _currentUserService = currentUserService;
+        _employeeRepository = employeeRepository;
+        _driverProfileRepository = driverProfileRepository;
+        _unitOfWork = unitOfWork;
+    }
+
+    public async Task<Result> Handle(DeleteDriverProfileCommand request, CancellationToken cancellationToken)
+    {
+        var authCheck = _currentUserService.EnsureAuthenticated();
+        if (authCheck.IsFailure)
+            return Result.Failure(authCheck.Error);
+
+        var employee = await _employeeRepository.GetByIdAsync(new EmployeeId(request.EmployeeId), _currentUserService.CompanyId, cancellationToken);
+        if (employee is null)
+            return Result.Failure(Error.NotFound("Drivers.Delete.EmployeeNotFound", "The requested employee was not found."));
+
+        var profile = await _driverProfileRepository.GetByEmployeeIdAsync(employee.Id, _currentUserService.CompanyId, cancellationToken);
+        if (profile is null)
+            return Result.Failure(Error.NotFound("Drivers.Delete.ProfileNotFound", "The requested driver profile was not found."));
+
+        _driverProfileRepository.Remove(profile);
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        return Result.Success();
     }
 }
 

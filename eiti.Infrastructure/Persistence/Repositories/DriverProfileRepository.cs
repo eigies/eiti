@@ -31,4 +31,7 @@ public sealed class DriverProfileRepository : IDriverProfileRepository
                 && x.LicenseNumber == licenseNumber
                 && (excludingId == null || x.EmployeeId != excludingId),
             cancellationToken);
+
+    public void Remove(DriverProfile profile) =>
+        _context.DriverProfiles.Remove(profile);
 }

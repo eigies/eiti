@@ -24,6 +24,7 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
     private readonly IStockMovementRepository _stockMovementRepository;
     private readonly ISaleRepository _saleRepository;
     private readonly ICashSessionRepository _cashSessionRepository;
+    private readonly IAddressRepository _addressRepository;
     private readonly IUnitOfWork _unitOfWork;
 
     public CreateSaleHandler(
@@ -35,6 +36,7 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
         IStockMovementRepository stockMovementRepository,
         ISaleRepository saleRepository,
         ICashSessionRepository cashSessionRepository,
+        IAddressRepository addressRepository,
         IUnitOfWork unitOfWork)
     {
         _currentUserService = currentUserService;
@@ -45,6 +47,7 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
         _stockMovementRepository = stockMovementRepository;
         _saleRepository = saleRepository;
         _cashSessionRepository = cashSessionRepository;
+        _addressRepository = addressRepository;
         _unitOfWork = unitOfWork;
     }
 
@@ -305,6 +308,8 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
         await _saleRepository.AddAsync(sale, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
+        var customerAddress = await BuildCustomerAddress(customer, cancellationToken);
+
         return Result<CreateSaleResponse>.Success(
             new CreateSaleResponse(
                 sale.Id.Value,
@@ -313,6 +318,7 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
                 customer?.FullName,
                 customer is null ? null : BuildCustomerDocument(customer),
                 customer?.TaxId,
+                customerAddress,
                 sale.CashSessionId?.Value,
                 sale.HasDelivery,
                 sale.TransportAssignmentId?.Value,
@@ -354,6 +360,43 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
         return customer.DocumentType is null || string.IsNullOrWhiteSpace(customer.DocumentNumber)
             ? null
             : $"{customer.DocumentType} {customer.DocumentNumber}";
+    }
+
+    private async Task<string?> BuildCustomerAddress(Customer? customer, CancellationToken cancellationToken)
+    {
+        if (customer?.AddressId is null)
+            return null;
+
+        var address = await _addressRepository.GetByIdAsync(customer.AddressId, cancellationToken);
+        if (address is null)
+            return null;
+
+        return FormatAddress(address);
+    }
+
+    private static string FormatAddress(Domain.Addresses.Address address)
+    {
+        var parts = new List<string>();
+
+        if (!string.IsNullOrWhiteSpace(address.Street))
+        {
+            var street = address.Street;
+            if (!string.IsNullOrWhiteSpace(address.StreetNumber))
+                street += $" {address.StreetNumber}";
+            if (!string.IsNullOrWhiteSpace(address.Floor))
+                street += $", Piso {address.Floor}";
+            if (!string.IsNullOrWhiteSpace(address.Apartment))
+                street += $", Depto {address.Apartment}";
+            parts.Add(street);
+        }
+
+        if (!string.IsNullOrWhiteSpace(address.City))
+            parts.Add(address.City);
+
+        if (!string.IsNullOrWhiteSpace(address.StateOrProvince))
+            parts.Add(address.StateOrProvince);
+
+        return parts.Count > 0 ? string.Join(", ", parts) : null;
     }
 
     private static string GetProductName(IDictionary<Guid, Product> productMap, Guid productId)

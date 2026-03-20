@@ -38,4 +38,11 @@ public sealed class DriversController : ControllerBase
         var result = await _sender.Send(command, cancellationToken);
         return result.ToActionResult();
     }
+
+    [HttpDelete("{employeeId:guid}")]
+    public async Task<IActionResult> Delete(Guid employeeId, CancellationToken cancellationToken)
+    {
+        var result = await _sender.Send(new DeleteDriverProfileCommand(employeeId), cancellationToken);
+        return result.ToActionResult();
+    }
 }

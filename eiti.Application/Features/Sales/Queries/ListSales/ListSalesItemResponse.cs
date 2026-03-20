@@ -9,6 +9,7 @@ public sealed record ListSalesItemResponse(
     string? CustomerFullName,
     string? CustomerDocument,
     string? CustomerTaxId,
+    string? CustomerAddress,
     Guid? CashSessionId,
     bool HasDelivery,
     Guid? TransportAssignmentId,

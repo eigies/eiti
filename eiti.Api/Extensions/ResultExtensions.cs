@@ -22,20 +22,12 @@ public static class ResultExtensions
 
     private static IActionResult ToProblemDetails(Result result)
     {
-        var statusCode = result.Error.Type switch
-        {
-            ErrorType.Validation => StatusCodes.Status400BadRequest,
-            ErrorType.NotFound => StatusCodes.Status404NotFound,
-            ErrorType.Conflict => StatusCodes.Status409Conflict,
-            ErrorType.Unauthorized => StatusCodes.Status401Unauthorized,
-            ErrorType.Forbidden => StatusCodes.Status403Forbidden,
-            _ => StatusCodes.Status500InternalServerError
-        };
+        var (statusCode, title) = GetErrorMapping(result.Error.Type);
 
         return new ObjectResult(new ProblemDetails
         {
             Status = statusCode,
-            Title = GetTitle(result.Error.Type),
+            Title = title,
             Detail = result.Error.Description,
             Extensions = { ["errorCode"] = result.Error.Code }
         })
@@ -44,16 +36,16 @@ public static class ResultExtensions
         };
     }
 
-    private static string GetTitle(ErrorType errorType)
+    private static (int StatusCode, string Title) GetErrorMapping(ErrorType errorType)
     {
         return errorType switch
         {
-            ErrorType.Validation => "Validation Error",
-            ErrorType.NotFound => "Not Found",
-            ErrorType.Conflict => "Conflict",
-            ErrorType.Unauthorized => "Unauthorized",
-            ErrorType.Forbidden => "Forbidden",
-            _ => "Internal Server Error"
+            ErrorType.Validation => (StatusCodes.Status400BadRequest, "Validation Error"),
+            ErrorType.NotFound => (StatusCodes.Status404NotFound, "Not Found"),
+            ErrorType.Conflict => (StatusCodes.Status409Conflict, "Conflict"),
+            ErrorType.Unauthorized => (StatusCodes.Status401Unauthorized, "Unauthorized"),
+            ErrorType.Forbidden => (StatusCodes.Status403Forbidden, "Forbidden"),
+            _ => (StatusCodes.Status500InternalServerError, "Internal Server Error")
         };
     }
 }

@@ -2,7 +2,7 @@ using eiti.Application.Abstractions.Data;
 using eiti.Application.Abstractions.Repositories;
 using eiti.Application.Abstractions.Services;
 using eiti.Application.Common;
-using eiti.Application.Common.Authorization;
+using eiti.Application.Features.Auth.Common;
 using eiti.Domain.Customers;
 using eiti.Domain.Users;
 using MediatR;
@@ -70,8 +70,7 @@ public sealed class LoginHandler
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         var token = _jwtTokenGenerator.GenerateToken(user);
-        var roles = user.Roles.Select(role => role.RoleCode).ToArray();
-        var permissions = RoleCatalog.PermissionsFor(roles).OrderBy(permission => permission).ToArray();
+        var (roles, permissions) = AuthenticationMapper.MapRolesAndPermissions(user);
 
         return Result<LoginResponse>.Success(
             new LoginResponse(

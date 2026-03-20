@@ -68,6 +68,7 @@ public sealed class CreateSaleHandlerTests
             stockMovementRepository.Object,
             saleRepository.Object,
             cashSessionRepository.Object,
+            new Mock<IAddressRepository>().Object,
             unitOfWork.Object);
 
         var result = await handler.Handle(
@@ -138,6 +139,7 @@ public sealed class CreateSaleHandlerTests
             stockMovementRepository.Object,
             saleRepository.Object,
             cashSessionRepository.Object,
+            new Mock<IAddressRepository>().Object,
             unitOfWork.Object);
 
         var result = await handler.Handle(
@@ -200,7 +202,7 @@ public sealed class CreateSaleHandlerTests
         var handler = new CreateSaleHandler(
             currentUserService.Object, branchRepository.Object, customerRepository.Object,
             productRepository.Object, branchProductStockRepository.Object, stockMovementRepository.Object,
-            saleRepository.Object, cashSessionRepository.Object, unitOfWork.Object);
+            saleRepository.Object, cashSessionRepository.Object, new Mock<IAddressRepository>().Object, unitOfWork.Object);
 
         var result = await handler.Handle(
             new CreateSaleCommand(branch.Id.Value, null, 1, false, null,
@@ -256,7 +258,7 @@ public sealed class CreateSaleHandlerTests
         var handler = new CreateSaleHandler(
             currentUserService.Object, branchRepository.Object, customerRepository.Object,
             productRepository.Object, branchProductStockRepository.Object, stockMovementRepository.Object,
-            saleRepository.Object, cashSessionRepository.Object, unitOfWork.Object);
+            saleRepository.Object, cashSessionRepository.Object, new Mock<IAddressRepository>().Object, unitOfWork.Object);
 
         var result = await handler.Handle(
             new CreateSaleCommand(branch.Id.Value, null, 1, false, null,
@@ -312,7 +314,7 @@ public sealed class CreateSaleHandlerTests
         var handler = new CreateSaleHandler(
             currentUserService.Object, branchRepository.Object, customerRepository.Object,
             productRepository.Object, branchProductStockRepository.Object, stockMovementRepository.Object,
-            saleRepository.Object, cashSessionRepository.Object, unitOfWork.Object);
+            saleRepository.Object, cashSessionRepository.Object, new Mock<IAddressRepository>().Object, unitOfWork.Object);
 
         var result = await handler.Handle(
             new CreateSaleCommand(branch.Id.Value, null, 1, false, null,
@@ -368,7 +370,7 @@ public sealed class CreateSaleHandlerTests
         var handler = new CreateSaleHandler(
             currentUserService.Object, branchRepository.Object, customerRepository.Object,
             productRepository.Object, branchProductStockRepository.Object, stockMovementRepository.Object,
-            saleRepository.Object, cashSessionRepository.Object, unitOfWork.Object);
+            saleRepository.Object, cashSessionRepository.Object, new Mock<IAddressRepository>().Object, unitOfWork.Object);
 
         var result = await handler.Handle(
             new CreateSaleCommand(branch.Id.Value, null, 1, false, null,

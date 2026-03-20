@@ -3,6 +3,7 @@ using eiti.Application.Abstractions.Repositories;
 using eiti.Application.Abstractions.Services;
 using eiti.Application.Common;
 using eiti.Application.Common.Authorization;
+using eiti.Application.Features.Auth.Common;
 using eiti.Domain.Companies;
 using eiti.Domain.Customers;
 using eiti.Domain.Users;
@@ -81,8 +82,7 @@ public sealed class RegisterHandler
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         var token = _jwtTokenGenerator.GenerateToken(user);
-        var roles = user.Roles.Select(role => role.RoleCode).ToArray();
-        var permissions = RoleCatalog.PermissionsFor(roles).OrderBy(permission => permission).ToArray();
+        var (roles, permissions) = AuthenticationMapper.MapRolesAndPermissions(user);
 
         return Result<RegisterResponse>.Success(
             new RegisterResponse(
