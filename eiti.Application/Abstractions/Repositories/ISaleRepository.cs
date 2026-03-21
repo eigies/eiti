@@ -30,4 +30,10 @@ public interface ISaleRepository
     Task<int> CountByBranchAsync(
         BranchId branchId,
         CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<string>> SearchDeliveryAddressesAsync(
+        string query,
+        CompanyId companyId,
+        int limit = 8,
+        CancellationToken cancellationToken = default);
 }

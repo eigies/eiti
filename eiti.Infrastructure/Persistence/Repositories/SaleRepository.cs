@@ -90,4 +90,21 @@ public sealed class SaleRepository : ISaleRepository
         return await _context.Sales
             .CountAsync(sale => sale.BranchId == branchId, cancellationToken);
     }
+
+    public async Task<IReadOnlyList<string>> SearchDeliveryAddressesAsync(
+        string query,
+        CompanyId companyId,
+        int limit = 8,
+        CancellationToken cancellationToken = default)
+    {
+        return await _context.Sales
+            .Where(sale => sale.CompanyId == companyId
+                && sale.DeliveryAddress != null
+                && sale.DeliveryAddress.Contains(query))
+            .Select(sale => sale.DeliveryAddress!)
+            .Distinct()
+            .OrderBy(address => address)
+            .Take(limit)
+            .ToListAsync(cancellationToken);
+    }
 }

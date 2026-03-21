@@ -6,6 +6,7 @@ using eiti.Application.Features.Sales.Commands.DeleteSale;
 using eiti.Application.Features.Sales.Commands.SendSaleWhatsApp;
 using eiti.Application.Features.Sales.Commands.UpdateSale;
 using eiti.Application.Features.Sales.Queries.ListSales;
+using eiti.Application.Features.Sales.Queries.SearchDeliveryAddresses;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -113,6 +114,13 @@ public sealed class SalesController : ControllerBase
     public async Task<IActionResult> SendSaleWhatsApp(Guid id, CancellationToken cancellationToken)
     {
         var result = await _sender.Send(new SendSaleWhatsAppCommand(id), cancellationToken);
+        return result.ToActionResult();
+    }
+
+    [HttpGet("delivery-addresses")]
+    public async Task<IActionResult> DeliveryAddresses([FromQuery] string query, CancellationToken cancellationToken)
+    {
+        var result = await _sender.Send(new SearchDeliveryAddressesQuery(query ?? string.Empty), cancellationToken);
         return result.ToActionResult();
     }
 }
