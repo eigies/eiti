@@ -198,6 +198,12 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
 
         var saleTradeIns = tradeInsResult.Value!;
 
+        var branchSaleCount = await _saleRepository.CountByBranchAsync(branch.Id, cancellationToken);
+        var codePrefix = !string.IsNullOrWhiteSpace(branch.Code)
+            ? branch.Code.ToUpper()
+            : branch.Name.ToUpper()[..Math.Min(3, branch.Name.Length)];
+        var saleCode = $"{codePrefix}-{(branchSaleCount + 1).ToString().PadLeft(3, '0')}";
+
         Sale sale;
 
         try
@@ -212,7 +218,9 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
                 salePayments,
                 saleTradeIns,
                 allowOverpayment: requestedStatus == SaleStatus.Paid,
-                noDeliverySurchargeTotal: request.NoDeliverySurchargeTotal ?? 0);
+                noDeliverySurchargeTotal: request.NoDeliverySurchargeTotal ?? 0,
+                code: saleCode,
+                deliveryAddress: request.DeliveryAddress);
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
         {
@@ -313,12 +321,14 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
         return Result<CreateSaleResponse>.Success(
             new CreateSaleResponse(
                 sale.Id.Value,
+                sale.Code,
                 sale.BranchId.Value,
                 sale.CustomerId?.Value,
                 customer?.FullName,
                 customer is null ? null : BuildCustomerDocument(customer),
                 customer?.TaxId,
                 customerAddress,
+                sale.DeliveryAddress,
                 sale.CashSessionId?.Value,
                 sale.HasDelivery,
                 sale.TransportAssignmentId?.Value,

@@ -137,12 +137,14 @@ public sealed class ListSalesHandler : IRequestHandler<ListSalesQuery, Result<IR
                         : null;
                     return new ListSalesItemResponse(
                         sale.Id.Value,
+                        sale.Code,
                         sale.BranchId.Value,
                         sale.CustomerId?.Value,
                         customer?.FullName,
                         customer is null ? null : BuildCustomerDocument(customer),
                         customer?.TaxId,
                         customerAddress,
+                        sale.DeliveryAddress,
                         sale.CashSessionId?.Value,
                         sale.HasDelivery,
                         sale.TransportAssignmentId?.Value,

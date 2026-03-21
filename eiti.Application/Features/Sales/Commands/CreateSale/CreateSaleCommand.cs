@@ -15,7 +15,8 @@ public sealed record CreateSaleCommand(
     IReadOnlyList<CreateSalePaymentItemRequest> Payments,
     IReadOnlyList<CreateSaleTradeInItemRequest> TradeIns,
     decimal? NoDeliverySurchargeTotal = null,
-    SaleSourceChannel? SourceChannel = null
+    SaleSourceChannel? SourceChannel = null,
+    string? DeliveryAddress = null
 ) : IRequest<Result<CreateSaleResponse>>, IRequirePermissions
 {
     public IReadOnlyCollection<string> RequiredPermissions => [PermissionCodes.SalesCreate];

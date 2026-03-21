@@ -1,4 +1,5 @@
 using eiti.Application.Abstractions.Repositories;
+using eiti.Domain.Branches;
 using eiti.Domain.Companies;
 using eiti.Domain.Sales;
 using Microsoft.EntityFrameworkCore;
@@ -80,5 +81,13 @@ public sealed class SaleRepository : ISaleRepository
         return await _context.SalePayments
             .Where(payment => ids.Contains(payment.SaleId))
             .ToListAsync(cancellationToken);
+    }
+
+    public async Task<int> CountByBranchAsync(
+        BranchId branchId,
+        CancellationToken cancellationToken = default)
+    {
+        return await _context.Sales
+            .CountAsync(sale => sale.BranchId == branchId, cancellationToken);
     }
 }

@@ -1,3 +1,4 @@
+using eiti.Domain.Branches;
 using eiti.Domain.Companies;
 using eiti.Domain.Sales;
 
@@ -24,5 +25,9 @@ public interface ISaleRepository
 
     Task<IReadOnlyList<SalePayment>> GetPaymentsBySaleIdsAsync(
         IEnumerable<Guid> saleIds,
+        CancellationToken cancellationToken = default);
+
+    Task<int> CountByBranchAsync(
+        BranchId branchId,
         CancellationToken cancellationToken = default);
 }

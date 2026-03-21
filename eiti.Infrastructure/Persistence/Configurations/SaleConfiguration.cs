@@ -69,6 +69,8 @@ public sealed class SaleConfiguration : IEntityTypeConfiguration<Sale>
         builder.Property(sale => sale.PaidAt).IsRequired(false);
         builder.Property(sale => sale.UpdatedAt).IsRequired(false);
         builder.Property(sale => sale.IsModified).IsRequired();
+        builder.Property(sale => sale.Code).HasMaxLength(20).IsRequired(false);
+        builder.Property(sale => sale.DeliveryAddress).HasMaxLength(500).IsRequired(false);
 
         builder.HasIndex(sale => new { sale.CompanyId, sale.CreatedAt });
 

@@ -23,6 +23,8 @@ public sealed class Sale : AggregateRoot<SaleId>
     public DateTime? UpdatedAt { get; private set; }
     public bool IsModified { get; private set; }
     public SaleSourceChannel? SourceChannel { get; private set; }
+    public string? Code { get; private set; }
+    public string? DeliveryAddress { get; private set; }
     private readonly List<SaleDetail> _details = [];
     private readonly List<SalePayment> _payments = [];
     private readonly List<SaleTradeIn> _tradeIns = [];
@@ -48,7 +50,9 @@ public sealed class Sale : AggregateRoot<SaleId>
         SaleStatus saleStatus,
         decimal noDeliverySurchargeTotal,
         DateTime createdAt,
-        List<SaleDetail> details)
+        List<SaleDetail> details,
+        string? code = null,
+        string? deliveryAddress = null)
         : base(id)
     {
         CompanyId = companyId;
@@ -59,6 +63,8 @@ public sealed class Sale : AggregateRoot<SaleId>
         NoDeliverySurchargeTotal = noDeliverySurchargeTotal;
         CreatedAt = createdAt;
         _details = details;
+        Code = code;
+        DeliveryAddress = deliveryAddress;
 
         foreach (var detail in _details)
         {
@@ -78,7 +84,9 @@ public sealed class Sale : AggregateRoot<SaleId>
         IEnumerable<SalePayment>? payments = null,
         IEnumerable<SaleTradeIn>? tradeIns = null,
         bool allowOverpayment = false,
-        decimal noDeliverySurchargeTotal = 0)
+        decimal noDeliverySurchargeTotal = 0,
+        string? code = null,
+        string? deliveryAddress = null)
     {
         if (saleStatus == SaleStatus.Cancel)
         {
@@ -106,7 +114,9 @@ public sealed class Sale : AggregateRoot<SaleId>
             saleStatus,
             noDeliverySurchargeTotal,
             DateTime.UtcNow,
-            detailList);
+            detailList,
+            code,
+            deliveryAddress);
 
         sale.SetSettlement(
             payments,
@@ -124,7 +134,8 @@ public sealed class Sale : AggregateRoot<SaleId>
         IEnumerable<SalePayment>? payments = null,
         IEnumerable<SaleTradeIn>? tradeIns = null,
         bool allowOverpayment = false,
-        decimal noDeliverySurchargeTotal = 0)
+        decimal noDeliverySurchargeTotal = 0,
+        string? deliveryAddress = null)
     {
         if (SaleStatus != SaleStatus.OnHold)
         {
@@ -165,6 +176,7 @@ public sealed class Sale : AggregateRoot<SaleId>
         HasDelivery = hasDelivery;
         SaleStatus = saleStatus;
         NoDeliverySurchargeTotal = noDeliverySurchargeTotal;
+        DeliveryAddress = deliveryAddress;
         TotalAmount = _details.Sum(detail => detail.TotalAmount) + noDeliverySurchargeTotal;
         SetSettlement(payments, tradeIns, allowOverpayment);
         UpdatedAt = DateTime.UtcNow;
@@ -237,6 +249,8 @@ public sealed class Sale : AggregateRoot<SaleId>
     }
 
     public void SetSourceChannel(SaleSourceChannel? channel) => SourceChannel = channel;
+
+    public void SetDeliveryAddress(string? address) => DeliveryAddress = address;
 
     private void SetSettlement(
         IEnumerable<SalePayment>? payments,

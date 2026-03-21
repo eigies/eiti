@@ -92,12 +92,14 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
 
             return Result<UpdateSaleResponse>.Success(new UpdateSaleResponse(
                 sale.Id.Value,
+                sale.Code,
                 sale.BranchId.Value,
                 sale.CustomerId?.Value,
                 paidCustomer?.FullName,
                 paidCustomer is null ? null : BuildCustomerDocument(paidCustomer),
                 paidCustomer?.TaxId,
                 paidCustomerAddress,
+                sale.DeliveryAddress,
                 sale.CashSessionId?.Value,
                 sale.HasDelivery,
                 sale.TransportAssignmentId?.Value,
@@ -386,7 +388,8 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
                     request.HasDelivery,
                     currentDetailsSnapshot,
                     sale.Payments.ToList(),
-                    sale.TradeIns.ToList());
+                    sale.TradeIns.ToList(),
+                    deliveryAddress: request.DeliveryAddress);
             }
             else
             {
@@ -409,7 +412,7 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
                         cancellationToken);
                 }
 
-                sale.Update(customer?.Id, requestedStatus, request.HasDelivery, saleDetails, salePayments, saleTradeIns, noDeliverySurchargeTotal: request.NoDeliverySurchargeTotal ?? 0);
+                sale.Update(customer?.Id, requestedStatus, request.HasDelivery, saleDetails, salePayments, saleTradeIns, noDeliverySurchargeTotal: request.NoDeliverySurchargeTotal ?? 0, deliveryAddress: request.DeliveryAddress);
             }
 
             if (requestedStatus == SaleStatus.Cancel && existingTransportAssignmentId is not null)
@@ -445,12 +448,14 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
         return Result<UpdateSaleResponse>.Success(
             new UpdateSaleResponse(
                 sale.Id.Value,
+                sale.Code,
                 sale.BranchId.Value,
                 sale.CustomerId?.Value,
                 customer?.FullName,
                 customer is null ? null : BuildCustomerDocument(customer),
                 customer?.TaxId,
                 customerAddress,
+                sale.DeliveryAddress,
                 sale.CashSessionId?.Value,
                 sale.HasDelivery,
                 sale.TransportAssignmentId?.Value,

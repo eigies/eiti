@@ -4,12 +4,14 @@ namespace eiti.Application.Features.Sales.Queries.ListSales;
 
 public sealed record ListSalesItemResponse(
     Guid Id,
+    string? Code,
     Guid BranchId,
     Guid? CustomerId,
     string? CustomerFullName,
     string? CustomerDocument,
     string? CustomerTaxId,
     string? CustomerAddress,
+    string? DeliveryAddress,
     Guid? CashSessionId,
     bool HasDelivery,
     Guid? TransportAssignmentId,

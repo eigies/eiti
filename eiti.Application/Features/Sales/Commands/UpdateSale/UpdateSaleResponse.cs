@@ -2,12 +2,14 @@ namespace eiti.Application.Features.Sales.Commands.UpdateSale;
 
 public sealed record UpdateSaleResponse(
     Guid Id,
+    string? Code,
     Guid BranchId,
     Guid? CustomerId,
     string? CustomerFullName,
     string? CustomerDocument,
     string? CustomerTaxId,
     string? CustomerAddress,
+    string? DeliveryAddress,
     Guid? CashSessionId,
     bool HasDelivery,
     Guid? TransportAssignmentId,
