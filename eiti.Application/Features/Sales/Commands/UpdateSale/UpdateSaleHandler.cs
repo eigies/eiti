@@ -303,7 +303,7 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
                         cancellationToken);
                 }
 
-                sale.Update(customer?.Id, SaleStatus.OnHold, request.HasDelivery, saleDetails, salePayments, saleTradeIns, allowOverpayment: true, noDeliverySurchargeTotal: request.NoDeliverySurchargeTotal ?? 0);
+                sale.Update(customer?.Id, SaleStatus.OnHold, request.HasDelivery, saleDetails, salePayments, saleTradeIns, allowOverpayment: true, noDeliverySurchargeTotal: request.NoDeliverySurchargeTotal ?? 0, deliveryAddress: request.DeliveryAddress);
 
                 var cashAmount = sale.GetPaymentAmount(SalePaymentMethod.Cash);
                 CashSession? session = null;
