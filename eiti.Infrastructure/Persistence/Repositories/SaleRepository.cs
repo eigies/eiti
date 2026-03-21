@@ -57,7 +57,8 @@ public sealed class SaleRepository : ISaleRepository
 
         if (dateTo.HasValue)
         {
-            query = query.Where(sale => sale.CreatedAt <= dateTo.Value);
+            var dateToEndOfDay = dateTo.Value.Date.AddDays(1);
+            query = query.Where(sale => sale.CreatedAt < dateToEndOfDay);
         }
 
         if (idSaleStatus.HasValue)

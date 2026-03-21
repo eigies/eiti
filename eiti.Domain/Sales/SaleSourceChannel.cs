@@ -7,5 +7,9 @@ public enum SaleSourceChannel
     Facebook = 3,
     Web = 4,
     Instagram = 5,
-    Other = 6
+    Other = 6,
+    PreviousCustomer = 7,
+    MercadoLibre = 8,
+    Google = 9
 }
+
