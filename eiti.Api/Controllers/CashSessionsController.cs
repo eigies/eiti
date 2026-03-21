@@ -5,6 +5,7 @@ using eiti.Application.Features.CashSessions.Commands.CreateCashWithdrawal;
 using eiti.Application.Features.CashSessions.Commands.OpenCashSession;
 using eiti.Application.Features.CashSessions.Queries.GetCashSessionSummary;
 using eiti.Application.Features.CashSessions.Queries.GetCurrentCashSession;
+using eiti.Application.Features.CashSessions.Queries.GetLastClosedCashSession;
 using eiti.Application.Features.CashSessions.Queries.ListCashSessionHistory;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -70,6 +71,13 @@ public sealed class CashSessionsController : ControllerBase
     public async Task<IActionResult> Summary(Guid id, CancellationToken cancellationToken)
     {
         var result = await _sender.Send(new GetCashSessionSummaryQuery(id), cancellationToken);
+        return result.ToActionResult();
+    }
+
+    [HttpGet("last-closed")]
+    public async Task<IActionResult> LastClosed([FromQuery] Guid cashDrawerId, CancellationToken cancellationToken)
+    {
+        var result = await _sender.Send(new GetLastClosedCashSessionQuery(cashDrawerId), cancellationToken);
         return result.ToActionResult();
     }
 }

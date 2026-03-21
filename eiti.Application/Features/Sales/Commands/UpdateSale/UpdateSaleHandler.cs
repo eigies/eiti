@@ -69,6 +69,71 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
             return Result<UpdateSaleResponse>.Failure(UpdateSaleErrors.NotFound);
         }
 
+        if (sale.SaleStatus == SaleStatus.Paid)
+        {
+            sale.SetSourceChannel(request.SourceChannel);
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+            Customer? paidCustomer = null;
+            if (sale.CustomerId is not null)
+            {
+                paidCustomer = await _customerRepository.GetByIdAsync(sale.CustomerId, companyId, cancellationToken);
+            }
+
+            var paidProductMap = new Dictionary<Guid, Product>();
+            foreach (var detail in sale.Details)
+            {
+                var product = await _productRepository.GetByIdAsync(detail.ProductId, companyId, cancellationToken);
+                if (product is not null)
+                    paidProductMap[product.Id.Value] = product;
+            }
+
+            var paidCustomerAddress = await BuildCustomerAddress(paidCustomer, cancellationToken);
+
+            return Result<UpdateSaleResponse>.Success(new UpdateSaleResponse(
+                sale.Id.Value,
+                sale.BranchId.Value,
+                sale.CustomerId?.Value,
+                paidCustomer?.FullName,
+                paidCustomer is null ? null : BuildCustomerDocument(paidCustomer),
+                paidCustomer?.TaxId,
+                paidCustomerAddress,
+                sale.CashSessionId?.Value,
+                sale.HasDelivery,
+                sale.TransportAssignmentId?.Value,
+                (int)sale.SaleStatus,
+                sale.SaleStatus.ToString(),
+                sale.NoDeliverySurchargeTotal,
+                sale.TotalAmount,
+                sale.MonetaryPaidAmount,
+                sale.TradeInAmount,
+                sale.SettledAmount,
+                sale.PendingAmount,
+                sale.ChangeAmount,
+                sale.CreatedAt,
+                sale.PaidAt,
+                sale.UpdatedAt,
+                sale.IsModified,
+                sale.Details.Select(detail => new UpdateSaleDetailItemResponse(
+                    detail.ProductId.Value,
+                    GetProductName(paidProductMap, detail.ProductId.Value),
+                    GetProductBrand(paidProductMap, detail.ProductId.Value),
+                    detail.Quantity,
+                    detail.UnitPrice,
+                    detail.TotalAmount)).ToList(),
+                sale.Payments.Select(payment => new UpdateSalePaymentItemResponse(
+                    (int)payment.Method,
+                    payment.Method.ToString(),
+                    payment.Amount,
+                    payment.Reference)).ToList(),
+                sale.TradeIns.Select(tradeIn => new UpdateSaleTradeInItemResponse(
+                    tradeIn.ProductId.Value,
+                    GetProductName(paidProductMap, tradeIn.ProductId.Value),
+                    GetProductBrand(paidProductMap, tradeIn.ProductId.Value),
+                    tradeIn.Quantity,
+                    tradeIn.Amount)).ToList()));
+        }
+
         if (sale.SaleStatus != SaleStatus.OnHold)
         {
             return Result<UpdateSaleResponse>.Failure(UpdateSaleErrors.NotEditable);
