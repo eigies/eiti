@@ -129,6 +129,18 @@ public sealed class BranchProductStock : AggregateRoot<BranchProductStockId>
         Touch();
     }
 
+    public void RevertSaleOut(int quantity)
+    {
+        if (quantity <= 0)
+        {
+            throw new ArgumentException("Reverted quantity must be greater than zero.", nameof(quantity));
+        }
+
+        OnHandQuantity += quantity;
+        ReservedQuantity += quantity;
+        Touch();
+    }
+
     private void Touch()
     {
         UpdatedAt = DateTime.UtcNow;

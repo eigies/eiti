@@ -31,6 +31,7 @@ public sealed record ListSalesItemResponse(
     DateTime? PaidAt,
     DateTime? UpdatedAt,
     bool IsModified,
+    bool IsCuentaCorriente,
     SaleSourceChannel? SourceChannel,
     IReadOnlyList<ListSalesDetailItemResponse> Details,
     IReadOnlyList<ListSalesPaymentItemResponse> Payments,

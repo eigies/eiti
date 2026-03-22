@@ -1,10 +1,15 @@
 using eiti.Api.Extensions;
 using eiti.Application.Features.SaleTransport;
-using eiti.Application.Features.Sales.Commands.CreateSale;
+using eiti.Application.Features.Sales.Commands.AddCcPayment;
+using eiti.Application.Features.Sales.Commands.CancelCcPayment;
 using eiti.Application.Features.Sales.Commands.CancelSale;
+using eiti.Application.Features.Sales.Commands.CreateCcSale;
+using eiti.Application.Features.Sales.Commands.CreateSale;
 using eiti.Application.Features.Sales.Commands.DeleteSale;
 using eiti.Application.Features.Sales.Commands.SendSaleWhatsApp;
 using eiti.Application.Features.Sales.Commands.UpdateSale;
+using eiti.Application.Features.Sales.Queries.GetSaleById;
+using eiti.Application.Features.Sales.Queries.ListCcPayments;
 using eiti.Application.Features.Sales.Queries.ListSales;
 using eiti.Application.Features.Sales.Queries.SearchDeliveryAddresses;
 using MediatR;
@@ -123,7 +128,58 @@ public sealed class SalesController : ControllerBase
         var result = await _sender.Send(new SearchDeliveryAddressesQuery(query ?? string.Empty), cancellationToken);
         return result.ToActionResult();
     }
+
+    [HttpGet("{id:guid}")]
+    public async Task<IActionResult> GetSaleById(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await _sender.Send(new GetSaleByIdQuery(id), cancellationToken);
+        return result.ToActionResult();
+    }
+
+    [HttpPost("cc")]
+    public async Task<IActionResult> CreateCcSale(
+        [FromBody] CreateCcSaleCommand command,
+        CancellationToken cancellationToken)
+    {
+        var result = await _sender.Send(command, cancellationToken);
+        return result.ToActionResult();
+    }
+
+    [HttpGet("{id:guid}/cc-payments")]
+    public async Task<IActionResult> ListCcPayments(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await _sender.Send(new ListCcPaymentsQuery(id), cancellationToken);
+        return result.ToActionResult();
+    }
+
+    [HttpPost("{id:guid}/cc-payments")]
+    public async Task<IActionResult> AddCcPayment(
+        Guid id,
+        [FromBody] AddCcPaymentRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _sender.Send(
+            new AddCcPaymentCommand(id, request.IdPaymentMethod, request.Amount, request.Date, request.Notes),
+            cancellationToken);
+        return result.ToActionResult();
+    }
+
+    [HttpPost("{id:guid}/cc-payments/{paymentId:guid}/cancel")]
+    public async Task<IActionResult> CancelCcPayment(
+        Guid id,
+        Guid paymentId,
+        CancellationToken cancellationToken)
+    {
+        var result = await _sender.Send(new CancelCcPaymentCommand(id, paymentId), cancellationToken);
+        return result.ToActionResult();
+    }
 }
 
 public sealed record UpdateSaleTransportStatusRequest(int Status);
+
+public sealed record AddCcPaymentRequest(
+    int IdPaymentMethod,
+    decimal Amount,
+    DateTime Date,
+    string? Notes);
 

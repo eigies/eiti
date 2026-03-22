@@ -41,6 +41,7 @@ public sealed class ApplicationDbContext : DbContext
     public DbSet<SaleDetail> SaleDetails { get; set; }
     public DbSet<SalePayment> SalePayments { get; set; }
     public DbSet<SaleTradeIn> SaleTradeIns { get; set; }
+    public DbSet<SaleCcPayment> SaleCcPayments { get; set; }
     public DbSet<SaleTransportAssignment> SaleTransportAssignments { get; set; }
     public DbSet<User> Users { get; set; }
     public DbSet<UserRoleAssignment> UserRoles { get; set; }

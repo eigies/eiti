@@ -22,18 +22,25 @@ public sealed class Sale : AggregateRoot<SaleId>
     public DateTime? PaidAt { get; private set; }
     public DateTime? UpdatedAt { get; private set; }
     public bool IsModified { get; private set; }
+    public bool IsCuentaCorriente { get; private set; }
     public SaleSourceChannel? SourceChannel { get; private set; }
     public string? Code { get; private set; }
     public string? DeliveryAddress { get; private set; }
     private readonly List<SaleDetail> _details = [];
     private readonly List<SalePayment> _payments = [];
     private readonly List<SaleTradeIn> _tradeIns = [];
+    private readonly List<SaleCcPayment> _ccPayments = [];
     public IReadOnlyCollection<SaleDetail> Details => _details;
     public IReadOnlyCollection<SalePayment> Payments => _payments;
     public IReadOnlyCollection<SaleTradeIn> TradeIns => _tradeIns;
+    public IReadOnlyCollection<SaleCcPayment> CcPayments => _ccPayments;
     public decimal MonetaryPaidAmount => _payments.Sum(payment => payment.Amount);
     public decimal TradeInAmount => _tradeIns.Sum(tradeIn => tradeIn.Amount);
     public decimal SettledAmount => MonetaryPaidAmount + TradeInAmount;
+    public decimal CcPaidTotal => _ccPayments
+        .Where(p => p.Status == SaleCcPaymentStatus.Active)
+        .Sum(p => p.Amount);
+    public decimal CcPendingAmount => NormalizeAmount(TotalAmount - CcPaidTotal);
     public decimal PendingAmount => NormalizeAmount(TotalAmount - SettledAmount);
     public decimal ChangeAmount => NormalizeAmount(Math.Max(0m, SettledAmount - TotalAmount));
 
@@ -124,6 +131,112 @@ public sealed class Sale : AggregateRoot<SaleId>
             allowOverpayment || saleStatus == SaleStatus.Paid);
 
         return sale;
+    }
+
+    public static Sale CreateCc(
+        CompanyId companyId,
+        BranchId branchId,
+        CustomerId customerId,
+        IEnumerable<SaleDetail> details,
+        decimal noDeliverySurchargeTotal = 0,
+        string? code = null)
+    {
+        var detailList = details.ToList();
+
+        if (detailList.Count == 0)
+        {
+            throw new ArgumentException("A sale must contain at least one detail.", nameof(details));
+        }
+
+        if (noDeliverySurchargeTotal < 0)
+        {
+            throw new ArgumentException("No-delivery surcharge total cannot be negative.", nameof(noDeliverySurchargeTotal));
+        }
+
+        var sale = new Sale(
+            SaleId.New(),
+            companyId,
+            branchId,
+            customerId,
+            hasDelivery: false,
+            SaleStatus.OnHold,
+            noDeliverySurchargeTotal,
+            DateTime.UtcNow,
+            detailList,
+            code);
+
+        sale.IsCuentaCorriente = true;
+        return sale;
+    }
+
+    public SaleCcPayment AddCcPayment(SalePaymentMethod method, decimal amount, DateTime date, string? notes)
+    {
+        if (!IsCuentaCorriente)
+        {
+            throw new InvalidOperationException("CC payments can only be added to Cuenta Corriente sales.");
+        }
+
+        if (SaleStatus == SaleStatus.Cancel)
+        {
+            throw new InvalidOperationException("Cannot add payments to a cancelled sale.");
+        }
+
+        var remaining = NormalizeAmount(CcPendingAmount);
+        var roundedAmount = NormalizeAmount(amount);
+
+        if (roundedAmount > remaining)
+        {
+            throw new InvalidOperationException("Payment amount exceeds the remaining balance.");
+        }
+
+        var payment = SaleCcPayment.Create(Id, method, amount, date, notes);
+        _ccPayments.Add(payment);
+
+        if (NormalizeAmount(CcPaidTotal) >= NormalizeAmount(TotalAmount))
+        {
+            TransitionToPaidFromCc();
+        }
+
+        return payment;
+    }
+
+    public void CancelCcPayment(SaleCcPaymentId paymentId)
+    {
+        if (!IsCuentaCorriente)
+        {
+            throw new InvalidOperationException("CC payments can only be cancelled on Cuenta Corriente sales.");
+        }
+
+        var payment = _ccPayments.FirstOrDefault(p => p.Id == paymentId);
+
+        if (payment is null)
+        {
+            throw new InvalidOperationException("Payment not found.");
+        }
+
+        var wasPaid = SaleStatus == SaleStatus.Paid;
+        payment.Cancel();
+
+        if (wasPaid && NormalizeAmount(CcPaidTotal) < NormalizeAmount(TotalAmount))
+        {
+            RevertToOnHoldFromCc();
+        }
+    }
+
+    private void TransitionToPaidFromCc()
+    {
+        SaleStatus = SaleStatus.Paid;
+        PaidAt = DateTime.UtcNow;
+        UpdatedAt = DateTime.UtcNow;
+        IsModified = true;
+    }
+
+    private void RevertToOnHoldFromCc()
+    {
+        SaleStatus = SaleStatus.OnHold;
+        PaidAt = null;
+        UpdatedAt = DateTime.UtcNow;
+        IsModified = true;
     }
 
     public void Update(

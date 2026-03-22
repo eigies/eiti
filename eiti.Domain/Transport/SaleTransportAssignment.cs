@@ -102,6 +102,23 @@ public sealed class SaleTransportAssignment : AggregateRoot<SaleTransportAssignm
         UpdatedAt = DateTime.UtcNow;
     }
 
+    public void Reassign(EmployeeId driverEmployeeId, VehicleId vehicleId, string? notes)
+    {
+        if (Status != SaleTransportStatus.Cancelled)
+        {
+            throw new InvalidOperationException("Only cancelled transports can be reassigned.");
+        }
+
+        DriverEmployeeId = driverEmployeeId;
+        VehicleId = vehicleId;
+        Notes = NormalizeOptional(notes, 500, nameof(notes));
+        Status = SaleTransportStatus.Assigned;
+        AssignedAt = DateTime.UtcNow;
+        DispatchedAt = null;
+        DeliveredAt = null;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
     public void Cancel()
     {
         if (Status == SaleTransportStatus.Delivered)

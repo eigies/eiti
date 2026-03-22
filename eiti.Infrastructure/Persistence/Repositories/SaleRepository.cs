@@ -107,4 +107,16 @@ public sealed class SaleRepository : ISaleRepository
             .Take(limit)
             .ToListAsync(cancellationToken);
     }
+
+    public async Task<Sale?> GetByIdWithCcPaymentsAsync(
+        SaleId id,
+        CancellationToken cancellationToken = default)
+    {
+        return await _context.Sales
+            .Include(sale => sale.Details)
+            .Include(sale => sale.Payments)
+            .Include(sale => sale.TradeIns)
+            .Include(sale => sale.CcPayments)
+            .FirstOrDefaultAsync(sale => sale.Id == id, cancellationToken);
+    }
 }

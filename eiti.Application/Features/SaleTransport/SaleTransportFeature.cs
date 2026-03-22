@@ -76,9 +76,20 @@ public sealed class CreateSaleTransportHandler : IRequestHandler<CreateSaleTrans
             return Result<SaleTransportResponse>.Failure(validation.Error);
         }
 
-        var assignment = SaleTransportAssignment.Create(sale.Id, _currentUserService.CompanyId, validation.Driver!.Id, validation.Vehicle!.Id, request.Notes, _currentUserService.UserId);
+        SaleTransportAssignment assignment;
+        if (existing is not null)
+        {
+            // Reuse the cancelled record to avoid violating the unique index on SaleId.
+            existing.Reassign(validation.Driver!.Id, validation.Vehicle!.Id, request.Notes);
+            assignment = existing;
+        }
+        else
+        {
+            assignment = SaleTransportAssignment.Create(sale.Id, _currentUserService.CompanyId, validation.Driver!.Id, validation.Vehicle!.Id, request.Notes, _currentUserService.UserId);
+            await _saleTransportAssignmentRepository.AddAsync(assignment, cancellationToken);
+        }
+
         sale.AssignTransport(assignment.Id);
-        await _saleTransportAssignmentRepository.AddAsync(assignment, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
         return Result<SaleTransportResponse>.Success(SaleTransportMappings.Map(assignment, validation.Driver, validation.Vehicle));
     }

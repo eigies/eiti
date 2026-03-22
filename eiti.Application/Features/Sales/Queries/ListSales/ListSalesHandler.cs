@@ -164,6 +164,7 @@ public sealed class ListSalesHandler : IRequestHandler<ListSalesQuery, Result<IR
                         sale.PaidAt,
                         sale.UpdatedAt,
                         sale.IsModified,
+                        sale.IsCuentaCorriente,
                         sale.SourceChannel,
                         sale.Details.Select(detail =>
                         {

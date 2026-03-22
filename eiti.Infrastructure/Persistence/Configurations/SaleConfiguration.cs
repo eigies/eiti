@@ -69,6 +69,7 @@ public sealed class SaleConfiguration : IEntityTypeConfiguration<Sale>
         builder.Property(sale => sale.PaidAt).IsRequired(false);
         builder.Property(sale => sale.UpdatedAt).IsRequired(false);
         builder.Property(sale => sale.IsModified).IsRequired();
+        builder.Property(sale => sale.IsCuentaCorriente).HasDefaultValue(false).IsRequired();
         builder.Property(sale => sale.Code).HasMaxLength(20).IsRequired(false);
         builder.Property(sale => sale.DeliveryAddress).HasMaxLength(500).IsRequired(false);
 
@@ -114,6 +115,11 @@ public sealed class SaleConfiguration : IEntityTypeConfiguration<Sale>
             .HasForeignKey(tradeIn => tradeIn.SaleId)
             .OnDelete(DeleteBehavior.Cascade);
 
+        builder.HasMany(sale => sale.CcPayments)
+            .WithOne()
+            .HasForeignKey(payment => payment.SaleId)
+            .OnDelete(DeleteBehavior.Cascade);
+
         builder.Navigation(sale => sale.Details)
             .UsePropertyAccessMode(PropertyAccessMode.Field);
 
@@ -121,6 +127,9 @@ public sealed class SaleConfiguration : IEntityTypeConfiguration<Sale>
             .UsePropertyAccessMode(PropertyAccessMode.Field);
 
         builder.Navigation(sale => sale.TradeIns)
+            .UsePropertyAccessMode(PropertyAccessMode.Field);
+
+        builder.Navigation(sale => sale.CcPayments)
             .UsePropertyAccessMode(PropertyAccessMode.Field);
     }
 }

@@ -36,4 +36,8 @@ public interface ISaleRepository
         CompanyId companyId,
         int limit = 8,
         CancellationToken cancellationToken = default);
+
+    Task<Sale?> GetByIdWithCcPaymentsAsync(
+        SaleId id,
+        CancellationToken cancellationToken = default);
 }
