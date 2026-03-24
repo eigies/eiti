@@ -14,6 +14,7 @@ public sealed class CancelCcPaymentHandler : IRequestHandler<CancelCcPaymentComm
     private readonly ISaleRepository _saleRepository;
     private readonly IBranchProductStockRepository _branchProductStockRepository;
     private readonly IStockMovementRepository _stockMovementRepository;
+    private readonly ICashSessionRepository _cashSessionRepository;
     private readonly IUnitOfWork _unitOfWork;
 
     public CancelCcPaymentHandler(
@@ -21,12 +22,14 @@ public sealed class CancelCcPaymentHandler : IRequestHandler<CancelCcPaymentComm
         ISaleRepository saleRepository,
         IBranchProductStockRepository branchProductStockRepository,
         IStockMovementRepository stockMovementRepository,
+        ICashSessionRepository cashSessionRepository,
         IUnitOfWork unitOfWork)
     {
         _currentUserService = currentUserService;
         _saleRepository = saleRepository;
         _branchProductStockRepository = branchProductStockRepository;
         _stockMovementRepository = stockMovementRepository;
+        _cashSessionRepository = cashSessionRepository;
         _unitOfWork = unitOfWork;
     }
 
@@ -53,16 +56,48 @@ public sealed class CancelCcPaymentHandler : IRequestHandler<CancelCcPaymentComm
             return Result.Failure(CancelCcPaymentErrors.NotCuentaCorriente);
         }
 
+        // Calculate amount to cancel before the operation
+        var paymentId = new SaleCcPaymentId(request.PaymentId);
+        var targetPayment = sale.CcPayments.FirstOrDefault(p => p.Id == paymentId);
+        if (targetPayment is null)
+        {
+            return Result.Failure(
+                Error.NotFound("Sales.CancelCcPayment.PaymentNotFound", "The payment was not found."));
+        }
+
+        decimal cancelledAmount;
+        if (targetPayment.GroupId.HasValue)
+        {
+            cancelledAmount = sale.CcPayments
+                .Where(p => p.GroupId == targetPayment.GroupId && p.Status == SaleCcPaymentStatus.Active)
+                .Sum(p => p.Amount);
+        }
+        else
+        {
+            cancelledAmount = targetPayment.Amount;
+        }
+
         var wasPaid = sale.SaleStatus == SaleStatus.Paid;
 
         try
         {
-            sale.CancelCcPayment(new SaleCcPaymentId(request.PaymentId));
+            sale.CancelCcPayment(paymentId);
         }
         catch (InvalidOperationException ex)
         {
             return Result.Failure(
                 Error.Validation("Sales.CancelCcPayment.InvalidInput", ex.Message));
+        }
+
+        // Register caja cancellation movement if there's an open session
+        var session = await _cashSessionRepository.GetAnyOpenByBranchAsync(
+            sale.BranchId,
+            companyId,
+            cancellationToken);
+
+        if (session is not null && _currentUserService.UserId is not null)
+        {
+            session.RegisterCcPaymentCancel(cancelledAmount, sale.Id.Value, _currentUserService.UserId);
         }
 
         if (wasPaid && sale.SaleStatus == SaleStatus.OnHold)

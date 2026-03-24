@@ -1,6 +1,7 @@
 using eiti.Application.Abstractions.Repositories;
 using eiti.Domain.Branches;
 using eiti.Domain.Companies;
+using eiti.Domain.Customers;
 using eiti.Domain.Sales;
 using Microsoft.EntityFrameworkCore;
 
@@ -49,7 +50,8 @@ public sealed class SaleRepository : ISaleRepository
             .Include(sale => sale.Details)
             .Include(sale => sale.Payments)
             .Include(sale => sale.TradeIns)
-            .Where(sale => sale.CompanyId == companyId);
+            .Where(sale => sale.CompanyId == companyId)
+            .Where(sale => !sale.IsCuentaCorriente);
 
         if (dateFrom.HasValue)
         {
@@ -118,5 +120,25 @@ public sealed class SaleRepository : ISaleRepository
             .Include(sale => sale.TradeIns)
             .Include(sale => sale.CcPayments)
             .FirstOrDefaultAsync(sale => sale.Id == id, cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<Sale>> ListCcSalesByCompanyAsync(
+        CompanyId companyId,
+        CustomerId? customerId,
+        CancellationToken cancellationToken = default)
+    {
+        var query = _context.Sales
+            .Include(sale => sale.Details)
+            .Include(sale => sale.CcPayments)
+            .Where(sale => sale.CompanyId == companyId && sale.IsCuentaCorriente);
+
+        if (customerId is not null)
+        {
+            query = query.Where(sale => sale.CustomerId == customerId);
+        }
+
+        return await query
+            .OrderByDescending(sale => sale.CreatedAt)
+            .ToListAsync(cancellationToken);
     }
 }

@@ -36,6 +36,7 @@ public sealed record CreateSaleDetailItemResponse(
     string ProductBrand,
     int Quantity,
     decimal UnitPrice,
+    decimal DiscountPercent,
     decimal TotalAmount);
 
 public sealed record CreateSalePaymentItemResponse(

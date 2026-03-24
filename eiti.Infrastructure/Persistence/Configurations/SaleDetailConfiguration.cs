@@ -31,6 +31,11 @@ public sealed class SaleDetailConfiguration : IEntityTypeConfiguration<SaleDetai
             .HasColumnType("decimal(18,2)")
             .IsRequired();
 
+        builder.Property(detail => detail.DiscountPercent)
+            .HasColumnType("decimal(5,2)")
+            .HasDefaultValue(0m)
+            .IsRequired();
+
         builder.Property(detail => detail.TotalAmount)
             .HasColumnType("decimal(18,2)")
             .IsRequired();

@@ -99,6 +99,38 @@ public sealed class CashSession : AggregateRoot<CashSessionId>
             createdByUserId);
     }
 
+    public void RegisterCcPaymentIncome(
+        decimal amount,
+        Guid saleId,
+        UserId createdByUserId)
+    {
+        EnsureOpen();
+        AddMovement(
+            CashMovementType.CuentaCorrienteIncome,
+            CashMovementDirection.In,
+            amount,
+            "CuentaCorriente",
+            saleId,
+            "Pago cuenta corriente",
+            createdByUserId);
+    }
+
+    public void RegisterCcPaymentCancel(
+        decimal amount,
+        Guid saleId,
+        UserId createdByUserId)
+    {
+        EnsureOpen();
+        AddMovement(
+            CashMovementType.CuentaCorrienteCancellation,
+            CashMovementDirection.Out,
+            amount,
+            "CuentaCorriente",
+            saleId,
+            "Pago CC anulado",
+            createdByUserId);
+    }
+
     public void RegisterSaleCancel(
         decimal totalAmount,
         Guid saleId,

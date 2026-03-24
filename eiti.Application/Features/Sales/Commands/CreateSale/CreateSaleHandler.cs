@@ -102,7 +102,8 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
             {
                 ProductId = group.Key,
                 Quantity = group.Sum(item => item.Quantity),
-                UnitPrice = group.FirstOrDefault(i => i.UnitPrice.HasValue)?.UnitPrice
+                UnitPrice = group.FirstOrDefault(i => i.UnitPrice.HasValue)?.UnitPrice,
+                DiscountPercent = group.First().DiscountPercent
             })
             .ToList();
 
@@ -142,7 +143,7 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
             {
                 unitPrice = product.Price;
             }
-            saleDetails.Add(SaleDetail.Create(product.Id, detail.Quantity, unitPrice));
+            saleDetails.Add(SaleDetail.Create(product.Id, detail.Quantity, unitPrice, detail.DiscountPercent));
         }
 
         foreach (var detail in groupedDetails)
@@ -220,7 +221,8 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
                 allowOverpayment: requestedStatus == SaleStatus.Paid,
                 noDeliverySurchargeTotal: request.NoDeliverySurchargeTotal ?? 0,
                 code: saleCode,
-                deliveryAddress: request.DeliveryAddress);
+                deliveryAddress: request.DeliveryAddress,
+                generalDiscountPercent: request.GeneralDiscountPercent);
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
         {
@@ -351,6 +353,7 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
                     GetProductBrand(productMap, detail.ProductId.Value),
                     detail.Quantity,
                     detail.UnitPrice,
+                    detail.DiscountPercent,
                     detail.TotalAmount)).ToList(),
                 sale.Payments.Select(payment => new CreateSalePaymentItemResponse(
                     (int)payment.Method,

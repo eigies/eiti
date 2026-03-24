@@ -1,6 +1,7 @@
 using eiti.Api.Extensions;
 using eiti.Application.Features.SaleTransport;
 using eiti.Application.Features.Sales.Commands.AddCcPayment;
+using eiti.Application.Features.Sales.Commands.AddCcPaymentGroup;
 using eiti.Application.Features.Sales.Commands.CancelCcPayment;
 using eiti.Application.Features.Sales.Commands.CancelSale;
 using eiti.Application.Features.Sales.Commands.CreateCcSale;
@@ -10,6 +11,7 @@ using eiti.Application.Features.Sales.Commands.SendSaleWhatsApp;
 using eiti.Application.Features.Sales.Commands.UpdateSale;
 using eiti.Application.Features.Sales.Queries.GetSaleById;
 using eiti.Application.Features.Sales.Queries.ListCcPayments;
+using eiti.Application.Features.Sales.Queries.ListCcSales;
 using eiti.Application.Features.Sales.Queries.ListSales;
 using eiti.Application.Features.Sales.Queries.SearchDeliveryAddresses;
 using MediatR;
@@ -173,6 +175,27 @@ public sealed class SalesController : ControllerBase
         var result = await _sender.Send(new CancelCcPaymentCommand(id, paymentId), cancellationToken);
         return result.ToActionResult();
     }
+
+    [HttpPost("{id:guid}/cc-payment-group")]
+    public async Task<IActionResult> AddCcPaymentGroup(
+        Guid id,
+        [FromBody] AddCcPaymentGroupRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _sender.Send(
+            new AddCcPaymentGroupCommand(id, request.Methods, request.Date, request.Notes, request.CashDrawerId),
+            cancellationToken);
+        return result.ToActionResult();
+    }
+
+    [HttpGet("cc")]
+    public async Task<IActionResult> ListCcSales(
+        [FromQuery] Guid? customerId,
+        CancellationToken cancellationToken)
+    {
+        var result = await _sender.Send(new ListCcSalesQuery(customerId), cancellationToken);
+        return result.ToActionResult();
+    }
 }
 
 public sealed record UpdateSaleTransportStatusRequest(int Status);
@@ -182,4 +205,10 @@ public sealed record AddCcPaymentRequest(
     decimal Amount,
     DateTime Date,
     string? Notes);
+
+public sealed record AddCcPaymentGroupRequest(
+    List<CcPaymentMethodLine> Methods,
+    DateTime Date,
+    string? Notes,
+    Guid? CashDrawerId);
 

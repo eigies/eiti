@@ -159,7 +159,8 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
             {
                 ProductId = group.Key,
                 Quantity = group.Sum(item => item.Quantity),
-                UnitPrice = group.FirstOrDefault(i => i.UnitPrice.HasValue)?.UnitPrice
+                UnitPrice = group.FirstOrDefault(i => i.UnitPrice.HasValue)?.UnitPrice,
+                DiscountPercent = group.First().DiscountPercent
             })
             .ToList();
         var currentGroupedDetails = sale.Details
@@ -215,7 +216,7 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
             {
                 unitPrice = product.Price;
             }
-            saleDetails.Add(SaleDetail.Create(product.Id, detail.Quantity, unitPrice));
+            saleDetails.Add(SaleDetail.Create(product.Id, detail.Quantity, unitPrice, detail.DiscountPercent));
         }
 
         foreach (var currentDetail in currentGroupedDetails)
@@ -303,7 +304,7 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
                         cancellationToken);
                 }
 
-                sale.Update(customer?.Id, SaleStatus.OnHold, request.HasDelivery, saleDetails, salePayments, saleTradeIns, allowOverpayment: true, noDeliverySurchargeTotal: request.NoDeliverySurchargeTotal ?? 0, deliveryAddress: request.DeliveryAddress);
+                sale.Update(customer?.Id, SaleStatus.OnHold, request.HasDelivery, saleDetails, salePayments, saleTradeIns, allowOverpayment: true, noDeliverySurchargeTotal: request.NoDeliverySurchargeTotal ?? 0, deliveryAddress: request.DeliveryAddress, generalDiscountPercent: request.GeneralDiscountPercent);
 
                 var cashAmount = sale.GetPaymentAmount(SalePaymentMethod.Cash);
                 CashSession? session = null;
@@ -412,7 +413,7 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
                         cancellationToken);
                 }
 
-                sale.Update(customer?.Id, requestedStatus, request.HasDelivery, saleDetails, salePayments, saleTradeIns, noDeliverySurchargeTotal: request.NoDeliverySurchargeTotal ?? 0, deliveryAddress: request.DeliveryAddress);
+                sale.Update(customer?.Id, requestedStatus, request.HasDelivery, saleDetails, salePayments, saleTradeIns, noDeliverySurchargeTotal: request.NoDeliverySurchargeTotal ?? 0, deliveryAddress: request.DeliveryAddress, generalDiscountPercent: request.GeneralDiscountPercent);
             }
 
             if (requestedStatus == SaleStatus.Cancel && existingTransportAssignmentId is not null)

@@ -47,6 +47,8 @@ public sealed class SaleCcPaymentConfiguration : IEntityTypeConfiguration<SaleCc
 
         builder.Property(payment => payment.CancelledAt).IsRequired(false);
 
+        builder.Property(payment => payment.GroupId).IsRequired(false);
+
         builder.HasIndex(payment => payment.SaleId);
     }
 }

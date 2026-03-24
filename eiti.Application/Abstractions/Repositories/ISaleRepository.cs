@@ -1,5 +1,6 @@
 using eiti.Domain.Branches;
 using eiti.Domain.Companies;
+using eiti.Domain.Customers;
 using eiti.Domain.Sales;
 
 namespace eiti.Application.Abstractions.Repositories;
@@ -39,5 +40,10 @@ public interface ISaleRepository
 
     Task<Sale?> GetByIdWithCcPaymentsAsync(
         SaleId id,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<Sale>> ListCcSalesByCompanyAsync(
+        CompanyId companyId,
+        CustomerId? customerId,
         CancellationToken cancellationToken = default);
 }

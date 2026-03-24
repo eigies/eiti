@@ -83,7 +83,12 @@ public sealed class GetSaleByIdHandler : IRequestHandler<GetSaleByIdQuery, Resul
                 (int)sale.SaleStatus,
                 sale.SaleStatus.ToString(),
                 sale.IsCuentaCorriente,
+                sale.GeneralDiscountPercent,
+                sale.OriginalTotal,
                 sale.TotalAmount,
+                sale.ManualOverridePrice,
+                sale.OverriddenByUserId,
+                sale.OverriddenAt,
                 sale.MonetaryPaidAmount,
                 sale.TradeInAmount,
                 sale.SettledAmount,
@@ -99,6 +104,7 @@ public sealed class GetSaleByIdHandler : IRequestHandler<GetSaleByIdQuery, Resul
                     GetProductBrand(productMap, detail.ProductId.Value),
                     detail.Quantity,
                     detail.UnitPrice,
+                    detail.DiscountPercent,
                     detail.TotalAmount)).ToList(),
                 sale.Payments.Select(payment => new GetSaleByIdPaymentResponse(
                     (int)payment.Method,
@@ -115,7 +121,8 @@ public sealed class GetSaleByIdHandler : IRequestHandler<GetSaleByIdQuery, Resul
                     (int)payment.Status,
                     payment.Status.ToString(),
                     payment.CreatedAt,
-                    payment.CancelledAt)).ToList()));
+                    payment.CancelledAt,
+                    payment.GroupId)).ToList()));
     }
 
     private static string GetProductName(IDictionary<Guid, Product> productMap, Guid productId)

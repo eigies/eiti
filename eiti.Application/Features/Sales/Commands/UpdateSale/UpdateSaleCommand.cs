@@ -16,7 +16,8 @@ public sealed record UpdateSaleCommand(
     IReadOnlyList<UpdateSaleTradeInItemRequest> TradeIns,
     decimal? NoDeliverySurchargeTotal = null,
     SaleSourceChannel? SourceChannel = null,
-    string? DeliveryAddress = null
+    string? DeliveryAddress = null,
+    decimal GeneralDiscountPercent = 0
 ) : IRequest<Result<UpdateSaleResponse>>, IRequirePermissions
 {
     public IReadOnlyCollection<string> RequiredPermissions => [PermissionCodes.SalesUpdate];
@@ -25,7 +26,8 @@ public sealed record UpdateSaleCommand(
 public sealed record UpdateSaleDetailItemRequest(
     Guid ProductId,
     int Quantity,
-    decimal? UnitPrice = null);
+    decimal? UnitPrice = null,
+    decimal DiscountPercent = 0);
 
 public sealed record UpdateSalePaymentItemRequest(
     int IdPaymentMethod,

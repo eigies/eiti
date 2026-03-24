@@ -155,7 +155,10 @@ public sealed class ListSalesHandler : IRequestHandler<ListSalesQuery, Result<IR
                         (int)sale.SaleStatus,
                         sale.SaleStatus.ToString(),
                         sale.NoDeliverySurchargeTotal,
+                        sale.GeneralDiscountPercent,
+                        sale.OriginalTotal,
                         sale.TotalAmount,
+                        sale.ManualOverridePrice,
                         sale.MonetaryPaidAmount,
                         sale.TradeInAmount,
                         sale.SettledAmount,
@@ -175,6 +178,7 @@ public sealed class ListSalesHandler : IRequestHandler<ListSalesQuery, Result<IR
                                 product?.Brand ?? "Unknown",
                                 detail.Quantity,
                                 detail.UnitPrice,
+                                detail.DiscountPercent,
                                 detail.TotalAmount);
                         }).ToList(),
                         sale.Payments.Select(payment => new ListSalesPaymentItemResponse(

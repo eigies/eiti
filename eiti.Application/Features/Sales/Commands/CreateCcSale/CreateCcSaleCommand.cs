@@ -8,7 +8,9 @@ namespace eiti.Application.Features.Sales.Commands.CreateCcSale;
 public sealed record CreateCcSaleCommand(
     Guid BranchId,
     Guid CustomerId,
-    IReadOnlyList<CreateSaleDetailItemRequest> Details
+    IReadOnlyList<CreateSaleDetailItemRequest> Details,
+    decimal GeneralDiscountPercent = 0,
+    decimal? ManualOverridePrice = null
 ) : IRequest<Result<CreateCcSaleResponse>>, IRequirePermissions
 {
     public IReadOnlyCollection<string> RequiredPermissions => [PermissionCodes.SalesCreate];

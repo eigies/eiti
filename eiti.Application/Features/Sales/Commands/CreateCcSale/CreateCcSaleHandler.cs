@@ -74,7 +74,8 @@ public sealed class CreateCcSaleHandler : IRequestHandler<CreateCcSaleCommand, R
             {
                 ProductId = group.Key,
                 Quantity = group.Sum(item => item.Quantity),
-                UnitPrice = group.FirstOrDefault(i => i.UnitPrice.HasValue)?.UnitPrice
+                UnitPrice = group.FirstOrDefault(i => i.UnitPrice.HasValue)?.UnitPrice,
+                DiscountPercent = group.First().DiscountPercent
             })
             .ToList();
 
@@ -114,7 +115,7 @@ public sealed class CreateCcSaleHandler : IRequestHandler<CreateCcSaleCommand, R
             {
                 unitPrice = product.Price;
             }
-            saleDetails.Add(SaleDetail.Create(product.Id, detail.Quantity, unitPrice));
+            saleDetails.Add(SaleDetail.Create(product.Id, detail.Quantity, unitPrice, detail.DiscountPercent));
         }
 
         foreach (var detail in groupedDetails)
@@ -166,12 +167,18 @@ public sealed class CreateCcSaleHandler : IRequestHandler<CreateCcSaleCommand, R
                 branch.Id,
                 customer.Id,
                 saleDetails,
-                code: saleCode);
+                code: saleCode,
+                generalDiscountPercent: request.GeneralDiscountPercent);
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
         {
             return Result<CreateCcSaleResponse>.Failure(
                 Error.Validation("Sales.CreateCc.InvalidInput", ex.Message));
+        }
+
+        if (request.ManualOverridePrice.HasValue)
+        {
+            sale.SetManualOverride(request.ManualOverridePrice.Value, _currentUserService.UserId?.Value);
         }
 
         await _saleRepository.AddAsync(sale, cancellationToken);
@@ -186,7 +193,10 @@ public sealed class CreateCcSaleHandler : IRequestHandler<CreateCcSaleCommand, R
                 customer.FullName,
                 (int)sale.SaleStatus,
                 sale.SaleStatus.ToString(),
+                sale.GeneralDiscountPercent,
+                sale.OriginalTotal,
                 sale.TotalAmount,
+                sale.ManualOverridePrice,
                 sale.IsCuentaCorriente,
                 sale.CreatedAt,
                 sale.Details.Select(detail => new CreateCcSaleDetailItemResponse(
@@ -195,6 +205,7 @@ public sealed class CreateCcSaleHandler : IRequestHandler<CreateCcSaleCommand, R
                     GetProductBrand(productMap, detail.ProductId.Value),
                     detail.Quantity,
                     detail.UnitPrice,
+                    detail.DiscountPercent,
                     detail.TotalAmount)).ToList()));
     }
 

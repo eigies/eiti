@@ -22,7 +22,10 @@ public sealed record ListSalesItemResponse(
     int IdSaleStatus,
     string SaleStatus,
     decimal NoDeliverySurchargeTotal,
+    decimal GeneralDiscountPercent,
+    decimal OriginalTotal,
     decimal TotalAmount,
+    decimal? ManualOverridePrice,
     decimal MonetaryPaidAmount,
     decimal TradeInAmount,
     decimal SettledAmount,
@@ -43,6 +46,7 @@ public sealed record ListSalesDetailItemResponse(
     string ProductBrand,
     int Quantity,
     decimal UnitPrice,
+    decimal DiscountPercent,
     decimal TotalAmount);
 
 public sealed record ListSalesPaymentItemResponse(

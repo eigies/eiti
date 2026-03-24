@@ -52,7 +52,8 @@ public sealed class ListCcPaymentsHandler : IRequestHandler<ListCcPaymentsQuery,
                 (int)p.Status,
                 p.Status.ToString(),
                 p.CreatedAt,
-                p.CancelledAt))
+                p.CancelledAt,
+                p.GroupId))
             .ToList();
 
         return Result<IReadOnlyList<ListCcPaymentsItemResponse>>.Success(payments);

@@ -12,6 +12,7 @@ public sealed class SaleCcPayment : Entity<SaleCcPaymentId>
     public SaleCcPaymentStatus Status { get; private set; }
     public DateTime CreatedAt { get; private set; }
     public DateTime? CancelledAt { get; private set; }
+    public Guid? GroupId { get; private set; }
 
     private SaleCcPayment()
     {
@@ -23,7 +24,8 @@ public sealed class SaleCcPayment : Entity<SaleCcPaymentId>
         SalePaymentMethod method,
         decimal amount,
         DateTime date,
-        string? notes)
+        string? notes,
+        Guid? groupId)
         : base(id)
     {
         if (amount <= 0)
@@ -43,6 +45,7 @@ public sealed class SaleCcPayment : Entity<SaleCcPaymentId>
         Notes = NormalizeOptional(notes, 250, nameof(notes));
         Status = SaleCcPaymentStatus.Active;
         CreatedAt = DateTime.UtcNow;
+        GroupId = groupId;
     }
 
     public static SaleCcPayment Create(
@@ -50,9 +53,10 @@ public sealed class SaleCcPayment : Entity<SaleCcPaymentId>
         SalePaymentMethod method,
         decimal amount,
         DateTime date,
-        string? notes)
+        string? notes,
+        Guid? groupId = null)
     {
-        return new SaleCcPayment(SaleCcPaymentId.New(), saleId, method, amount, date, notes);
+        return new SaleCcPayment(SaleCcPaymentId.New(), saleId, method, amount, date, notes, groupId);
     }
 
     public void Cancel()

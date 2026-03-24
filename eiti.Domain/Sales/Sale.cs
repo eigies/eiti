@@ -4,6 +4,7 @@ using eiti.Domain.Companies;
 using eiti.Domain.Customers;
 using eiti.Domain.Primitives;
 using eiti.Domain.Transport;
+using eiti.Domain.Users;
 
 namespace eiti.Domain.Sales;
 
@@ -17,7 +18,12 @@ public sealed class Sale : AggregateRoot<SaleId>
     public SaleTransportAssignmentId? TransportAssignmentId { get; private set; }
     public SaleStatus SaleStatus { get; private set; }
     public decimal NoDeliverySurchargeTotal { get; private set; }
+    public decimal GeneralDiscountPercent { get; private set; }
+    public decimal OriginalTotal { get; private set; }
     public decimal TotalAmount { get; private set; }
+    public decimal? ManualOverridePrice { get; private set; }
+    public Guid? OverriddenByUserId { get; private set; }
+    public DateTime? OverriddenAt { get; private set; }
     public DateTime CreatedAt { get; private set; }
     public DateTime? PaidAt { get; private set; }
     public DateTime? UpdatedAt { get; private set; }
@@ -56,6 +62,7 @@ public sealed class Sale : AggregateRoot<SaleId>
         bool hasDelivery,
         SaleStatus saleStatus,
         decimal noDeliverySurchargeTotal,
+        decimal generalDiscountPercent,
         DateTime createdAt,
         List<SaleDetail> details,
         string? code = null,
@@ -68,6 +75,7 @@ public sealed class Sale : AggregateRoot<SaleId>
         HasDelivery = hasDelivery;
         SaleStatus = saleStatus;
         NoDeliverySurchargeTotal = noDeliverySurchargeTotal;
+        GeneralDiscountPercent = NormalizeAmount(generalDiscountPercent);
         CreatedAt = createdAt;
         _details = details;
         Code = code;
@@ -78,7 +86,7 @@ public sealed class Sale : AggregateRoot<SaleId>
             detail.AttachToSale(id);
         }
 
-        TotalAmount = _details.Sum(detail => detail.TotalAmount) + noDeliverySurchargeTotal;
+        RecalculateTotal();
     }
 
     public static Sale Create(
@@ -93,7 +101,8 @@ public sealed class Sale : AggregateRoot<SaleId>
         bool allowOverpayment = false,
         decimal noDeliverySurchargeTotal = 0,
         string? code = null,
-        string? deliveryAddress = null)
+        string? deliveryAddress = null,
+        decimal generalDiscountPercent = 0)
     {
         if (saleStatus == SaleStatus.Cancel)
         {
@@ -104,6 +113,8 @@ public sealed class Sale : AggregateRoot<SaleId>
         {
             throw new ArgumentException("No-delivery surcharge total cannot be negative.", nameof(noDeliverySurchargeTotal));
         }
+
+        ValidateDiscountPercent(generalDiscountPercent);
 
         var detailList = details.ToList();
 
@@ -120,6 +131,7 @@ public sealed class Sale : AggregateRoot<SaleId>
             hasDelivery,
             saleStatus,
             noDeliverySurchargeTotal,
+            generalDiscountPercent,
             DateTime.UtcNow,
             detailList,
             code,
@@ -139,7 +151,10 @@ public sealed class Sale : AggregateRoot<SaleId>
         CustomerId customerId,
         IEnumerable<SaleDetail> details,
         decimal noDeliverySurchargeTotal = 0,
-        string? code = null)
+        string? code = null,
+        decimal generalDiscountPercent = 0,
+        decimal? manualOverridePrice = null,
+        Guid? overriddenByUserId = null)
     {
         var detailList = details.ToList();
 
@@ -153,6 +168,8 @@ public sealed class Sale : AggregateRoot<SaleId>
             throw new ArgumentException("No-delivery surcharge total cannot be negative.", nameof(noDeliverySurchargeTotal));
         }
 
+        ValidateDiscountPercent(generalDiscountPercent);
+
         var sale = new Sale(
             SaleId.New(),
             companyId,
@@ -161,12 +178,40 @@ public sealed class Sale : AggregateRoot<SaleId>
             hasDelivery: false,
             SaleStatus.OnHold,
             noDeliverySurchargeTotal,
+            generalDiscountPercent,
             DateTime.UtcNow,
             detailList,
             code);
 
         sale.IsCuentaCorriente = true;
+
+        if (manualOverridePrice.HasValue)
+        {
+            sale.SetManualOverride(manualOverridePrice.Value, overriddenByUserId);
+        }
+
         return sale;
+    }
+
+    public void SetManualOverride(decimal price, Guid? userId)
+    {
+        if (price < 0)
+        {
+            throw new ArgumentException("Manual override price cannot be negative.", nameof(price));
+        }
+
+        ManualOverridePrice = NormalizeAmount(price);
+        OverriddenByUserId = userId;
+        OverriddenAt = DateTime.UtcNow;
+        TotalAmount = ManualOverridePrice.Value;
+    }
+
+    public void ClearManualOverride()
+    {
+        ManualOverridePrice = null;
+        OverriddenByUserId = null;
+        OverriddenAt = null;
+        RecalculateTotal();
     }
 
     public SaleCcPayment AddCcPayment(SalePaymentMethod method, decimal amount, DateTime date, string? notes)
@@ -200,6 +245,88 @@ public sealed class Sale : AggregateRoot<SaleId>
         return payment;
     }
 
+    public IReadOnlyList<SaleCcPayment> AddCcPaymentGroup(
+        IEnumerable<(SalePaymentMethod Method, decimal Amount)> methods,
+        DateTime date,
+        string? notes)
+    {
+        if (!IsCuentaCorriente)
+        {
+            throw new InvalidOperationException("CC payments can only be added to Cuenta Corriente sales.");
+        }
+
+        if (SaleStatus == SaleStatus.Cancel)
+        {
+            throw new InvalidOperationException("Cannot add payments to a cancelled sale.");
+        }
+
+        var methodList = methods.ToList();
+        if (methodList.Count == 0)
+        {
+            throw new ArgumentException("At least one payment method is required.", nameof(methods));
+        }
+
+        var totalPayment = methodList.Sum(m => NormalizeAmount(m.Amount));
+        var remaining = NormalizeAmount(CcPendingAmount);
+
+        if (totalPayment > remaining)
+        {
+            throw new InvalidOperationException("Payment amount exceeds the remaining balance.");
+        }
+
+        var groupId = Guid.NewGuid();
+        var created = new List<SaleCcPayment>();
+
+        foreach (var (method, amount) in methodList)
+        {
+            if (NormalizeAmount(amount) <= 0) continue;
+
+            var payment = SaleCcPayment.Create(Id, method, amount, date, notes, groupId);
+            _ccPayments.Add(payment);
+            created.Add(payment);
+        }
+
+        if (NormalizeAmount(CcPaidTotal) >= NormalizeAmount(TotalAmount))
+        {
+            TransitionToPaidFromCc();
+        }
+
+        return created;
+    }
+
+    public decimal CancelCcPaymentGroup(Guid groupId)
+    {
+        if (!IsCuentaCorriente)
+        {
+            throw new InvalidOperationException("CC payments can only be cancelled on Cuenta Corriente sales.");
+        }
+
+        var groupPayments = _ccPayments
+            .Where(p => p.GroupId == groupId && p.Status == SaleCcPaymentStatus.Active)
+            .ToList();
+
+        if (groupPayments.Count == 0)
+        {
+            throw new InvalidOperationException("No active payments found for this group.");
+        }
+
+        var wasPaid = SaleStatus == SaleStatus.Paid;
+        var cancelledAmount = 0m;
+
+        foreach (var payment in groupPayments)
+        {
+            cancelledAmount += payment.Amount;
+            payment.Cancel();
+        }
+
+        if (wasPaid && NormalizeAmount(CcPaidTotal) < NormalizeAmount(TotalAmount))
+        {
+            RevertToOnHoldFromCc();
+        }
+
+        return cancelledAmount;
+    }
+
     public void CancelCcPayment(SaleCcPaymentId paymentId)
     {
         if (!IsCuentaCorriente)
@@ -215,7 +342,22 @@ public sealed class Sale : AggregateRoot<SaleId>
         }
 
         var wasPaid = SaleStatus == SaleStatus.Paid;
-        payment.Cancel();
+
+        if (payment.GroupId.HasValue)
+        {
+            var groupPayments = _ccPayments
+                .Where(p => p.GroupId == payment.GroupId && p.Status == SaleCcPaymentStatus.Active)
+                .ToList();
+
+            foreach (var gp in groupPayments)
+            {
+                gp.Cancel();
+            }
+        }
+        else
+        {
+            payment.Cancel();
+        }
 
         if (wasPaid && NormalizeAmount(CcPaidTotal) < NormalizeAmount(TotalAmount))
         {
@@ -248,7 +390,8 @@ public sealed class Sale : AggregateRoot<SaleId>
         IEnumerable<SaleTradeIn>? tradeIns = null,
         bool allowOverpayment = false,
         decimal noDeliverySurchargeTotal = 0,
-        string? deliveryAddress = null)
+        string? deliveryAddress = null,
+        decimal generalDiscountPercent = 0)
     {
         if (SaleStatus != SaleStatus.OnHold)
         {
@@ -272,6 +415,8 @@ public sealed class Sale : AggregateRoot<SaleId>
             throw new ArgumentException("No-delivery surcharge total cannot be negative.", nameof(noDeliverySurchargeTotal));
         }
 
+        ValidateDiscountPercent(generalDiscountPercent);
+
         if (!hasDelivery)
         {
             TransportAssignmentId = null;
@@ -289,8 +434,9 @@ public sealed class Sale : AggregateRoot<SaleId>
         HasDelivery = hasDelivery;
         SaleStatus = saleStatus;
         NoDeliverySurchargeTotal = noDeliverySurchargeTotal;
+        GeneralDiscountPercent = NormalizeAmount(generalDiscountPercent);
         DeliveryAddress = deliveryAddress;
-        TotalAmount = _details.Sum(detail => detail.TotalAmount) + noDeliverySurchargeTotal;
+        RecalculateTotal();
         SetSettlement(payments, tradeIns, allowOverpayment);
         UpdatedAt = DateTime.UtcNow;
         IsModified = true;
@@ -365,6 +511,19 @@ public sealed class Sale : AggregateRoot<SaleId>
 
     public void SetDeliveryAddress(string? address) => DeliveryAddress = address;
 
+    private void RecalculateTotal()
+    {
+        var subtotal = _details.Sum(detail => detail.TotalAmount) + NoDeliverySurchargeTotal;
+        OriginalTotal = NormalizeAmount(subtotal);
+
+        if (GeneralDiscountPercent > 0)
+        {
+            subtotal = subtotal * (1m - GeneralDiscountPercent / 100m);
+        }
+
+        TotalAmount = ManualOverridePrice ?? NormalizeAmount(subtotal);
+    }
+
     private void SetSettlement(
         IEnumerable<SalePayment>? payments,
         IEnumerable<SaleTradeIn>? tradeIns,
@@ -419,6 +578,14 @@ public sealed class Sale : AggregateRoot<SaleId>
         if (requireAtLeastTotal && settledAmount < totalAmount)
         {
             throw new InvalidOperationException("The settled amount must cover the total amount to mark the sale as paid.");
+        }
+    }
+
+    private static void ValidateDiscountPercent(decimal value)
+    {
+        if (value < 0 || value > 100)
+        {
+            throw new ArgumentException("General discount percent must be between 0 and 100.");
         }
     }
 

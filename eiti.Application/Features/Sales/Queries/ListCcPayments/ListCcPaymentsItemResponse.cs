@@ -11,4 +11,5 @@ public sealed record ListCcPaymentsItemResponse(
     int Status,
     string StatusName,
     DateTime CreatedAt,
-    DateTime? CancelledAt);
+    DateTime? CancelledAt,
+    Guid? GroupId);

@@ -12,7 +12,12 @@ public sealed record GetSaleByIdResponse(
     int IdSaleStatus,
     string SaleStatus,
     bool IsCuentaCorriente,
+    decimal GeneralDiscountPercent,
+    decimal OriginalTotal,
     decimal TotalAmount,
+    decimal? ManualOverridePrice,
+    Guid? OverriddenByUserId,
+    DateTime? OverriddenAt,
     decimal MonetaryPaidAmount,
     decimal TradeInAmount,
     decimal SettledAmount,
@@ -32,6 +37,7 @@ public sealed record GetSaleByIdDetailResponse(
     string ProductBrand,
     int Quantity,
     decimal UnitPrice,
+    decimal DiscountPercent,
     decimal TotalAmount);
 
 public sealed record GetSaleByIdPaymentResponse(
@@ -50,4 +56,5 @@ public sealed record GetSaleByIdCcPaymentResponse(
     int Status,
     string StatusName,
     DateTime CreatedAt,
-    DateTime? CancelledAt);
+    DateTime? CancelledAt,
+    Guid? GroupId);

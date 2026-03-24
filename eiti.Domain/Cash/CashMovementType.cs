@@ -8,5 +8,7 @@ public enum CashMovementType
     ManualAdjustment = 4,
     CashTransferOut = 5,
     CashTransferIn = 6,
-    SaleCancellation = 7
+    SaleCancellation = 7,
+    CuentaCorrienteIncome = 8,
+    CuentaCorrienteCancellation = 9
 }

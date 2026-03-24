@@ -8,7 +8,10 @@ public sealed record CreateCcSaleResponse(
     string? CustomerFullName,
     int IdSaleStatus,
     string SaleStatus,
+    decimal GeneralDiscountPercent,
+    decimal OriginalTotal,
     decimal TotalAmount,
+    decimal? ManualOverridePrice,
     bool IsCuentaCorriente,
     DateTime CreatedAt,
     IReadOnlyList<CreateCcSaleDetailItemResponse> Details);
@@ -19,4 +22,5 @@ public sealed record CreateCcSaleDetailItemResponse(
     string ProductBrand,
     int Quantity,
     decimal UnitPrice,
+    decimal DiscountPercent,
     decimal TotalAmount);
