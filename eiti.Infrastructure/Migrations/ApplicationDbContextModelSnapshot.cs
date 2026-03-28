@@ -80,6 +80,68 @@ namespace eiti.Infrastructure.Migrations
                     b.ToTable("Addresses", (string)null);
                 });
 
+            modelBuilder.Entity("eiti.Domain.Banks.Bank", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("Active")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("Banks", (string)null);
+                });
+
+            modelBuilder.Entity("eiti.Domain.Banks.BankInstallmentPlan", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("Active")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
+                    b.Property<int>("BankId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("Cuotas")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("SurchargePct")
+                        .HasColumnType("decimal(5,2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BankId", "Cuotas")
+                        .IsUnique();
+
+                    b.ToTable("BankInstallmentPlans", (string)null);
+                });
+
             modelBuilder.Entity("eiti.Domain.Branches.Branch", b =>
                 {
                     b.Property<Guid>("Id")
@@ -241,6 +303,78 @@ namespace eiti.Infrastructure.Migrations
                     b.HasIndex("CashDrawerId", "Status");
 
                     b.ToTable("CashSessions", (string)null);
+                });
+
+            modelBuilder.Entity("eiti.Domain.Cheques.Cheque", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("BankId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CuitDni")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<int>("Estado")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(1);
+
+                    b.Property<DateTime>("FechaEmision")
+                        .HasColumnType("date");
+
+                    b.Property<DateTime>("FechaVencimiento")
+                        .HasColumnType("date");
+
+                    b.Property<decimal>("Monto")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("Notas")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("Numero")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<Guid?>("SaleCcPaymentId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int?>("SalePaymentMethod")
+                        .HasColumnType("int");
+
+                    b.Property<Guid?>("SalePaymentSaleId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Titular")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BankId");
+
+                    b.HasIndex("Estado");
+
+                    b.HasIndex("FechaVencimiento");
+
+                    b.HasIndex("SaleCcPaymentId");
+
+                    b.HasIndex("SalePaymentSaleId");
+
+                    b.ToTable("Cheques", (string)null);
                 });
 
             modelBuilder.Entity("eiti.Domain.Companies.Company", b =>
@@ -655,6 +789,9 @@ namespace eiti.Infrastructure.Migrations
                     b.Property<decimal?>("ManualOverridePrice")
                         .HasColumnType("decimal(18,2)");
 
+                    b.Property<decimal>("CardSurchargeTotal")
+                        .HasColumnType("decimal(18,2)");
+
                     b.Property<decimal>("NoDeliverySurchargeTotal")
                         .HasColumnType("decimal(18,2)");
 
@@ -713,6 +850,18 @@ namespace eiti.Infrastructure.Migrations
                     b.Property<DateTime?>("CancelledAt")
                         .HasColumnType("datetime2");
 
+                    b.Property<int?>("CardBankId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("CardCuotas")
+                        .HasColumnType("int");
+
+                    b.Property<decimal?>("CardSurchargeAmt")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal?>("CardSurchargePct")
+                        .HasColumnType("decimal(5,2)");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
@@ -736,6 +885,9 @@ namespace eiti.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("int")
                         .HasDefaultValue(1);
+
+                    b.Property<decimal?>("TotalCobrado")
+                        .HasColumnType("decimal(18,2)");
 
                     b.HasKey("Id");
 
@@ -784,9 +936,24 @@ namespace eiti.Infrastructure.Migrations
                     b.Property<decimal>("Amount")
                         .HasColumnType("decimal(18,2)");
 
+                    b.Property<int?>("CardBankId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("CardCuotas")
+                        .HasColumnType("int");
+
+                    b.Property<decimal?>("CardSurchargeAmt")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal?>("CardSurchargePct")
+                        .HasColumnType("decimal(5,2)");
+
                     b.Property<string>("Reference")
                         .HasMaxLength(120)
                         .HasColumnType("nvarchar(120)");
+
+                    b.Property<decimal?>("TotalCobrado")
+                        .HasColumnType("decimal(18,2)");
 
                     b.HasKey("SaleId", "Method");
 
@@ -1120,6 +1287,15 @@ namespace eiti.Infrastructure.Migrations
                     b.ToTable("Vehicles", (string)null);
                 });
 
+            modelBuilder.Entity("eiti.Domain.Banks.BankInstallmentPlan", b =>
+                {
+                    b.HasOne("eiti.Domain.Banks.Bank", null)
+                        .WithMany("InstallmentPlans")
+                        .HasForeignKey("BankId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("eiti.Domain.Branches.Branch", b =>
                 {
                     b.HasOne("eiti.Domain.Companies.Company", null)
@@ -1318,6 +1494,11 @@ namespace eiti.Infrastructure.Migrations
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("eiti.Domain.Banks.Bank", b =>
+                {
+                    b.Navigation("InstallmentPlans");
                 });
 
             modelBuilder.Entity("eiti.Domain.Cash.CashSession", b =>

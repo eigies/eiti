@@ -5,6 +5,7 @@ using eiti.Application.Common;
 using eiti.Application.Common.Authorization;
 using eiti.Domain.Branches;
 using eiti.Domain.Cash;
+using eiti.Domain.Cheques;
 using eiti.Domain.Companies;
 using eiti.Domain.Customers;
 using eiti.Domain.Products;
@@ -25,6 +26,8 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
     private readonly ISaleRepository _saleRepository;
     private readonly ICashSessionRepository _cashSessionRepository;
     private readonly IAddressRepository _addressRepository;
+    private readonly IBankRepository _bankRepository;
+    private readonly IChequeRepository _chequeRepository;
     private readonly IUnitOfWork _unitOfWork;
 
     public CreateSaleHandler(
@@ -37,6 +40,8 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
         ISaleRepository saleRepository,
         ICashSessionRepository cashSessionRepository,
         IAddressRepository addressRepository,
+        IBankRepository bankRepository,
+        IChequeRepository chequeRepository,
         IUnitOfWork unitOfWork)
     {
         _currentUserService = currentUserService;
@@ -48,6 +53,8 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
         _saleRepository = saleRepository;
         _cashSessionRepository = cashSessionRepository;
         _addressRepository = addressRepository;
+        _bankRepository = bankRepository;
+        _chequeRepository = chequeRepository;
         _unitOfWork = unitOfWork;
     }
 
@@ -205,6 +212,28 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
             : branch.Name.ToUpper()[..Math.Min(3, branch.Name.Length)];
         var saleCode = $"{codePrefix}-{(branchSaleCount + 1).ToString().PadLeft(3, '0')}";
 
+        // Pre-compute card surcharge total so TotalAmount includes it from the start.
+        // Amount from frontend is already the total charged (base + surcharge),
+        // so surcharge = amount * pct / (100 + pct).
+        var cardSurchargeTotal = 0m;
+        foreach (var reqPayment in request.Payments)
+        {
+            if ((SalePaymentMethod)reqPayment.IdPaymentMethod == SalePaymentMethod.Card
+                && reqPayment.CardBankId.HasValue
+                && reqPayment.CardCuotas.HasValue)
+            {
+                var bank = await _bankRepository.GetByIdAsync(reqPayment.CardBankId.Value, cancellationToken);
+                var plan = bank?.InstallmentPlans.FirstOrDefault(p => p.Cuotas == reqPayment.CardCuotas.Value && p.Active);
+                if (plan is not null && plan.SurchargePct > 0)
+                {
+                    cardSurchargeTotal += decimal.Round(
+                        reqPayment.Amount * plan.SurchargePct / (100 + plan.SurchargePct),
+                        2,
+                        MidpointRounding.AwayFromZero);
+                }
+            }
+        }
+
         Sale sale;
 
         try
@@ -222,7 +251,8 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
                 noDeliverySurchargeTotal: request.NoDeliverySurchargeTotal ?? 0,
                 code: saleCode,
                 deliveryAddress: request.DeliveryAddress,
-                generalDiscountPercent: request.GeneralDiscountPercent);
+                generalDiscountPercent: request.GeneralDiscountPercent,
+                cardSurchargeTotal: cardSurchargeTotal);
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
         {
@@ -314,6 +344,52 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
         }
 
         sale.SetSourceChannel(request.SourceChannel);
+
+        // Process card and cheque data for payments
+        // BuildPayments groups by method, so use first matching request per method
+        var paymentRequestByMethod = request.Payments
+            .GroupBy(p => p.IdPaymentMethod)
+            .ToDictionary(g => g.Key, g => g.First());
+
+        foreach (var payment in sale.Payments)
+        {
+            var methodKey = (int)payment.Method;
+            if (!paymentRequestByMethod.TryGetValue(methodKey, out var reqLine))
+                continue;
+
+            if (payment.Method == SalePaymentMethod.Card
+                && reqLine.CardBankId.HasValue
+                && reqLine.CardCuotas.HasValue)
+            {
+                var bank = await _bankRepository.GetByIdAsync(reqLine.CardBankId.Value, cancellationToken);
+                if (bank is not null)
+                {
+                    var plan = bank.InstallmentPlans.FirstOrDefault(p => p.Cuotas == reqLine.CardCuotas.Value && p.Active);
+                    if (plan is not null)
+                    {
+                        var surchargeAmt = decimal.Round(payment.Amount * plan.SurchargePct / (100 + plan.SurchargePct), 2, MidpointRounding.AwayFromZero);
+                        payment.SetCardData(bank.Id, plan.Cuotas, plan.SurchargePct, surchargeAmt);
+                    }
+                }
+            }
+
+            if (payment.Method == SalePaymentMethod.Check && reqLine.Cheque is not null)
+            {
+                var chequeData = reqLine.Cheque;
+                var cheque = Cheque.CreateForRegularSale(
+                    sale.Id.Value,
+                    (int)payment.Method,
+                    chequeData.BankId,
+                    chequeData.Numero,
+                    chequeData.Titular,
+                    chequeData.CuitDni,
+                    chequeData.Monto,
+                    chequeData.FechaEmision,
+                    chequeData.FechaVencimiento,
+                    chequeData.Notas);
+                await _chequeRepository.AddAsync(cheque, cancellationToken);
+            }
+        }
 
         await _saleRepository.AddAsync(sale, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);

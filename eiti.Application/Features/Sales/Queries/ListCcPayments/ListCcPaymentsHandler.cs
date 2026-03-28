@@ -10,13 +10,16 @@ public sealed class ListCcPaymentsHandler : IRequestHandler<ListCcPaymentsQuery,
 {
     private readonly ICurrentUserService _currentUserService;
     private readonly ISaleRepository _saleRepository;
+    private readonly IBankRepository _bankRepository;
 
     public ListCcPaymentsHandler(
         ICurrentUserService currentUserService,
-        ISaleRepository saleRepository)
+        ISaleRepository saleRepository,
+        IBankRepository bankRepository)
     {
         _currentUserService = currentUserService;
         _saleRepository = saleRepository;
+        _bankRepository = bankRepository;
     }
 
     public async Task<Result<IReadOnlyList<ListCcPaymentsItemResponse>>> Handle(ListCcPaymentsQuery request, CancellationToken cancellationToken)
@@ -39,21 +42,38 @@ public sealed class ListCcPaymentsHandler : IRequestHandler<ListCcPaymentsQuery,
                 Error.NotFound("Sales.ListCcPayments.NotFound", "The sale was not found."));
         }
 
+        // Fetch bank names for payments that have card data
+        var allBanks = await _bankRepository.ListAsync(false, cancellationToken);
+        var bankNameById = allBanks.ToDictionary(b => b.Id, b => b.Name);
+
         var payments = sale.CcPayments
             .OrderByDescending(p => p.CreatedAt)
-            .Select(p => new ListCcPaymentsItemResponse(
-                p.Id.Value,
-                p.SaleId.Value,
-                (int)p.Method,
-                p.Method.ToString(),
-                p.Amount,
-                p.Date,
-                p.Notes,
-                (int)p.Status,
-                p.Status.ToString(),
-                p.CreatedAt,
-                p.CancelledAt,
-                p.GroupId))
+            .Select(p =>
+            {
+                string? cardBankName = p.CardBankId.HasValue
+                    ? bankNameById.GetValueOrDefault(p.CardBankId.Value)
+                    : null;
+
+                return new ListCcPaymentsItemResponse(
+                    p.Id.Value,
+                    p.SaleId.Value,
+                    (int)p.Method,
+                    p.Method.ToString(),
+                    p.Amount,
+                    p.Date,
+                    p.Notes,
+                    (int)p.Status,
+                    p.Status.ToString(),
+                    p.CreatedAt,
+                    p.CancelledAt,
+                    p.GroupId,
+                    p.CardBankId,
+                    cardBankName,
+                    p.CardCuotas,
+                    p.CardSurchargePct,
+                    p.CardSurchargeAmt,
+                    p.TotalCobrado);
+            })
             .ToList();
 
         return Result<IReadOnlyList<ListCcPaymentsItemResponse>>.Success(payments);

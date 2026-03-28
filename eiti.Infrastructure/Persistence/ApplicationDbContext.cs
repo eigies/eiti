@@ -1,6 +1,8 @@
 using eiti.Domain.Addresses;
+using eiti.Domain.Banks;
 using eiti.Domain.Branches;
 using eiti.Domain.Cash;
+using eiti.Domain.Cheques;
 using eiti.Domain.Companies;
 using eiti.Domain.Customers;
 using eiti.Domain.Employees;
@@ -22,6 +24,9 @@ public sealed class ApplicationDbContext : DbContext
     {
     }
 
+    public DbSet<Bank> Banks => Set<Bank>();
+    public DbSet<BankInstallmentPlan> BankInstallmentPlans => Set<BankInstallmentPlan>();
+    public DbSet<Cheque> Cheques => Set<Cheque>();
     public DbSet<Branch> Branches { get; set; }
     public DbSet<Address> Addresses { get; set; }
     public DbSet<CashDrawer> CashDrawers { get; set; }

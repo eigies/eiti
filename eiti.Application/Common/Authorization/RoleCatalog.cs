@@ -22,7 +22,9 @@ public static class RoleCatalog
                 PermissionCodes.CashDrawerManage,
                 PermissionCodes.CashHistoryExport,
                 PermissionCodes.UsersManage,
-                PermissionCodes.SalesPriceOverride
+                PermissionCodes.SalesPriceOverride,
+                PermissionCodes.BanksManage,
+                PermissionCodes.ChequesManage
             }),
         new RoleDefinition(
             SystemRoles.Admin,
@@ -42,7 +44,9 @@ public static class RoleCatalog
                 PermissionCodes.CashDrawerManage,
                 PermissionCodes.CashHistoryExport,
                 PermissionCodes.UsersManage,
-                PermissionCodes.SalesPriceOverride
+                PermissionCodes.SalesPriceOverride,
+                PermissionCodes.BanksManage,
+                PermissionCodes.ChequesManage
             }),
         new RoleDefinition(
             SystemRoles.Seller,

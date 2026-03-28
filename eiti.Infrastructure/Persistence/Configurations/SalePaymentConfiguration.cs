@@ -30,6 +30,12 @@ public sealed class SalePaymentConfiguration : IEntityTypeConfiguration<SalePaym
             .HasMaxLength(120)
             .IsRequired(false);
 
+        builder.Property(p => p.CardBankId).IsRequired(false);
+        builder.Property(p => p.CardCuotas).IsRequired(false);
+        builder.Property(p => p.CardSurchargePct).HasColumnType("decimal(5,2)").IsRequired(false);
+        builder.Property(p => p.CardSurchargeAmt).HasColumnType("decimal(18,2)").IsRequired(false);
+        builder.Property(p => p.TotalCobrado).HasColumnType("decimal(18,2)").IsRequired(false);
+
         builder.HasOne<Sale>()
             .WithMany(sale => sale.Payments)
             .HasForeignKey(payment => payment.SaleId)

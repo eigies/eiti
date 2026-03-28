@@ -7,4 +7,5 @@ public sealed record AddCcPaymentGroupResponse(
 public sealed record AddCcPaymentGroupItemResponse(
     Guid Id, Guid SaleId, int IdPaymentMethod, string PaymentMethodName,
     decimal Amount, DateTime Date, string? Notes, int Status, string StatusName,
-    DateTime CreatedAt, DateTime? CancelledAt, Guid? GroupId);
+    DateTime CreatedAt, DateTime? CancelledAt, Guid? GroupId,
+    int? CardBankId, int? CardCuotas, decimal? CardSurchargePct, decimal? CardSurchargeAmt, decimal? TotalCobrado);

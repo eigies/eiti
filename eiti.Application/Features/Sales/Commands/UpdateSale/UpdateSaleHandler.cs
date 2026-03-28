@@ -25,6 +25,7 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
     private readonly ICashSessionRepository _cashSessionRepository;
     private readonly ISaleTransportAssignmentRepository _saleTransportAssignmentRepository;
     private readonly IAddressRepository _addressRepository;
+    private readonly IBankRepository _bankRepository;
     private readonly IUnitOfWork _unitOfWork;
 
     public UpdateSaleHandler(
@@ -37,6 +38,7 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
         ICashSessionRepository cashSessionRepository,
         ISaleTransportAssignmentRepository saleTransportAssignmentRepository,
         IAddressRepository addressRepository,
+        IBankRepository bankRepository,
         IUnitOfWork unitOfWork)
     {
         _currentUserService = currentUserService;
@@ -48,6 +50,7 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
         _cashSessionRepository = cashSessionRepository;
         _saleTransportAssignmentRepository = saleTransportAssignmentRepository;
         _addressRepository = addressRepository;
+        _bankRepository = bankRepository;
         _unitOfWork = unitOfWork;
     }
 
@@ -259,6 +262,7 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
 
         IReadOnlyList<SalePayment> salePayments = sale.Payments.ToList();
         IReadOnlyList<SaleTradeIn> saleTradeIns = sale.TradeIns.ToList();
+        var cardSurchargeTotal = 0m;
 
         if (requestedStatus != SaleStatus.Cancel)
         {
@@ -279,6 +283,25 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
             }
 
             saleTradeIns = tradeInsResult.Value;
+
+            // Pre-compute card surcharge total so TotalAmount includes it.
+            foreach (var reqPayment in request.Payments)
+            {
+                if ((SalePaymentMethod)reqPayment.IdPaymentMethod == SalePaymentMethod.Card
+                    && reqPayment.CardBankId.HasValue
+                    && reqPayment.CardCuotas.HasValue)
+                {
+                    var bank = await _bankRepository.GetByIdAsync(reqPayment.CardBankId.Value, cancellationToken);
+                    var plan = bank?.InstallmentPlans.FirstOrDefault(p => p.Cuotas == reqPayment.CardCuotas.Value && p.Active);
+                    if (plan is not null && plan.SurchargePct > 0)
+                    {
+                        cardSurchargeTotal += decimal.Round(
+                            reqPayment.Amount * plan.SurchargePct / (100 + plan.SurchargePct),
+                            2,
+                            MidpointRounding.AwayFromZero);
+                    }
+                }
+            }
         }
 
         try
@@ -304,7 +327,7 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
                         cancellationToken);
                 }
 
-                sale.Update(customer?.Id, SaleStatus.OnHold, request.HasDelivery, saleDetails, salePayments, saleTradeIns, allowOverpayment: true, noDeliverySurchargeTotal: request.NoDeliverySurchargeTotal ?? 0, deliveryAddress: request.DeliveryAddress, generalDiscountPercent: request.GeneralDiscountPercent);
+                sale.Update(customer?.Id, SaleStatus.OnHold, request.HasDelivery, saleDetails, salePayments, saleTradeIns, allowOverpayment: true, noDeliverySurchargeTotal: request.NoDeliverySurchargeTotal ?? 0, deliveryAddress: request.DeliveryAddress, generalDiscountPercent: request.GeneralDiscountPercent, cardSurchargeTotal: cardSurchargeTotal);
 
                 var cashAmount = sale.GetPaymentAmount(SalePaymentMethod.Cash);
                 CashSession? session = null;
@@ -413,7 +436,7 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
                         cancellationToken);
                 }
 
-                sale.Update(customer?.Id, requestedStatus, request.HasDelivery, saleDetails, salePayments, saleTradeIns, noDeliverySurchargeTotal: request.NoDeliverySurchargeTotal ?? 0, deliveryAddress: request.DeliveryAddress, generalDiscountPercent: request.GeneralDiscountPercent);
+                sale.Update(customer?.Id, requestedStatus, request.HasDelivery, saleDetails, salePayments, saleTradeIns, noDeliverySurchargeTotal: request.NoDeliverySurchargeTotal ?? 0, deliveryAddress: request.DeliveryAddress, generalDiscountPercent: request.GeneralDiscountPercent, cardSurchargeTotal: cardSurchargeTotal);
             }
 
             if (requestedStatus == SaleStatus.Cancel && existingTransportAssignmentId is not null)
@@ -441,6 +464,40 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
         }
 
         sale.SetSourceChannel(request.SourceChannel);
+
+        // Process card data for payments
+        if (requestedStatus != SaleStatus.Cancel)
+        {
+            var paymentRequestByMethod = request.Payments
+                .GroupBy(p => p.IdPaymentMethod)
+                .ToDictionary(g => g.Key, g => g.First());
+
+            foreach (var payment in sale.Payments)
+            {
+                var methodKey = (int)payment.Method;
+                if (!paymentRequestByMethod.TryGetValue(methodKey, out var reqLine))
+                    continue;
+
+                if (payment.Method == SalePaymentMethod.Card
+                    && reqLine.CardBankId.HasValue
+                    && reqLine.CardCuotas.HasValue)
+                {
+                    var bank = await _bankRepository.GetByIdAsync(reqLine.CardBankId.Value, cancellationToken);
+                    if (bank is not null)
+                    {
+                        var plan = bank.InstallmentPlans.FirstOrDefault(p => p.Cuotas == reqLine.CardCuotas.Value && p.Active);
+                        if (plan is not null)
+                        {
+                            var surchargeAmt = decimal.Round(
+                                payment.Amount * plan.SurchargePct / (100 + plan.SurchargePct),
+                                2,
+                                MidpointRounding.AwayFromZero);
+                            payment.SetCardData(bank.Id, plan.Cuotas, plan.SurchargePct, surchargeAmt);
+                        }
+                    }
+                }
+            }
+        }
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 

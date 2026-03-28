@@ -50,5 +50,11 @@ public sealed class SaleCcPaymentConfiguration : IEntityTypeConfiguration<SaleCc
         builder.Property(payment => payment.GroupId).IsRequired(false);
 
         builder.HasIndex(payment => payment.SaleId);
+
+        builder.Property(p => p.CardBankId).IsRequired(false);
+        builder.Property(p => p.CardCuotas).IsRequired(false);
+        builder.Property(p => p.CardSurchargePct).HasColumnType("decimal(5,2)").IsRequired(false);
+        builder.Property(p => p.CardSurchargeAmt).HasColumnType("decimal(18,2)").IsRequired(false);
+        builder.Property(p => p.TotalCobrado).HasColumnType("decimal(18,2)").IsRequired(false);
     }
 }

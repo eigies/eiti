@@ -18,6 +18,7 @@ public sealed class Sale : AggregateRoot<SaleId>
     public SaleTransportAssignmentId? TransportAssignmentId { get; private set; }
     public SaleStatus SaleStatus { get; private set; }
     public decimal NoDeliverySurchargeTotal { get; private set; }
+    public decimal CardSurchargeTotal { get; private set; }
     public decimal GeneralDiscountPercent { get; private set; }
     public decimal OriginalTotal { get; private set; }
     public decimal TotalAmount { get; private set; }
@@ -62,6 +63,7 @@ public sealed class Sale : AggregateRoot<SaleId>
         bool hasDelivery,
         SaleStatus saleStatus,
         decimal noDeliverySurchargeTotal,
+        decimal cardSurchargeTotal,
         decimal generalDiscountPercent,
         DateTime createdAt,
         List<SaleDetail> details,
@@ -75,6 +77,7 @@ public sealed class Sale : AggregateRoot<SaleId>
         HasDelivery = hasDelivery;
         SaleStatus = saleStatus;
         NoDeliverySurchargeTotal = noDeliverySurchargeTotal;
+        CardSurchargeTotal = cardSurchargeTotal;
         GeneralDiscountPercent = NormalizeAmount(generalDiscountPercent);
         CreatedAt = createdAt;
         _details = details;
@@ -102,7 +105,8 @@ public sealed class Sale : AggregateRoot<SaleId>
         decimal noDeliverySurchargeTotal = 0,
         string? code = null,
         string? deliveryAddress = null,
-        decimal generalDiscountPercent = 0)
+        decimal generalDiscountPercent = 0,
+        decimal cardSurchargeTotal = 0)
     {
         if (saleStatus == SaleStatus.Cancel)
         {
@@ -112,6 +116,11 @@ public sealed class Sale : AggregateRoot<SaleId>
         if (noDeliverySurchargeTotal < 0)
         {
             throw new ArgumentException("No-delivery surcharge total cannot be negative.", nameof(noDeliverySurchargeTotal));
+        }
+
+        if (cardSurchargeTotal < 0)
+        {
+            throw new ArgumentException("Card surcharge total cannot be negative.", nameof(cardSurchargeTotal));
         }
 
         ValidateDiscountPercent(generalDiscountPercent);
@@ -131,6 +140,7 @@ public sealed class Sale : AggregateRoot<SaleId>
             hasDelivery,
             saleStatus,
             noDeliverySurchargeTotal,
+            cardSurchargeTotal,
             generalDiscountPercent,
             DateTime.UtcNow,
             detailList,
@@ -178,6 +188,7 @@ public sealed class Sale : AggregateRoot<SaleId>
             hasDelivery: false,
             SaleStatus.OnHold,
             noDeliverySurchargeTotal,
+            cardSurchargeTotal: 0,
             generalDiscountPercent,
             DateTime.UtcNow,
             detailList,
@@ -391,7 +402,8 @@ public sealed class Sale : AggregateRoot<SaleId>
         bool allowOverpayment = false,
         decimal noDeliverySurchargeTotal = 0,
         string? deliveryAddress = null,
-        decimal generalDiscountPercent = 0)
+        decimal generalDiscountPercent = 0,
+        decimal cardSurchargeTotal = 0)
     {
         if (SaleStatus != SaleStatus.OnHold)
         {
@@ -434,6 +446,7 @@ public sealed class Sale : AggregateRoot<SaleId>
         HasDelivery = hasDelivery;
         SaleStatus = saleStatus;
         NoDeliverySurchargeTotal = noDeliverySurchargeTotal;
+        CardSurchargeTotal = cardSurchargeTotal;
         GeneralDiscountPercent = NormalizeAmount(generalDiscountPercent);
         DeliveryAddress = deliveryAddress;
         RecalculateTotal();
@@ -521,7 +534,7 @@ public sealed class Sale : AggregateRoot<SaleId>
             subtotal = subtotal * (1m - GeneralDiscountPercent / 100m);
         }
 
-        TotalAmount = ManualOverridePrice ?? NormalizeAmount(subtotal);
+        TotalAmount = ManualOverridePrice ?? NormalizeAmount(subtotal + CardSurchargeTotal);
     }
 
     private void SetSettlement(

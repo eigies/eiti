@@ -46,4 +46,12 @@ public interface ISaleRepository
         CompanyId companyId,
         CustomerId? customerId,
         CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<Sale>> GetByIdsAsync(
+        IEnumerable<Guid> ids,
+        CancellationToken cancellationToken = default);
+
+    Task<Dictionary<Guid, Guid>> GetSaleIdsByCcPaymentIdsAsync(
+        IEnumerable<Guid> ccPaymentIds,
+        CancellationToken cancellationToken = default);
 }

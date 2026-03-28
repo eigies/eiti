@@ -12,4 +12,10 @@ public sealed record ListCcPaymentsItemResponse(
     string StatusName,
     DateTime CreatedAt,
     DateTime? CancelledAt,
-    Guid? GroupId);
+    Guid? GroupId,
+    int? CardBankId,
+    string? CardBankName,
+    int? CardCuotas,
+    decimal? CardSurchargePct,
+    decimal? CardSurchargeAmt,
+    decimal? TotalCobrado);

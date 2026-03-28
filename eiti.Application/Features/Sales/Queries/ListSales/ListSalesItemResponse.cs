@@ -53,7 +53,10 @@ public sealed record ListSalesPaymentItemResponse(
     int IdPaymentMethod,
     string PaymentMethod,
     decimal Amount,
-    string? Reference);
+    string? Reference,
+    int? CardBankId = null,
+    int? CardCuotas = null,
+    decimal? CardSurchargeAmt = null);
 
 public sealed record ListSalesTradeInItemResponse(
     Guid ProductId,

@@ -29,10 +29,23 @@ public sealed record CreateSaleDetailItemRequest(
     decimal? UnitPrice = null,
     decimal DiscountPercent = 0);
 
+public sealed record CreateSalePaymentChequeData(
+    string Numero,
+    int BankId,
+    string Titular,
+    string CuitDni,
+    decimal Monto,
+    DateTime FechaEmision,
+    DateTime FechaVencimiento,
+    string? Notas);
+
 public sealed record CreateSalePaymentItemRequest(
     int IdPaymentMethod,
     decimal Amount,
-    string? Reference);
+    string? Reference,
+    int? CardBankId = null,
+    int? CardCuotas = null,
+    CreateSalePaymentChequeData? Cheque = null);
 
 public sealed record CreateSaleTradeInItemRequest(
     Guid ProductId,

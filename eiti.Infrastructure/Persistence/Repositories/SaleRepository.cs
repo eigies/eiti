@@ -141,4 +141,33 @@ public sealed class SaleRepository : ISaleRepository
             .OrderByDescending(sale => sale.CreatedAt)
             .ToListAsync(cancellationToken);
     }
+
+    public async Task<IReadOnlyList<Sale>> GetByIdsAsync(
+        IEnumerable<Guid> ids,
+        CancellationToken cancellationToken = default)
+    {
+        var saleIds = ids.Select(id => new SaleId(id)).ToList();
+
+        return await _context.Sales
+            .Where(sale => saleIds.Contains(sale.Id))
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<Dictionary<Guid, Guid>> GetSaleIdsByCcPaymentIdsAsync(
+        IEnumerable<Guid> ccPaymentIds,
+        CancellationToken cancellationToken = default)
+    {
+        var ids = ccPaymentIds.Select(id => new SaleCcPaymentId(id)).ToList();
+        if (ids.Count == 0)
+            return new Dictionary<Guid, Guid>();
+
+        return await _context.SaleCcPayments
+            .Where(p => ids.Contains(p.Id))
+            .Select(p => new
+            {
+                Id = p.Id.Value,
+                SaleId = p.SaleId.Value
+            })
+            .ToDictionaryAsync(x => x.Id, x => x.SaleId, cancellationToken);
+    }
 }

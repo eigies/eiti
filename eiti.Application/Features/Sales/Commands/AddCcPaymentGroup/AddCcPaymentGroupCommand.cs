@@ -4,7 +4,22 @@ using MediatR;
 
 namespace eiti.Application.Features.Sales.Commands.AddCcPaymentGroup;
 
-public sealed record CcPaymentMethodLine(int IdPaymentMethod, decimal Amount);
+public sealed record ChequeData(
+    string Numero,
+    int BankId,
+    string Titular,
+    string CuitDni,
+    decimal Monto,
+    DateTime FechaEmision,
+    DateTime FechaVencimiento,
+    string? Notas);
+
+public sealed record CcPaymentMethodLine(
+    int IdPaymentMethod,
+    decimal Amount,
+    int? CardBankId = null,
+    int? CardCuotas = null,
+    ChequeData? Cheque = null);
 
 public sealed record AddCcPaymentGroupCommand(
     Guid SaleId,

@@ -3,6 +3,7 @@ using eiti.Application.Abstractions.Repositories;
 using eiti.Application.Abstractions.Services;
 using eiti.Application.Common;
 using eiti.Domain.Cash;
+using eiti.Domain.Cheques;
 using eiti.Domain.Sales;
 using eiti.Domain.Stock;
 using MediatR;
@@ -16,6 +17,8 @@ public sealed class AddCcPaymentGroupHandler : IRequestHandler<AddCcPaymentGroup
     private readonly IBranchProductStockRepository _branchProductStockRepository;
     private readonly IStockMovementRepository _stockMovementRepository;
     private readonly ICashSessionRepository _cashSessionRepository;
+    private readonly IBankRepository _bankRepository;
+    private readonly IChequeRepository _chequeRepository;
     private readonly IUnitOfWork _unitOfWork;
 
     public AddCcPaymentGroupHandler(
@@ -24,6 +27,8 @@ public sealed class AddCcPaymentGroupHandler : IRequestHandler<AddCcPaymentGroup
         IBranchProductStockRepository branchProductStockRepository,
         IStockMovementRepository stockMovementRepository,
         ICashSessionRepository cashSessionRepository,
+        IBankRepository bankRepository,
+        IChequeRepository chequeRepository,
         IUnitOfWork unitOfWork)
     {
         _currentUserService = currentUserService;
@@ -31,6 +36,8 @@ public sealed class AddCcPaymentGroupHandler : IRequestHandler<AddCcPaymentGroup
         _branchProductStockRepository = branchProductStockRepository;
         _stockMovementRepository = stockMovementRepository;
         _cashSessionRepository = cashSessionRepository;
+        _bankRepository = bankRepository;
+        _chequeRepository = chequeRepository;
         _unitOfWork = unitOfWork;
     }
 
@@ -129,6 +136,50 @@ public sealed class AddCcPaymentGroupHandler : IRequestHandler<AddCcPaymentGroup
             }
         }
 
+        // Process card data and cheque data — match payment to its method line by method enum
+        // (AddCcPaymentGroup skips zero-amount lines so we can't rely on positional index)
+        var methodLineByMethod = request.Methods
+            .GroupBy(m => (SalePaymentMethod)m.IdPaymentMethod)
+            .ToDictionary(g => g.Key, g => g.First());
+
+        foreach (var payment in payments)
+        {
+            if (!methodLineByMethod.TryGetValue(payment.Method, out var methodLine))
+                continue;
+
+            if (payment.Method == SalePaymentMethod.Card
+                && methodLine.CardBankId.HasValue
+                && methodLine.CardCuotas.HasValue)
+            {
+                var bank = await _bankRepository.GetByIdAsync(methodLine.CardBankId.Value, cancellationToken);
+                if (bank is not null)
+                {
+                    var plan = bank.InstallmentPlans.FirstOrDefault(p => p.Cuotas == methodLine.CardCuotas.Value && p.Active);
+                    if (plan is not null)
+                    {
+                        var surchargeAmt = decimal.Round(payment.Amount * plan.SurchargePct / 100, 2, MidpointRounding.AwayFromZero);
+                        payment.SetCardData(bank.Id, plan.Cuotas, plan.SurchargePct, surchargeAmt);
+                    }
+                }
+            }
+
+            if (payment.Method == SalePaymentMethod.Check && methodLine.Cheque is not null)
+            {
+                var chequeData = methodLine.Cheque;
+                var cheque = Cheque.CreateForCcPayment(
+                    payment.Id.Value,
+                    chequeData.BankId,
+                    chequeData.Numero,
+                    chequeData.Titular,
+                    chequeData.CuitDni,
+                    chequeData.Monto,
+                    chequeData.FechaEmision,
+                    chequeData.FechaVencimiento,
+                    chequeData.Notas);
+                await _chequeRepository.AddAsync(cheque, cancellationToken);
+            }
+        }
+
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         var groupId = payments.First().GroupId!.Value;
@@ -148,6 +199,11 @@ public sealed class AddCcPaymentGroupHandler : IRequestHandler<AddCcPaymentGroup
                     p.Status.ToString(),
                     p.CreatedAt,
                     p.CancelledAt,
-                    p.GroupId)).ToList()));
+                    p.GroupId,
+                    p.CardBankId,
+                    p.CardCuotas,
+                    p.CardSurchargePct,
+                    p.CardSurchargeAmt,
+                    p.TotalCobrado)).ToList()));
     }
 }

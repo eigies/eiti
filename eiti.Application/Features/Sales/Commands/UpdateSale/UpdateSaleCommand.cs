@@ -32,7 +32,9 @@ public sealed record UpdateSaleDetailItemRequest(
 public sealed record UpdateSalePaymentItemRequest(
     int IdPaymentMethod,
     decimal Amount,
-    string? Reference);
+    string? Reference,
+    int? CardBankId = null,
+    int? CardCuotas = null);
 
 public sealed record UpdateSaleTradeInItemRequest(
     Guid ProductId,

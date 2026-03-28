@@ -18,4 +18,7 @@ public static class PermissionCodes
     public const string UsersManage = "users.manage";
 
     public const string SalesPriceOverride = "sales.override_price";
+
+    public const string BanksManage = "banks.manage";
+    public const string ChequesManage = "cheques.manage";
 }
