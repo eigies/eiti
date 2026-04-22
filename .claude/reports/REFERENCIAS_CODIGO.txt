@@ -1,0 +1,490 @@
+================================================================================
+REFERENCIAS DE CÓDIGO - MAPEO DE PROBLEMAS A UBICACIONES
+================================================================================
+
+Para facilitar la navegación, aquí están TODOS los archivos y líneas específicas
+mencionadas en los reportes.
+
+================================================================================
+SECCIÓN 1: PROBLEMAS CRÍTICOS
+================================================================================
+
+PROBLEMA 1: LoginHandler - Excepciones Silenciosas
+──────────────────────────────────────────────────
+
+Archivo: eiti.Application/Features/Auth/Queries/Login/LoginHandler.cs
+
+  Línea 32-34:
+    public async Task<Result<LoginResponse>> Handle(
+        LoginQuery request,
+        CancellationToken cancellationToken)
+
+  Línea 36-59: PROBLEM CODE - BARE CATCH BLOCKS
+    try
+    {
+        var username = Username.Create(request.UsernameOrEmail);
+        user = await _userRepository.GetByUsernameAsync(username, cancellationToken);
+    }
+    catch  // ⚠️ BARE CATCH - PROBLEMA
+    {
+        // Try as email.
+    }
+
+    if (user is null)
+    {
+        try
+        {
+            var email = Email.Create(request.UsernameOrEmail);
+            user = await _userRepository.GetByEmailAsync(email, cancellationToken);
+        }
+        catch  // ⚠️ BARE CATCH - PROBLEMA
+        {
+            // Invalid input for both username and email.
+        }
+    }
+
+  Línea 83-85: DUPLICACIÓN (ver Problema 2)
+    var token = _jwtTokenGenerator.GenerateToken(user);
+    var roles = user.Roles.Select(role => role.RoleCode).ToArray();
+    var permissions = RoleCatalog.PermissionsFor(roles).OrderBy(permission => permission).ToArray();
+
+  Ver: refactoring_examples.md - PROBLEMA 1
+
+
+PROBLEMA 2: Duplicación - Response Building en Auth Handlers
+─────────────────────────────────────────────────────────────
+
+LoginHandler:
+  Archivo: eiti.Application/Features/Auth/Queries/Login/LoginHandler.cs
+  Línea 83-94:
+    var token = _jwtTokenGenerator.GenerateToken(user);
+    var roles = user.Roles.Select(role => role.RoleCode).ToArray();
+    var permissions = RoleCatalog.PermissionsFor(roles).OrderBy(permission => permission).ToArray();
+
+    return Result<LoginResponse>.Success(
+        new LoginResponse(
+            user.Id.Value,
+            user.Username.Value,
+            user.Email.Value,
+            token,
+            roles,
+            permissions));
+
+RegisterHandler:
+  Archivo: eiti.Application/Features/Auth/Commands/Register/RegisterHandler.cs
+  Línea 83-94:
+    var token = _jwtTokenGenerator.GenerateToken(user);
+    var roles = user.Roles.Select(role => role.RoleCode).ToArray();
+    var permissions = RoleCatalog.PermissionsFor(roles).OrderBy(permission => permission).ToArray();
+
+    return Result<RegisterResponse>.Success(
+        new RegisterResponse(
+            user.Id.Value,
+            user.Username.Value,
+            user.Email.Value,
+            token,
+            roles,
+            permissions));
+
+  ⚠️ CÓDIGO DUPLICADO - 12 líneas idénticas
+
+  Ver: refactoring_examples.md - PROBLEMA 2
+
+
+PROBLEMA 3: CreateSaleHandler - Complejidad Excesiva
+─────────────────────────────────────────────────────
+
+Archivo: eiti.Application/Features/Sales/Commands/CreateSale/CreateSaleHandler.cs
+Líneas: 431 (TOTAL)
+Complejidad Ciclomática: ~15+
+
+Estructura problemática:
+
+  Línea 29-48: Constructor con 9 dependencias
+  Línea 51-431: Método Handle() - TODO EN UN SOLO MÉTODO
+
+    Línea 53-78: PRIMER BLOQUE - Validación de autorización (6 checks)
+      • Autenticación
+      • Status válido
+      • Permiso para pagar
+      • Status Cancel no permitido
+      → Debería ser: ValidateCreateSaleRequest()
+
+    Línea 80-85: SEGUNDO BLOQUE - Obtener y validar branch
+      → Debería ser: ValidateAndGetBranchAsync()
+
+    Línea 87-96: TERCER BLOQUE - Obtener y validar cliente
+      → Debería ser: ValidateAndGetCustomerAsync()
+
+    Línea 98-140: CUARTO BLOQUE - Procesar detalles de venta
+      → Debería ser: ValidateAndGroupSaleDetails()
+
+    Línea 140+: QUINTO BLOQUE - Procesar pagos y trade-ins
+      → Debería ser: ProcessPayments(), ProcessTradeIns()
+
+  Ver: quality_review_report.md §3.1
+  Ver: refactoring_examples.md - PROBLEMA 4
+  Ver: CHECKLIST_IMPLEMENTACION.md §2.3
+
+
+PROBLEMA 4: Duplicación - Authorization Checks
+───────────────────────────────────────────────
+
+CloseCashSessionHandler:
+  Archivo: eiti.Application/Features/CashSessions/Commands/CloseCashSession/CloseCashSessionHandler.cs
+  Línea 29-32:
+    if (!_currentUserService.IsAuthenticated || _currentUserService.CompanyId is null || _currentUserService.UserId is null)
+    {
+        return Result<CashSessionResponse>.Failure(Error.Unauthorized("CashSessions.Close.Unauthorized", "The current user is not authenticated."));
+    }
+
+OpenCashSessionHandler:
+  Archivo: eiti.Application/Features/CashSessions/Commands/OpenCashSession/OpenCashSessionHandler.cs
+  Línea 32-35:
+    if (!_currentUserService.IsAuthenticated || _currentUserService.CompanyId is null || _currentUserService.UserId is null)
+    {
+        return Result<CashSessionResponse>.Failure(Error.Unauthorized("CashSessions.Open.Unauthorized", "The current user is not authenticated."));
+    }
+
+CreateSaleHandler:
+  Archivo: eiti.Application/Features/Sales/Commands/CreateSale/CreateSaleHandler.cs
+  Línea 53-58:
+    if (!_currentUserService.IsAuthenticated || companyId is null)
+    {
+        return Result<CreateSaleResponse>.Failure(
+            Error.Unauthorized("Sales.Create.Unauthorized", "The current user is not authenticated."));
+    }
+
+  ⚠️ CÓDIGO REPETIDO - 3+ líneas en múltiples handlers
+  ⚠️ INCONSISTENCIA - Algunos checks CompanyId+UserId, otros solo CompanyId
+
+  Ver: quality_review_report.md §3.2
+  Ver: refactoring_examples.md - PROBLEMA 3
+  Ver: CHECKLIST_IMPLEMENTACION.md §2.1
+
+
+================================================================================
+SECCIÓN 2: DUPLICACIÓN DE ERRORES
+================================================================================
+
+PROBLEMA 5: Error Codes - Inline vs Archivos
+─────────────────────────────────────────────
+
+Archivos de error BIEN ORGANIZADOS (Modelo a seguir):
+  ✅ eiti.Application/Features/Auth/Commands/Register/RegisterErrors.cs
+  ✅ eiti.Application/Features/Auth/Queries/Login/LoginErrors.cs
+
+Archivos CON ERRORES INLINE (Necesitan archivo *Errors.cs):
+  ❌ eiti.Application/Features/Sales/Commands/CreateSale/CreateSaleHandler.cs
+     Línea 56, 62, 70, 76, 83, 93: Error definitions inline
+     → Crear: CreateSaleErrors.cs
+
+  ❌ eiti.Application/Features/Sales/Commands/UpdateSale/UpdateSaleHandler.cs
+     → Crear: UpdateSaleErrors.cs
+
+  ❌ eiti.Application/Features/CashSessions/Commands/CloseCashSession/CloseCashSessionHandler.cs
+     Línea 31, 38, 47: Error definitions inline
+     → Crear: CloseCashSessionErrors.cs
+
+  ❌ eiti.Application/Features/CashSessions/Commands/OpenCashSession/OpenCashSessionHandler.cs
+     Línea 34, 41, 48: Error definitions inline
+     → Crear: OpenCashSessionErrors.cs
+
+  Ver: quality_review_report.md §2.4
+  Ver: refactoring_examples.md - PROBLEMA 5
+  Ver: CHECKLIST_IMPLEMENTACION.md §1.2
+
+
+================================================================================
+SECCIÓN 3: PATRÓN RESULT/ERROR (BIEN PERO CON MEJORAS)
+================================================================================
+
+Archivo: eiti.Application/Common/Result.cs
+Línea 3-72: Implementación OK
+
+  Línea 9-23: Constructor con validación de invariantes
+    if (success && error != Error.None)
+        throw new InvalidOperationException("Success result cannot have an error.");
+
+    if (!success && error == Error.None)
+        throw new InvalidOperationException("Failure result must have an error.");
+
+  ✅ Buena validación de invariantes
+
+Archivo: eiti.Application/Common/Error.cs
+Línea 1-35: Error factory pattern
+
+  Línea 18-34: Factory methods bien tipados
+    public static Error Validation(...)
+    public static Error NotFound(...)
+    public static Error Conflict(...)
+    public static Error Unauthorized(...)
+    public static Error Forbidden(...)
+
+  ✅ Patrón limpio y extensible
+
+Archivo: eiti.Api/Extensions/ResultExtensions.cs
+Línea 1-60: Conversión a HTTP
+
+  Línea 25-33: DUPLICACIÓN
+    var statusCode = result.Error.Type switch { ... };
+    return new ObjectResult(new ProblemDetails { ... });
+
+  Línea 47-58: DUPLICACIÓN (mismo contenido)
+    private static string GetTitle(ErrorType errorType)
+    {
+        return errorType switch { ... };
+    }
+
+  ⚠️ PROBLEMA: Línea 40 expone código de error directamente
+    Extensions = { ["errorCode"] = result.Error.Code }
+    → Debería controlarse en dev vs prod
+
+  Ver: quality_review_report.md §2.4
+  Ver: refactoring_examples.md - PROBLEMA 6
+
+
+================================================================================
+SECCIÓN 4: FORTALEZAS (BIEN IMPLEMENTADAS)
+================================================================================
+
+Entity Pattern - EXCELENTE
+───────────────────────────
+Archivo: eiti.Domain/Primitives/Entity.cs
+Línea 3-42: Implementación correcta
+  • Generic entity base
+  • ID-based equality
+  • Operator overloading
+
+ValueObject Pattern - EXCELENTE
+────────────────────────────────
+Archivo: eiti.Domain/Primitives/ValueObject.cs
+Línea 1-42: Implementación correcta
+  • Abstract base class
+  • GetEqualityComponents()
+  • Proper equality semantics
+
+Domain Entities - EXCELENTE
+────────────────────────────
+Archivo: eiti.Domain/Companies/Company.cs
+  Línea 34-45: Factory method Create()
+  Línea 47-56: Alternative factory CreateLegacy()
+  Línea 58-78: Business logic in Update()
+  Línea 80-94: Private validation NormalizeSenderPhone()
+
+  ✅ Encapsulation correcto
+  ✅ Validación de invariantes
+  ✅ No accede a repositories
+
+Archivo: eiti.Domain/Users/User.cs
+  Línea 44-63: Factory method Create()
+  Línea 70-86: Domain behavior AssignRoles()
+  Línea 88-101: Domain behavior para activar/desactivar
+
+  ✅ Clean domain model
+  ✅ Business rules encapsulated
+
+Patrón CQRS - BIEN IMPLEMENTADO
+────────────────────────────────
+Archivos:
+  • eiti.Application/Features/Auth/Commands/Register/RegisterCommand.cs
+  • eiti.Application/Features/Auth/Queries/Login/LoginQuery.cs
+  • eiti.Application/Features/Sales/Commands/CreateSale/CreateSaleCommand.cs
+
+  ✅ Separación clara entre Commands y Queries
+  ✅ MediatR pattern usado correctamente
+
+Behaviors Pattern - BIEN IMPLEMENTADO
+──────────────────────────────────────
+Archivo: eiti.Application/Common/Behaviors/ValidationBehavior.cs
+Línea 17-43: Pipeline behavior para validación automática
+
+  ✅ Cross-cutting concern separado
+  ✅ Usa FluentValidation correctamente
+
+Archivo: eiti.Application/Common/Behaviors/AuthorizationBehavior.cs
+Línea 17-41: Pipeline behavior para autorización
+
+  ✅ Reflection complexity justified
+  ✅ Support para ambos Result y Result<T>
+
+Controllers - BIEN DISEÑADOS
+─────────────────────────────
+Archivo: eiti.Api/Controllers/AuthController.cs
+Línea 12-40: Controllers delgados
+
+  ✅ Solo delegados a MediatR
+  ✅ ToActionResult() para conversión limpia
+  ✅ Uso correcto de [Authorize] y [AllowAnonymous]
+
+Archivo: eiti.Api/Controllers/BranchesController.cs
+  ✅ Patrón similar, bien ejecutado
+
+
+================================================================================
+SECCIÓN 5: TESTS
+================================================================================
+
+Tests Existentes - UBICACIONES
+───────────────────────────────
+
+✅ RegisterHandlerTests.cs
+   Línea 14-79: 2 tests
+   • Test: CreateCompany cuando no existe
+   • Test: CreateNewCompany con email público
+   Verificación de mocks detallada
+
+✅ CreateSaleHandlerTests.cs
+   Línea 14-156: 2 tests
+   • Test: ManualTradeInAmount cuando permitido
+   • Test: RejectTradeIn cuando no permitido
+   Good setup con mocks
+
+✅ ProductHandlersTests.cs
+   Línea 15-50+: Múltiples tests
+   • CreateProduct_ShouldPersistProductForCurrentCompany
+   • (más tests no mostrados)
+
+✅ SendSaleWhatsAppHandlerTests.cs
+   Línea 15-60+: Tests detallados
+   Buena estructura de mocks
+
+Tests Faltantes - CRÍTICO
+──────────────────────────
+
+❌ LoginHandlerTests.cs NO EXISTE
+   Debería cubrir:
+   • Lookup por username
+   • Lookup por email
+   • Fallback username → email
+   • Password validation
+   • Inactive user rejection
+
+❌ CashSession Handler Tests NO EXISTEN
+   OpenCashSessionHandlerTests - TODO
+   CloseCashSessionHandlerTests - TODO
+   CreateCashWithdrawalHandlerTests - TODO
+
+❌ Validator Tests NO EXISTEN
+   RegisterValidatorTests - TODO
+   LoginValidatorTests - TODO
+   CreateSaleValidatorTests - TODO
+
+❌ Result Pattern Tests NO EXISTEN
+   Debería verificar invariantes
+
+❌ Behavior Tests NO EXPLÍCITOS
+   ValidationBehavior integration - TODO
+   AuthorizationBehavior integration - TODO
+
+  Ver: quality_review_report.md §6
+
+
+================================================================================
+SECCIÓN 6: SERVICIOS Y ABSTRACCIONES
+================================================================================
+
+Interfaces Bien Diseñadas
+─────────────────────────
+
+Archivo: eiti.Application/Abstractions/Services/ICurrentUserService.cs
+Línea 6-14: Interface clara
+  • IsAuthenticated: bool
+  • UserId: UserId?
+  • CompanyId: CompanyId?
+  • Roles: IReadOnlyCollection<string>
+  • Permissions: IReadOnlyCollection<string>
+  • HasPermission(permission): bool
+
+Archivo: eiti.Application/Abstractions/Data/IUnitOfWork.cs
+Línea 6-39: UnitOfWork pattern bien definido
+  • SaveChangesAsync()
+  • BeginTransactionAsync()
+  • CommitTransactionAsync()
+  • RollbackTransactionAsync()
+  • ExecuteInTransactionAsync()
+  • HasActiveTransaction: bool
+
+  ✅ Buena abstracción
+  ⚠️ PERO: Podría considerar separar ITransactionManager
+
+Archivo: eiti.Application/Abstractions/Services/IJwtTokenGenerator.cs
+Línea 5-8: Interface simple
+  • GenerateToken(user): string
+
+Archivo: eiti.Application/Abstractions/Services/IPasswordHasher.cs
+Línea 4-7: Interface bien enfocada
+  • HashPassword(password): string
+  • VerifyPassword(password, hash): bool
+
+
+Implementación de Servicios
+────────────────────────────
+
+Archivo: eiti.Api/Services/CurrentUserService.cs
+Línea 10-80: Implementación
+
+  Línea 20-32: Properties bien implementadas
+    public bool IsAuthenticated =>
+        _httpContextAccessor.HttpContext?.User?.Identity?.IsAuthenticated == true;
+
+    public UserId? UserId => TryParseUserId();
+
+    public CompanyId? CompanyId => TryParseCompanyId();
+
+    public IReadOnlyCollection<string> Roles => _roles ??= ReadClaimValues(ClaimTypes.Role);
+
+    public IReadOnlyCollection<string> Permissions => _permissions ??= ReadClaimValues("permission");
+
+  ✅ Caching con ??= pattern
+  ✅ Null-safe navigation
+
+  Línea 34-64: Métodos privados para parsing
+    • TryParseUserId()
+    • TryParseCompanyId()
+    • FindClaimValue()
+    • ReadClaimValues()
+
+  ✅ Bien separado en métodos privados
+  ⚠️ UBICACIÓN: Debería estar en Infrastructure, no Api
+
+
+================================================================================
+SECCIÓN 7: NOMBRES Y CONVENCIONES
+================================================================================
+
+Naming Corrections Necesarias
+──────────────────────────────
+
+1. Error codes namespace - INCONSISTENCIA
+   Buenos ejemplos:
+     "Auth.Register.UsernameAlreadyExists"  ← Bien namespaced
+     "Auth.Register.EmailAlreadyExists"
+
+   Malos ejemplos (inline, inconsistentes):
+     "Sales.Create.Unauthorized"
+     "CashSessions.Close.Unauthorized"
+     "Sales.Create.InvalidStatus"
+
+   → Consolidar en *Errors.cs con patrón "Feature.Operation.ErrorName"
+
+2. Mapper naming - MENOR
+   Buscar: CashSessionMapper (debe ser CashSessionResponseMapper)
+
+
+================================================================================
+FIN DE REFERENCIAS
+================================================================================
+
+Total de problemas identificados: 13
+Total de fortalezas destacadas: 11
+Total de líneas analizadas: ~5000+
+Total de archivos revisados: 50+
+
+Para detalles completos, consultar:
+  - quality_review_report.md (análisis detallado)
+  - refactoring_examples.md (soluciones concretas)
+  - CHECKLIST_IMPLEMENTACION.md (plan de trabajo)
+
+Generado: 2026-03-16
+Revisor: Quality Code Review Agent

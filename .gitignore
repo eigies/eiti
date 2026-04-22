@@ -42,7 +42,8 @@ coverage/
 .DS_Store
 Thumbs.db
 
-# Internal review & analysis (kept locally, not for repo)
-.claude/
+# Claude Code personal settings (kept locally, not for repo)
+.claude/settings.local.json
+CLAUDE.local.md
 DOCUMENTATION_REPORT.md
 DOCUMENTATION_EXAMPLES.md

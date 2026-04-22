@@ -6,6 +6,8 @@
     "allow": [
       "Bash(find:*)",
       "Bash(grep:*)",
+      "Bash(curl:*)",
+      "Bash(ng build:*)",
       "Bash(git config:*)",
       "Bash(git log:*)",
       "Bash(dotnet build:*)",
@@ -13,9 +15,32 @@
       "Bash(cd:*)",
       "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d.get\\(''''mcpServers'''', {}\\), indent=2\\)\\)\")",
       "Bash(cat:*)",
+      "Read(//c/EiTeFront/eiti-front/**)",
       "mcp__notion__API-get-self",
       "mcp__notion__API-retrieve-a-database",
-      "mcp__notion__API-post-page"
+      "mcp__notion__API-post-page",
+      "Bash(bash /c/Eiti/eiti/.claude/statusline-command.sh)",
+      "Bash(mv .claude/CLAUDE.md CLAUDE.md)",
+      "Bash(mv .claude/code-review-backend.md .claude/commands/code-review-backend.md)",
+      "Bash(mv .claude/code-review-frontend.md .claude/commands/code-review-frontend.md)",
+      "Bash(mv .claude/lessons.md .claude/rules/lessons.md)",
+      "Bash(mv \".claude/START_HERE.md\" .claude/reports/START_HERE.md)",
+      "Bash(cp -r \"C:/EiTeFront/.agents/skills/frontend-design\" \"C:/EiTeFront/eiti-front/.claude/skills/frontend-design\")",
+      "Bash(rm -rf \"C:/EiTeFront/.agents\")",
+      "Bash(cp -r \"C:/EiTeFront/.claude/agents/frontend-developer.md\" \"C:/EiTeFront/eiti-front/.claude/agents/frontend-developer.md\")",
+      "Bash(cp -r \"C:/EiTeFront/.claude/skills/code-reviewer\" \"C:/EiTeFront/eiti-front/.claude/skills/code-reviewer\")",
+      "Bash(mv \"C:/EiTeFront/IMPLEMENTACION_FEATURE_PRECIOS_PRODUCTO.md\" \"C:/EiTeFront/eiti-front/.claude/reports/IMPLEMENTACION_FEATURE_PRECIOS_PRODUCTO.md\")",
+      "Bash(mv \"C:/EiTeFront/skills-lock.json\" \"C:/EiTeFront/eiti-front/.claude/skills-lock.json\")",
+      "Bash(cp -r C:/Eiti/eiti/.agents/skills/. C:/Eiti/eiti/.claude/skills/)",
+      "Bash(cp -r \"C:/Eiti/.agents/skills/code-review-expert\" \"C:/Eiti/eiti/.claude/skills/code-review-expert\")",
+      "Bash(rm -rf C:/Eiti/eiti/.agents C:/Eiti/.agents)",
+      "Bash(git rm *)",
+      "Bash(git add *)"
     ]
-  }
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "bash /c/Eiti/eiti/.claude/statusline-command.sh"
+  },
+  "teammateMode": "tmux"
 }
