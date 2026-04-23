@@ -51,6 +51,7 @@ public sealed class ApplicationDbContext : DbContext
     public DbSet<User> Users { get; set; }
     public DbSet<UserRoleAssignment> UserRoles { get; set; }
     public DbSet<UserRoleAudit> UserRoleAudits { get; set; }
+    public DbSet<PasswordResetToken> PasswordResetTokens { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

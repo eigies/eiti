@@ -99,4 +99,9 @@ public sealed class User : AggregateRoot<UserId>
     {
         IsActive = false;
     }
+
+    public void ChangePassword(PasswordHash newHash)
+    {
+        PasswordHash = newHash;
+    }
 }
