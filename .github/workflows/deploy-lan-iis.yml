@@ -44,14 +44,14 @@ jobs:
 
       - name: Deploy
         run: |
-          & "$env:GITHUB_WORKSPACE\.agents\skills\deploy-lan-iis\scripts\deploy.ps1" `
+          & "$env:GITHUB_WORKSPACE\.claude\skills\deploy-lan-iis\scripts\deploy.ps1" `
             -ConnectionString "${{ secrets.DEPLOY_CONNECTION_STRING }}" `
             -SkipPrecheck
 
       - name: Start ngrok tunnel
         id: ngrok
         run: |
-          $publicUrl = & "$env:GITHUB_WORKSPACE\.agents\skills\deploy-lan-iis\scripts\start-ngrok-tunnel.ps1" `
+          $publicUrl = & "$env:GITHUB_WORKSPACE\.claude\skills\deploy-lan-iis\scripts\start-ngrok-tunnel.ps1" `
             -LocalUrl 'http://127.0.0.1:80' `
             -ToolRoot 'C:\eiti\tools\ngrok' `
             -NgrokExe 'C:\Users\eitip\AppData\Local\Microsoft\WinGet\Packages\Ngrok.Ngrok_Microsoft.Winget.Source_8wekyb3d8bbwe\ngrok.exe' `
@@ -62,8 +62,8 @@ jobs:
       - name: Notify Telegram
         run: |
           $prevSha = "${{ steps.backend.outputs.prev_sha }}"
-          $sendScript = "$env:GITHUB_WORKSPACE\.agents\skills\deploy-lan-iis\scripts\send-telegram.ps1"
-          $changelogScript = "$env:GITHUB_WORKSPACE\.agents\skills\deploy-lan-iis\scripts\build-changelog.ps1"
+          $sendScript = "$env:GITHUB_WORKSPACE\.claude\skills\deploy-lan-iis\scripts\send-telegram.ps1"
+          $changelogScript = "$env:GITHUB_WORKSPACE\.claude\skills\deploy-lan-iis\scripts\build-changelog.ps1"
           $publicUrl = "${{ steps.ngrok.outputs.public_url }}"
           $ownerChatId = "${{ secrets.TELEGRAM_OWNER_CHAT_ID }}"
 
