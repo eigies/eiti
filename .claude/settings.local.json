@@ -35,7 +35,12 @@
       "Bash(cp -r \"C:/Eiti/.agents/skills/code-review-expert\" \"C:/Eiti/eiti/.claude/skills/code-review-expert\")",
       "Bash(rm -rf C:/Eiti/eiti/.agents C:/Eiti/.agents)",
       "Bash(git rm *)",
-      "Bash(git add *)"
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "PowerShell(powershell -ExecutionPolicy Bypass -File .\\\\.agents\\\\skills\\\\git-commit-front\\\\scripts\\\\commit-front.ps1 -AutoMessage)",
+      "PowerShell(powershell -ExecutionPolicy Bypass -File \".\\\\.claude\\\\skills\\\\git-commit-front\\\\scripts\\\\commit-front.ps1\" -AutoMessage)",
+      "PowerShell(powershell -ExecutionPolicy Bypass -File \".\\\\.claude\\\\skills\\\\git-commit-front\\\\scripts\\\\commit-front.ps1\" -AutoMessage -Push)",
+      "PowerShell(powershell -ExecutionPolicy Bypass -File \".\\\\.claude\\\\skills\\\\git-commit-back\\\\scripts\\\\commit-back.ps1\" -AutoMessage -Push)"
     ]
   },
   "statusLine": {
