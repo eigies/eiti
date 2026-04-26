@@ -10,4 +10,6 @@ public sealed record CashSessionMovementResponse(
     DateTime OccurredAt,
     string Description,
     string? ReferenceType,
-    Guid? ReferenceId);
+    Guid? ReferenceId,
+    string? SaleCode,
+    string? CreatedByUsername);

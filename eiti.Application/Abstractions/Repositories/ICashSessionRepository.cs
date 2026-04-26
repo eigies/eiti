@@ -39,6 +39,15 @@ public interface ICashSessionRepository
         CompanyId companyId,
         CancellationToken cancellationToken = default);
 
+    Task<IReadOnlyList<CashSession>> GetAllStaleOpenAsync(
+        CompanyId companyId,
+        DateTime openedBefore,
+        CancellationToken cancellationToken = default);
+
+    Task<HashSet<Guid>> GetOpenDrawerIdsAsync(
+        IEnumerable<Guid> drawerIds,
+        CancellationToken cancellationToken = default);
+
     Task AddAsync(
         CashSession cashSession,
         CancellationToken cancellationToken = default);

@@ -1,6 +1,7 @@
 using eiti.Domain.Branches;
 using eiti.Domain.Cash;
 using eiti.Domain.Companies;
+using eiti.Domain.Users;
 
 namespace eiti.Application.Abstractions.Repositories;
 
@@ -24,5 +25,10 @@ public interface ICashDrawerRepository
 
     Task AddAsync(
         CashDrawer cashDrawer,
+        CancellationToken cancellationToken = default);
+
+    Task<CashDrawer?> GetByAssignedUserAsync(
+        UserId userId,
+        CompanyId companyId,
         CancellationToken cancellationToken = default);
 }

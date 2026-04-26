@@ -13,15 +13,18 @@ public sealed class GetCurrentCashSessionHandler : IRequestHandler<GetCurrentCas
     private readonly ICurrentUserService _currentUserService;
     private readonly ICashSessionRepository _cashSessionRepository;
     private readonly ISaleRepository _saleRepository;
+    private readonly IUserRepository _userRepository;
 
     public GetCurrentCashSessionHandler(
         ICurrentUserService currentUserService,
         ICashSessionRepository cashSessionRepository,
-        ISaleRepository saleRepository)
+        ISaleRepository saleRepository,
+        IUserRepository userRepository)
     {
         _currentUserService = currentUserService;
         _cashSessionRepository = cashSessionRepository;
         _saleRepository = saleRepository;
+        _userRepository = userRepository;
     }
 
     public async Task<Result<CashSessionResponse>> Handle(GetCurrentCashSessionQuery request, CancellationToken cancellationToken)
@@ -38,7 +41,7 @@ public sealed class GetCurrentCashSessionHandler : IRequestHandler<GetCurrentCas
         }
 
         var saleIds = session.Movements
-            .Where(movement => movement.Type == CashMovementType.SaleIncome && movement.ReferenceId.HasValue)
+            .Where(movement => movement.ReferenceId.HasValue)
             .Select(movement => movement.ReferenceId!.Value)
             .Distinct()
             .ToList();
@@ -47,6 +50,17 @@ public sealed class GetCurrentCashSessionHandler : IRequestHandler<GetCurrentCas
             ? await _saleRepository.GetPaymentsBySaleIdsAsync(saleIds, cancellationToken)
             : [];
 
-        return Result<CashSessionResponse>.Success(CashSessionMapper.Map(session, payments));
+        Dictionary<Guid, string?> saleCodes = saleIds.Count > 0
+            ? await _saleRepository.GetCodesBySaleIdsAsync(saleIds, cancellationToken)
+            : [];
+
+        var userIds = session.Movements
+            .Select(m => m.CreatedByUserId.Value)
+            .Distinct()
+            .ToList();
+
+        var usernames = await _userRepository.GetUsernamesByIdsAsync(userIds, cancellationToken);
+
+        return Result<CashSessionResponse>.Success(CashSessionMapper.Map(session, payments, saleCodes, usernames));
     }
 }

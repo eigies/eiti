@@ -72,6 +72,6 @@ public sealed class CreateCashDrawerHandler : IRequestHandler<CreateCashDrawerCo
         onboarding.MarkCashDrawerCreated();
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-        return Result<CashDrawerResponse>.Success(new(cashDrawer.Id.Value, cashDrawer.BranchId.Value, cashDrawer.Name, cashDrawer.IsActive, cashDrawer.CreatedAt, cashDrawer.UpdatedAt));
+        return Result<CashDrawerResponse>.Success(new(cashDrawer.Id.Value, cashDrawer.BranchId.Value, cashDrawer.Name, cashDrawer.IsActive, cashDrawer.CreatedAt, cashDrawer.UpdatedAt, cashDrawer.AssignedUserId?.Value));
     }
 }

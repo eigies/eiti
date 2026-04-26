@@ -54,4 +54,8 @@ public interface ISaleRepository
     Task<Dictionary<Guid, Guid>> GetSaleIdsByCcPaymentIdsAsync(
         IEnumerable<Guid> ccPaymentIds,
         CancellationToken cancellationToken = default);
+
+    Task<Dictionary<Guid, string?>> GetCodesBySaleIdsAsync(
+        IEnumerable<Guid> saleIds,
+        CancellationToken cancellationToken = default);
 }

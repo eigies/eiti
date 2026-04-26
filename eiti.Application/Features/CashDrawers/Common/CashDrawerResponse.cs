@@ -6,4 +6,6 @@ public sealed record CashDrawerResponse(
     string Name,
     bool IsActive,
     DateTime CreatedAt,
-    DateTime? UpdatedAt);
+    DateTime? UpdatedAt,
+    Guid? AssignedUserId,
+    bool HasOpenSession = false);

@@ -1,4 +1,5 @@
 using eiti.Api.Extensions;
+using eiti.Application.Features.CashDrawers.Commands.AssignCashDrawer;
 using eiti.Application.Features.CashDrawers.Commands.CreateCashDrawer;
 using eiti.Application.Features.CashDrawers.Commands.UpdateCashDrawer;
 using eiti.Application.Features.CashDrawers.Queries.ListCashDrawers;
@@ -38,6 +39,13 @@ public sealed class CashDrawersController : ControllerBase
     public async Task<IActionResult> Update(Guid id, [FromBody] UpdateCashDrawerCommand command, CancellationToken cancellationToken)
     {
         var result = await _sender.Send(command with { Id = id }, cancellationToken);
+        return result.ToActionResult();
+    }
+
+    [HttpPatch("{id:guid}/assign")]
+    public async Task<IActionResult> Assign(Guid id, [FromBody] AssignCashDrawerCommand command, CancellationToken cancellationToken)
+    {
+        var result = await _sender.Send(command with { CashDrawerId = id }, cancellationToken);
         return result.ToActionResult();
     }
 }

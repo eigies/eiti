@@ -3,6 +3,7 @@ using eiti.Application.Abstractions.Repositories;
 using eiti.Application.Abstractions.Services;
 using eiti.Application.Common;
 using eiti.Application.Features.Auth.Common;
+using eiti.Domain.Companies;
 using eiti.Domain.Customers;
 using eiti.Domain.Users;
 using MediatR;
@@ -15,17 +16,20 @@ public sealed class LoginHandler
     private readonly IUserRepository _userRepository;
     private readonly IPasswordHasher _passwordHasher;
     private readonly IJwtTokenGenerator _jwtTokenGenerator;
+    private readonly ICashDrawerRepository _cashDrawerRepository;
     private readonly IUnitOfWork _unitOfWork;
 
     public LoginHandler(
         IUserRepository userRepository,
         IPasswordHasher passwordHasher,
         IJwtTokenGenerator jwtTokenGenerator,
+        ICashDrawerRepository cashDrawerRepository,
         IUnitOfWork unitOfWork)
     {
         _userRepository = userRepository;
         _passwordHasher = passwordHasher;
         _jwtTokenGenerator = jwtTokenGenerator;
+        _cashDrawerRepository = cashDrawerRepository;
         _unitOfWork = unitOfWork;
     }
 
@@ -72,6 +76,11 @@ public sealed class LoginHandler
         var token = _jwtTokenGenerator.GenerateToken(user);
         var (roles, permissions) = AuthenticationMapper.MapRolesAndPermissions(user);
 
+        var assignedDrawer = await _cashDrawerRepository.GetByAssignedUserAsync(
+            user.Id,
+            new CompanyId(user.CompanyId.Value),
+            cancellationToken);
+
         return Result<LoginResponse>.Success(
             new LoginResponse(
                 user.Id.Value,
@@ -79,6 +88,7 @@ public sealed class LoginHandler
                 user.Email.Value,
                 token,
                 roles,
-                permissions));
+                permissions,
+                assignedDrawer?.Id.Value));
     }
 }

@@ -13,6 +13,7 @@ public static class PermissionCodes
     public const string CashClose = "cash.close";
     public const string CashWithdraw = "cash.withdraw";
     public const string CashDrawerManage = "cash.drawer.manage";
+    public const string CashDrawerAssign = "cash.drawer.assign";
     public const string CashHistoryExport = "cash.history.export";
 
     public const string UsersManage = "users.manage";

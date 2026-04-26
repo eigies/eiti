@@ -1,6 +1,7 @@
 using eiti.Domain.Branches;
 using eiti.Domain.Cash;
 using eiti.Domain.Companies;
+using eiti.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -33,6 +34,12 @@ public sealed class CashDrawerConfiguration : IEntityTypeConfiguration<CashDrawe
         builder.Property(drawer => drawer.IsActive).IsRequired();
         builder.Property(drawer => drawer.CreatedAt).IsRequired();
         builder.Property(drawer => drawer.UpdatedAt).IsRequired(false);
+
+        builder.Property(drawer => drawer.AssignedUserId)
+            .HasConversion(id => id!.Value, value => new UserId(value))
+            .IsRequired(false);
+
+        builder.HasIndex(drawer => drawer.AssignedUserId);
 
         builder.HasIndex(drawer => new { drawer.BranchId, drawer.Name }).IsUnique();
 

@@ -52,9 +52,10 @@ public sealed class CashSessionRepository : ICashSessionRepository
             .Include(session => session.Movements)
             .Where(session => session.CashDrawerId == cashDrawerId && session.CompanyId == companyId);
 
+        // Overlap: session intersects the range if OpenedAt <= to AND (ClosedAt is null OR ClosedAt >= from)
         if (from.HasValue)
         {
-            query = query.Where(session => session.OpenedAt >= from.Value);
+            query = query.Where(session => session.ClosedAt == null || session.ClosedAt >= from.Value);
         }
 
         if (to.HasValue)
@@ -64,6 +65,20 @@ public sealed class CashSessionRepository : ICashSessionRepository
 
         return await query
             .OrderByDescending(session => session.OpenedAt)
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<CashSession>> GetAllStaleOpenAsync(
+        CompanyId companyId,
+        DateTime openedBefore,
+        CancellationToken cancellationToken = default)
+    {
+        return await _context.CashSessions
+            .Where(session =>
+                session.CompanyId == companyId &&
+                session.Status == CashSessionStatus.Open &&
+                session.OpenedAt <= openedBefore)
+            .OrderBy(session => session.OpenedAt)
             .ToListAsync(cancellationToken);
     }
 
@@ -108,6 +123,22 @@ public sealed class CashSessionRepository : ICashSessionRepository
                 && session.Status == CashSessionStatus.Closed)
             .OrderByDescending(session => session.ClosedAt)
             .FirstOrDefaultAsync(cancellationToken);
+    }
+
+    public async Task<HashSet<Guid>> GetOpenDrawerIdsAsync(
+        IEnumerable<Guid> drawerIds,
+        CancellationToken cancellationToken = default)
+    {
+        var ids = drawerIds.Select(id => new CashDrawerId(id)).ToList();
+        if (ids.Count == 0)
+            return [];
+
+        var result = await _context.CashSessions
+            .Where(s => ids.Contains(s.CashDrawerId) && s.Status == CashSessionStatus.Open)
+            .Select(s => s.CashDrawerId.Value)
+            .ToListAsync(cancellationToken);
+
+        return result.ToHashSet();
     }
 
     public async Task AddAsync(CashSession cashSession, CancellationToken cancellationToken = default)

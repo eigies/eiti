@@ -53,6 +53,6 @@ public sealed class UpdateCashDrawerHandler : IRequestHandler<UpdateCashDrawerCo
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-        return Result<CashDrawerResponse>.Success(new(drawer.Id.Value, drawer.BranchId.Value, drawer.Name, drawer.IsActive, drawer.CreatedAt, drawer.UpdatedAt));
+        return Result<CashDrawerResponse>.Success(new(drawer.Id.Value, drawer.BranchId.Value, drawer.Name, drawer.IsActive, drawer.CreatedAt, drawer.UpdatedAt, drawer.AssignedUserId?.Value));
     }
 }

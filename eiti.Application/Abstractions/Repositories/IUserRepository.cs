@@ -14,5 +14,6 @@ public interface IUserRepository
     Task<bool> EmailExistsAsync(Email email, CancellationToken cancellationToken = default);
     Task<bool> UsernameExistsAsync(Username username, UserId excludingUserId, CancellationToken cancellationToken = default);
     Task<bool> EmailExistsAsync(Email email, UserId excludingUserId, CancellationToken cancellationToken = default);
+    Task<Dictionary<Guid, string>> GetUsernamesByIdsAsync(IEnumerable<Guid> userIds, CancellationToken cancellationToken = default);
     Task AddAsync(User user, CancellationToken cancellationToken = default);
 }

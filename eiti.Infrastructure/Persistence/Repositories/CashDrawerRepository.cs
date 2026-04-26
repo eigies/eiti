@@ -2,6 +2,7 @@ using eiti.Application.Abstractions.Repositories;
 using eiti.Domain.Branches;
 using eiti.Domain.Cash;
 using eiti.Domain.Companies;
+using eiti.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 
 namespace eiti.Infrastructure.Persistence.Repositories;
@@ -51,5 +52,18 @@ public sealed class CashDrawerRepository : ICashDrawerRepository
     public async Task AddAsync(CashDrawer cashDrawer, CancellationToken cancellationToken = default)
     {
         await _context.CashDrawers.AddAsync(cashDrawer, cancellationToken);
+    }
+
+    public async Task<CashDrawer?> GetByAssignedUserAsync(
+        UserId userId,
+        CompanyId companyId,
+        CancellationToken cancellationToken = default)
+    {
+        return await _context.CashDrawers
+            .FirstOrDefaultAsync(
+                drawer => drawer.AssignedUserId == userId
+                    && drawer.CompanyId == companyId
+                    && drawer.IsActive,
+                cancellationToken);
     }
 }

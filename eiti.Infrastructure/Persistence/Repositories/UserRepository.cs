@@ -91,6 +91,20 @@ public sealed class UserRepository : IUserRepository
         return users.Any(u => u.Email.Value == email.Value && u.Id != excludingUserId);
     }
 
+    public async Task<Dictionary<Guid, string>> GetUsernamesByIdsAsync(
+        IEnumerable<Guid> userIds,
+        CancellationToken cancellationToken = default)
+    {
+        var ids = userIds.Select(id => new UserId(id)).ToList();
+        if (ids.Count == 0)
+            return new Dictionary<Guid, string>();
+
+        return await _context.Users
+            .Where(u => ids.Contains(u.Id))
+            .Select(u => new { Id = u.Id.Value, Username = u.Username.Value })
+            .ToDictionaryAsync(x => x.Id, x => x.Username, cancellationToken);
+    }
+
     public async Task AddAsync(
         User user,
         CancellationToken cancellationToken = default)

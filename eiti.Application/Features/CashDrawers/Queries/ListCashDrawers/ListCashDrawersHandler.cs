@@ -3,6 +3,7 @@ using eiti.Application.Abstractions.Services;
 using eiti.Application.Common;
 using eiti.Application.Features.CashDrawers.Common;
 using eiti.Domain.Branches;
+using eiti.Domain.Cash;
 using MediatR;
 
 namespace eiti.Application.Features.CashDrawers.Queries.ListCashDrawers;
@@ -12,15 +13,18 @@ public sealed class ListCashDrawersHandler : IRequestHandler<ListCashDrawersQuer
     private readonly ICurrentUserService _currentUserService;
     private readonly IBranchRepository _branchRepository;
     private readonly ICashDrawerRepository _cashDrawerRepository;
+    private readonly ICashSessionRepository _cashSessionRepository;
 
     public ListCashDrawersHandler(
         ICurrentUserService currentUserService,
         IBranchRepository branchRepository,
-        ICashDrawerRepository cashDrawerRepository)
+        ICashDrawerRepository cashDrawerRepository,
+        ICashSessionRepository cashSessionRepository)
     {
         _currentUserService = currentUserService;
         _branchRepository = branchRepository;
         _cashDrawerRepository = cashDrawerRepository;
+        _cashSessionRepository = cashSessionRepository;
     }
 
     public async Task<Result<IReadOnlyList<CashDrawerResponse>>> Handle(ListCashDrawersQuery request, CancellationToken cancellationToken)
@@ -38,7 +42,19 @@ public sealed class ListCashDrawersHandler : IRequestHandler<ListCashDrawersQuer
 
         var drawers = await _cashDrawerRepository.ListByBranchAsync(branch.Id, _currentUserService.CompanyId, cancellationToken);
 
+        var openDrawerIds = await _cashSessionRepository.GetOpenDrawerIdsAsync(
+            drawers.Select(d => d.Id.Value),
+            cancellationToken);
+
         return Result<IReadOnlyList<CashDrawerResponse>>.Success(
-            drawers.Select(drawer => new CashDrawerResponse(drawer.Id.Value, drawer.BranchId.Value, drawer.Name, drawer.IsActive, drawer.CreatedAt, drawer.UpdatedAt)).ToList());
+            drawers.Select(drawer => new CashDrawerResponse(
+                drawer.Id.Value,
+                drawer.BranchId.Value,
+                drawer.Name,
+                drawer.IsActive,
+                drawer.CreatedAt,
+                drawer.UpdatedAt,
+                drawer.AssignedUserId?.Value,
+                openDrawerIds.Contains(drawer.Id.Value))).ToList());
     }
 }

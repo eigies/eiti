@@ -40,7 +40,9 @@
       "PowerShell(powershell -ExecutionPolicy Bypass -File .\\\\.agents\\\\skills\\\\git-commit-front\\\\scripts\\\\commit-front.ps1 -AutoMessage)",
       "PowerShell(powershell -ExecutionPolicy Bypass -File \".\\\\.claude\\\\skills\\\\git-commit-front\\\\scripts\\\\commit-front.ps1\" -AutoMessage)",
       "PowerShell(powershell -ExecutionPolicy Bypass -File \".\\\\.claude\\\\skills\\\\git-commit-front\\\\scripts\\\\commit-front.ps1\" -AutoMessage -Push)",
-      "PowerShell(powershell -ExecutionPolicy Bypass -File \".\\\\.claude\\\\skills\\\\git-commit-back\\\\scripts\\\\commit-back.ps1\" -AutoMessage -Push)"
+      "PowerShell(powershell -ExecutionPolicy Bypass -File \".\\\\.claude\\\\skills\\\\git-commit-back\\\\scripts\\\\commit-back.ps1\" -AutoMessage -Push)",
+      "Bash(dotnet ef *)",
+      "Bash(sqlcmd *)"
     ]
   },
   "statusLine": {

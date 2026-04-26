@@ -14,7 +14,11 @@ internal static class CashSessionMapper
         { SalePaymentMethod.Other,    "Otros" }
     };
 
-    public static CashSessionResponse Map(CashSession session, IReadOnlyList<SalePayment>? payments = null)
+    public static CashSessionResponse Map(
+        CashSession session,
+        IReadOnlyList<SalePayment>? payments = null,
+        Dictionary<Guid, string?>? saleCodes = null,
+        Dictionary<Guid, string>? usernames = null)
     {
         var breakdown = BuildBreakdown(payments ?? []);
 
@@ -43,7 +47,11 @@ internal static class CashSessionMapper
                     movement.OccurredAt,
                     movement.Description,
                     movement.ReferenceType,
-                    movement.ReferenceId))
+                    movement.ReferenceId,
+                    movement.ReferenceId.HasValue && saleCodes != null
+                        ? saleCodes.GetValueOrDefault(movement.ReferenceId.Value)
+                        : null,
+                    usernames?.GetValueOrDefault(movement.CreatedByUserId.Value)))
                 .ToList(),
             breakdown);
     }

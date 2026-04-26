@@ -170,4 +170,18 @@ public sealed class SaleRepository : ISaleRepository
             })
             .ToDictionaryAsync(x => x.Id, x => x.SaleId, cancellationToken);
     }
+
+    public async Task<Dictionary<Guid, string?>> GetCodesBySaleIdsAsync(
+        IEnumerable<Guid> saleIds,
+        CancellationToken cancellationToken = default)
+    {
+        var ids = saleIds.Select(id => new SaleId(id)).ToList();
+        if (ids.Count == 0)
+            return new Dictionary<Guid, string?>();
+
+        return await _context.Sales
+            .Where(sale => ids.Contains(sale.Id))
+            .Select(sale => new { Id = sale.Id.Value, sale.Code })
+            .ToDictionaryAsync(x => x.Id, x => x.Code, cancellationToken);
+    }
 }
