@@ -13,5 +13,4 @@ public interface IAddressRepository
         CancellationToken cancellationToken = default);
 
     void Update(Address address);
-    
 }
