@@ -31,11 +31,12 @@ public sealed class ListChequesHandler : IRequestHandler<ListChequesQuery, Resul
         if (authCheck.IsFailure)
             return Result<IReadOnlyList<ChequeListItemResponse>>.Failure(authCheck.Error);
 
+        var companyId = _currentUserService.CompanyId!;
         var filters = new ChequeFilters(request.Estado, request.BankId, request.FechaVencFrom, request.FechaVencTo);
-        var cheques = await _chequeRepository.ListAsync(filters, cancellationToken);
+        var cheques = await _chequeRepository.ListAsync(filters, companyId, cancellationToken);
 
         // Fetch all banks once for name lookup
-        var allBanks = await _bankRepository.ListAsync(false, cancellationToken);
+        var allBanks = await _bankRepository.ListAsync(false, companyId, cancellationToken);
         var bankNameById = allBanks.ToDictionary(b => b.Id, b => b.Name);
 
         // Collect unique sale IDs for regular payments

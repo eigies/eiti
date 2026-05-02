@@ -291,7 +291,7 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
                     && reqPayment.CardBankId.HasValue
                     && reqPayment.CardCuotas.HasValue)
                 {
-                    var bank = await _bankRepository.GetByIdAsync(reqPayment.CardBankId.Value, cancellationToken);
+                    var bank = await _bankRepository.GetByIdAsync(reqPayment.CardBankId.Value, companyId, cancellationToken);
                     var plan = bank?.InstallmentPlans.FirstOrDefault(p => p.Cuotas == reqPayment.CardCuotas.Value && p.Active);
                     if (plan is not null && plan.SurchargePct > 0)
                     {
@@ -482,7 +482,7 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
                     && reqLine.CardBankId.HasValue
                     && reqLine.CardCuotas.HasValue)
                 {
-                    var bank = await _bankRepository.GetByIdAsync(reqLine.CardBankId.Value, cancellationToken);
+                    var bank = await _bankRepository.GetByIdAsync(reqLine.CardBankId.Value, companyId, cancellationToken);
                     if (bank is not null)
                     {
                         var plan = bank.InstallmentPlans.FirstOrDefault(p => p.Cuotas == reqLine.CardCuotas.Value && p.Active);

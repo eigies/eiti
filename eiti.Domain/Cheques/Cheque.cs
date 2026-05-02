@@ -1,8 +1,11 @@
+using eiti.Domain.Companies;
+
 namespace eiti.Domain.Cheques;
 
 public sealed class Cheque
 {
     public Guid Id { get; private set; }
+    public CompanyId CompanyId { get; private set; } = null!;
     public Guid? SalePaymentSaleId { get; private set; }
     public int? SalePaymentMethod { get; private set; }
     public Guid? SaleCcPaymentId { get; private set; }
@@ -23,6 +26,7 @@ public sealed class Cheque
     }
 
     private Cheque(
+        CompanyId companyId,
         Guid? salePaymentSaleId,
         int? salePaymentMethod,
         Guid? saleCcPaymentId,
@@ -36,6 +40,7 @@ public sealed class Cheque
         string? notas)
     {
         Id = Guid.NewGuid();
+        CompanyId = companyId;
         SalePaymentSaleId = salePaymentSaleId;
         SalePaymentMethod = salePaymentMethod;
         SaleCcPaymentId = saleCcPaymentId;
@@ -53,6 +58,7 @@ public sealed class Cheque
     }
 
     public static Cheque CreateForRegularSale(
+        CompanyId companyId,
         Guid saleId,
         int paymentMethod,
         int bankId,
@@ -64,10 +70,11 @@ public sealed class Cheque
         DateTime fechaVencimiento,
         string? notas)
     {
-        return new Cheque(saleId, paymentMethod, null, bankId, numero, titular, cuitDni, monto, fechaEmision, fechaVencimiento, notas);
+        return new Cheque(companyId, saleId, paymentMethod, null, bankId, numero, titular, cuitDni, monto, fechaEmision, fechaVencimiento, notas);
     }
 
     public static Cheque CreateForCcPayment(
+        CompanyId companyId,
         Guid ccPaymentId,
         int bankId,
         string numero,
@@ -78,7 +85,7 @@ public sealed class Cheque
         DateTime fechaVencimiento,
         string? notas)
     {
-        return new Cheque(null, null, ccPaymentId, bankId, numero, titular, cuitDni, monto, fechaEmision, fechaVencimiento, notas);
+        return new Cheque(companyId, null, null, ccPaymentId, bankId, numero, titular, cuitDni, monto, fechaEmision, fechaVencimiento, notas);
     }
 
     public void TransitionTo(ChequeStatus newStatus)

@@ -32,7 +32,8 @@ public sealed class UpsertInstallmentPlanHandler : IRequestHandler<UpsertInstall
         if (_currentUserService.CompanyId is null)
             return Result<BankResponse>.Failure(UpsertInstallmentPlanErrors.Unauthorized);
 
-        var bank = await _bankRepository.GetByIdAsync(request.BankId, cancellationToken);
+        var companyId = _currentUserService.CompanyId!;
+        var bank = await _bankRepository.GetByIdAsync(request.BankId, companyId, cancellationToken);
         if (bank is null)
             return Result<BankResponse>.Failure(UpsertInstallmentPlanErrors.NotFound);
 

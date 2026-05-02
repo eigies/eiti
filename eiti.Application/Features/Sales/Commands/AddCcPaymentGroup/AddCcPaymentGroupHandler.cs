@@ -151,7 +151,7 @@ public sealed class AddCcPaymentGroupHandler : IRequestHandler<AddCcPaymentGroup
                 && methodLine.CardBankId.HasValue
                 && methodLine.CardCuotas.HasValue)
             {
-                var bank = await _bankRepository.GetByIdAsync(methodLine.CardBankId.Value, cancellationToken);
+                var bank = await _bankRepository.GetByIdAsync(methodLine.CardBankId.Value, companyId!, cancellationToken);
                 if (bank is not null)
                 {
                     var plan = bank.InstallmentPlans.FirstOrDefault(p => p.Cuotas == methodLine.CardCuotas.Value && p.Active);
@@ -167,6 +167,7 @@ public sealed class AddCcPaymentGroupHandler : IRequestHandler<AddCcPaymentGroup
             {
                 var chequeData = methodLine.Cheque;
                 var cheque = Cheque.CreateForCcPayment(
+                    companyId,
                     payment.Id.Value,
                     chequeData.BankId,
                     chequeData.Numero,

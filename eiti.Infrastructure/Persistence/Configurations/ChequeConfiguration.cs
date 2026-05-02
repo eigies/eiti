@@ -1,4 +1,5 @@
 using eiti.Domain.Cheques;
+using eiti.Domain.Companies;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -11,6 +12,11 @@ public sealed class ChequeConfiguration : IEntityTypeConfiguration<Cheque>
         builder.ToTable("Cheques");
 
         builder.HasKey(c => c.Id);
+
+        builder.Property(c => c.CompanyId)
+            .HasConversion(id => id.Value, value => new CompanyId(value))
+            .IsRequired();
+        builder.HasIndex(c => c.CompanyId);
 
         builder.Property(c => c.SalePaymentSaleId).IsRequired(false);
         builder.Property(c => c.SalePaymentMethod).IsRequired(false);

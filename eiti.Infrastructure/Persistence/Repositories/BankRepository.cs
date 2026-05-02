@@ -1,5 +1,6 @@
 using eiti.Application.Abstractions.Repositories;
 using eiti.Domain.Banks;
+using eiti.Domain.Companies;
 using Microsoft.EntityFrameworkCore;
 
 namespace eiti.Infrastructure.Persistence.Repositories;
@@ -13,9 +14,10 @@ public sealed class BankRepository : IBankRepository
         _db = db;
     }
 
-    public async Task<IReadOnlyList<Bank>> ListAsync(bool activeOnly, CancellationToken ct)
+    public async Task<IReadOnlyList<Bank>> ListAsync(bool activeOnly, CompanyId companyId, CancellationToken ct)
     {
-        var query = _db.Banks.Include(b => b.InstallmentPlans).AsQueryable();
+        var query = _db.Banks.Include(b => b.InstallmentPlans)
+            .Where(b => b.CompanyId == companyId);
 
         if (activeOnly)
         {
@@ -25,11 +27,11 @@ public sealed class BankRepository : IBankRepository
         return await query.OrderBy(b => b.Name).ToListAsync(ct);
     }
 
-    public async Task<Bank?> GetByIdAsync(int id, CancellationToken ct)
+    public async Task<Bank?> GetByIdAsync(int id, CompanyId companyId, CancellationToken ct)
     {
         return await _db.Banks
             .Include(b => b.InstallmentPlans)
-            .FirstOrDefaultAsync(b => b.Id == id, ct);
+            .FirstOrDefaultAsync(b => b.Id == id && b.CompanyId == companyId, ct);
     }
 
     public async Task AddAsync(Bank bank, CancellationToken ct)

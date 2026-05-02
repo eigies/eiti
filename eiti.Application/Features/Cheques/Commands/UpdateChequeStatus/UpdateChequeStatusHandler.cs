@@ -39,7 +39,8 @@ public sealed class UpdateChequeStatusHandler : IRequestHandler<UpdateChequeStat
         if (_currentUserService.CompanyId is null)
             return Result<ChequeDetailResponse>.Failure(UpdateChequeStatusErrors.Unauthorized);
 
-        var cheque = await _chequeRepository.GetByIdAsync(request.Id, cancellationToken);
+        var companyId = _currentUserService.CompanyId!;
+        var cheque = await _chequeRepository.GetByIdAsync(request.Id, companyId, cancellationToken);
         if (cheque is null)
             return Result<ChequeDetailResponse>.Failure(UpdateChequeStatusErrors.NotFound);
 
@@ -58,7 +59,7 @@ public sealed class UpdateChequeStatusHandler : IRequestHandler<UpdateChequeStat
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-        var bank = await _bankRepository.GetByIdAsync(cheque.BankId, cancellationToken);
+        var bank = await _bankRepository.GetByIdAsync(cheque.BankId, companyId, cancellationToken);
         var bankName = bank?.Name ?? "Unknown";
 
         string? saleCode = null;

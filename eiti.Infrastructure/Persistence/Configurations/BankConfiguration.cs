@@ -1,4 +1,5 @@
 using eiti.Domain.Banks;
+using eiti.Domain.Companies;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -14,6 +15,11 @@ public sealed class BankConfiguration : IEntityTypeConfiguration<Bank>
 
         builder.Property(b => b.Id)
             .ValueGeneratedOnAdd();
+
+        builder.Property(b => b.CompanyId)
+            .HasConversion(id => id.Value, value => new CompanyId(value))
+            .IsRequired();
+        builder.HasIndex(b => b.CompanyId);
 
         builder.Property(b => b.Name)
             .HasMaxLength(150)

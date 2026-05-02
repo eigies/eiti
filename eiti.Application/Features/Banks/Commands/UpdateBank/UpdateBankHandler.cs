@@ -32,7 +32,8 @@ public sealed class UpdateBankHandler : IRequestHandler<UpdateBankCommand, Resul
         if (_currentUserService.CompanyId is null)
             return Result<BankResponse>.Failure(UpdateBankErrors.Unauthorized);
 
-        var bank = await _bankRepository.GetByIdAsync(request.Id, cancellationToken);
+        var companyId = _currentUserService.CompanyId!;
+        var bank = await _bankRepository.GetByIdAsync(request.Id, companyId, cancellationToken);
         if (bank is null)
             return Result<BankResponse>.Failure(UpdateBankErrors.NotFound);
 

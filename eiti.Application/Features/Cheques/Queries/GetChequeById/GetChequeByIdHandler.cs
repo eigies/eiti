@@ -30,12 +30,13 @@ public sealed class GetChequeByIdHandler : IRequestHandler<GetChequeByIdQuery, R
         if (authCheck.IsFailure)
             return Result<ChequeDetailResponse>.Failure(authCheck.Error);
 
-        var cheque = await _chequeRepository.GetByIdAsync(request.Id, cancellationToken);
+        var companyId = _currentUserService.CompanyId!;
+        var cheque = await _chequeRepository.GetByIdAsync(request.Id, companyId, cancellationToken);
         if (cheque is null)
             return Result<ChequeDetailResponse>.Failure(
                 Error.NotFound("Cheques.GetById.NotFound", "The cheque was not found."));
 
-        var bank = await _bankRepository.GetByIdAsync(cheque.BankId, cancellationToken);
+        var bank = await _bankRepository.GetByIdAsync(cheque.BankId, companyId, cancellationToken);
         var bankName = bank?.Name ?? "Unknown";
 
         string? saleCode = null;

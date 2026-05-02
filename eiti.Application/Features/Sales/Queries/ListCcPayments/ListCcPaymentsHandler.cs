@@ -43,7 +43,7 @@ public sealed class ListCcPaymentsHandler : IRequestHandler<ListCcPaymentsQuery,
         }
 
         // Fetch bank names for payments that have card data
-        var allBanks = await _bankRepository.ListAsync(false, cancellationToken);
+        var allBanks = await _bankRepository.ListAsync(false, companyId!, cancellationToken);
         var bankNameById = allBanks.ToDictionary(b => b.Id, b => b.Name);
 
         var payments = sale.CcPayments

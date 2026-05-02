@@ -22,7 +22,8 @@ public sealed class ListBanksHandler : IRequestHandler<ListBanksQuery, Result<IR
         if (authCheck.IsFailure)
             return Result<IReadOnlyList<BankResponse>>.Failure(authCheck.Error);
 
-        var banks = await _bankRepository.ListAsync(request.ActiveOnly, cancellationToken);
+        var companyId = _currentUserService.CompanyId!;
+        var banks = await _bankRepository.ListAsync(request.ActiveOnly, companyId, cancellationToken);
 
         var response = banks
             .Select(b => new BankResponse(

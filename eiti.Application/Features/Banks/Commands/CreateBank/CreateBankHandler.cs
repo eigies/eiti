@@ -33,7 +33,8 @@ public sealed class CreateBankHandler : IRequestHandler<CreateBankCommand, Resul
         if (_currentUserService.CompanyId is null)
             return Result<BankResponse>.Failure(CreateBankErrors.Unauthorized);
 
-        var bank = Bank.Create(request.Name);
+        var companyId = _currentUserService.CompanyId!;
+        var bank = Bank.Create(companyId, request.Name);
 
         await _bankRepository.AddAsync(bank, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);

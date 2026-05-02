@@ -1,5 +1,6 @@
 using eiti.Application.Abstractions.Repositories;
 using eiti.Domain.Cheques;
+using eiti.Domain.Companies;
 using Microsoft.EntityFrameworkCore;
 
 namespace eiti.Infrastructure.Persistence.Repositories;
@@ -13,9 +14,9 @@ public sealed class ChequeRepository : IChequeRepository
         _db = db;
     }
 
-    public async Task<IReadOnlyList<Cheque>> ListAsync(ChequeFilters filters, CancellationToken ct)
+    public async Task<IReadOnlyList<Cheque>> ListAsync(ChequeFilters filters, CompanyId companyId, CancellationToken ct)
     {
-        var query = _db.Cheques.AsQueryable();
+        var query = _db.Cheques.Where(c => c.CompanyId == companyId);
 
         if (filters.Estado.HasValue)
         {
@@ -40,9 +41,9 @@ public sealed class ChequeRepository : IChequeRepository
         return await query.OrderBy(c => c.FechaVencimiento).ToListAsync(ct);
     }
 
-    public async Task<Cheque?> GetByIdAsync(Guid id, CancellationToken ct)
+    public async Task<Cheque?> GetByIdAsync(Guid id, CompanyId companyId, CancellationToken ct)
     {
-        return await _db.Cheques.FirstOrDefaultAsync(c => c.Id == id, ct);
+        return await _db.Cheques.FirstOrDefaultAsync(c => c.Id == id && c.CompanyId == companyId, ct);
     }
 
     public async Task AddAsync(Cheque cheque, CancellationToken ct)

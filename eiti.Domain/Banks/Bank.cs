@@ -1,3 +1,5 @@
+using eiti.Domain.Companies;
+
 namespace eiti.Domain.Banks;
 
 public sealed class Bank
@@ -7,6 +9,7 @@ public sealed class Bank
     private readonly List<BankInstallmentPlan> _installmentPlans = [];
 
     public int Id { get; private set; }
+    public CompanyId CompanyId { get; private set; } = null!;
     public string Name { get; private set; } = string.Empty;
     public bool Active { get; private set; }
     public DateTime CreatedAt { get; private set; }
@@ -17,22 +20,23 @@ public sealed class Bank
     {
     }
 
-    private Bank(string name)
+    private Bank(CompanyId companyId, string name)
     {
         if (string.IsNullOrWhiteSpace(name))
         {
             throw new ArgumentException("Bank name cannot be empty.", nameof(name));
         }
 
+        CompanyId = companyId;
         Name = name.Trim();
         Active = true;
         CreatedAt = DateTime.UtcNow;
         UpdatedAt = DateTime.UtcNow;
     }
 
-    public static Bank Create(string name)
+    public static Bank Create(CompanyId companyId, string name)
     {
-        return new Bank(name);
+        return new Bank(companyId, name);
     }
 
     public void Update(string name, bool active)
