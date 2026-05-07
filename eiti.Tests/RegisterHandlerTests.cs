@@ -17,6 +17,7 @@ public sealed class RegisterHandlerTests
         var companyRepository = new Mock<ICompanyRepository>();
         var companyOnboardingRepository = new Mock<ICompanyOnboardingRepository>();
         var userRepository = new Mock<IUserRepository>();
+        var accessProfileRepository = new Mock<IAccessProfileRepository>();
         var passwordHasher = new Mock<IPasswordHasher>();
         var jwtTokenGenerator = new Mock<IJwtTokenGenerator>();
         var unitOfWork = new Mock<IUnitOfWork>();
@@ -45,6 +46,7 @@ public sealed class RegisterHandlerTests
             companyRepository.Object,
             companyOnboardingRepository.Object,
             userRepository.Object,
+            accessProfileRepository.Object,
             passwordHasher.Object,
             jwtTokenGenerator.Object,
             unitOfWork.Object);
@@ -71,6 +73,10 @@ public sealed class RegisterHandlerTests
             It.IsAny<CompanyOnboarding>(),
             It.IsAny<CancellationToken>()), Times.Once);
 
+        accessProfileRepository.Verify(repository => repository.AddAsync(
+            It.IsAny<AccessProfile>(),
+            It.IsAny<CancellationToken>()), Times.Exactly(RoleCatalog.All.Count));
+
         userRepository.Verify(repository => repository.AddAsync(
             It.Is<User>(user => user.CompanyId != CompanyId.Empty),
             It.IsAny<CancellationToken>()), Times.Once);
@@ -84,6 +90,7 @@ public sealed class RegisterHandlerTests
         var companyRepository = new Mock<ICompanyRepository>();
         var companyOnboardingRepository = new Mock<ICompanyOnboardingRepository>();
         var userRepository = new Mock<IUserRepository>();
+        var accessProfileRepository = new Mock<IAccessProfileRepository>();
         var passwordHasher = new Mock<IPasswordHasher>();
         var jwtTokenGenerator = new Mock<IJwtTokenGenerator>();
         var unitOfWork = new Mock<IUnitOfWork>();
@@ -112,6 +119,7 @@ public sealed class RegisterHandlerTests
             companyRepository.Object,
             companyOnboardingRepository.Object,
             userRepository.Object,
+            accessProfileRepository.Object,
             passwordHasher.Object,
             jwtTokenGenerator.Object,
             unitOfWork.Object);

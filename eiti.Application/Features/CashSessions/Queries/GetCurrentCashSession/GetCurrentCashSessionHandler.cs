@@ -40,15 +40,9 @@ public sealed class GetCurrentCashSessionHandler : IRequestHandler<GetCurrentCas
             return Result<CashSessionResponse>.Failure(Error.NotFound("CashSessions.Current.NotFound", "There is no open cash session for the requested cash drawer."));
         }
 
-        var saleIds = session.Movements
-            .Where(movement => movement.ReferenceId.HasValue)
-            .Select(movement => movement.ReferenceId!.Value)
-            .Distinct()
-            .ToList();
+        IReadOnlyList<SalePayment> payments = await _saleRepository.GetPaymentsByCashSessionIdAsync(session.Id, cancellationToken);
 
-        IReadOnlyList<SalePayment> payments = saleIds.Count > 0
-            ? await _saleRepository.GetPaymentsBySaleIdsAsync(saleIds, cancellationToken)
-            : [];
+        var saleIds = payments.Select(p => p.SaleId.Value).Distinct().ToList();
 
         Dictionary<Guid, string?> saleCodes = saleIds.Count > 0
             ? await _saleRepository.GetCodesBySaleIdsAsync(saleIds, cancellationToken)

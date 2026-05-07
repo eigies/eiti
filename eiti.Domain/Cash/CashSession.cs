@@ -99,6 +99,22 @@ public sealed class CashSession : AggregateRoot<CashSessionId>
             createdByUserId);
     }
 
+    public void RegisterTransferIncome(
+        decimal amount,
+        Guid saleId,
+        UserId createdByUserId)
+    {
+        EnsureOpen();
+        AddMovement(
+            CashMovementType.TransferIncome,
+            CashMovementDirection.In,
+            amount,
+            "Sale",
+            saleId,
+            "Pago por transferencia",
+            createdByUserId);
+    }
+
     public void RegisterCcPaymentIncome(
         decimal amount,
         Guid saleId,
@@ -235,11 +251,13 @@ public sealed class CashSession : AggregateRoot<CashSessionId>
 
     public decimal ExpectedClosingAmount =>
         _movements.Sum(movement =>
-            movement.Direction == CashMovementDirection.In
-                ? movement.Amount
-                : movement.Direction == CashMovementDirection.Out
-                    ? -movement.Amount
-                    : 0m);
+            movement.Type == CashMovementType.TransferIncome
+                ? 0m  // transfers don't go into the physical drawer
+                : movement.Direction == CashMovementDirection.In
+                    ? movement.Amount
+                    : movement.Direction == CashMovementDirection.Out
+                        ? -movement.Amount
+                        : 0m);
 
     public decimal Difference =>
         (ActualClosingAmount ?? ExpectedClosingAmount) - ExpectedClosingAmount;

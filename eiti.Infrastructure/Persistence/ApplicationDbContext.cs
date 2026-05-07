@@ -48,8 +48,9 @@ public sealed class ApplicationDbContext : DbContext
     public DbSet<SaleTradeIn> SaleTradeIns { get; set; }
     public DbSet<SaleCcPayment> SaleCcPayments { get; set; }
     public DbSet<SaleTransportAssignment> SaleTransportAssignments { get; set; }
+    public DbSet<AccessProfile> AccessProfiles { get; set; }
+    public DbSet<AccessProfilePermission> AccessProfilePermissions { get; set; }
     public DbSet<User> Users { get; set; }
-    public DbSet<UserRoleAssignment> UserRoles { get; set; }
     public DbSet<UserRoleAudit> UserRoleAudits { get; set; }
     public DbSet<PasswordResetToken> PasswordResetTokens { get; set; }
 

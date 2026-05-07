@@ -6,4 +6,6 @@ public sealed record RegisterResponse(
     string Email,
     string Token,
     IReadOnlyList<string> Roles,
+    Guid? ProfileId,
+    string? ProfileName,
     IReadOnlyList<string> Permissions);

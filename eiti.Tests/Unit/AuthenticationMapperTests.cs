@@ -8,30 +8,33 @@ namespace eiti.Tests.Unit;
 
 public sealed class AuthenticationMapperTests
 {
-    [Fact]
-    public void MapRolesAndPermissions_ShouldReturnRoleCodes()
+    private static User CreateUserWithPermissions(params string[] permissionCodes)
     {
-        var user = User.Create(
+        var companyId = CompanyId.New();
+        var profile = AccessProfile.Create(companyId, "Test", "Test profile", permissionCodes);
+
+        return User.Create(
             Username.Create("testuser"),
             eiti.Domain.Customers.Email.Create("test@example.com"),
             PasswordHash.Create("hashed"),
-            CompanyId.New(),
-            [SystemRoles.Owner]);
+            companyId,
+            profile);
+    }
+
+    [Fact]
+    public void MapRolesAndPermissions_ShouldReturnEmptyLegacyRoles()
+    {
+        var user = CreateUserWithPermissions(PermissionCodes.UsersManage);
 
         var (roles, _) = AuthenticationMapper.MapRolesAndPermissions(user);
 
-        roles.Should().ContainSingle().Which.Should().Be(SystemRoles.Owner);
+        roles.Should().BeEmpty();
     }
 
     [Fact]
     public void MapRolesAndPermissions_ShouldReturnPermissionsSorted()
     {
-        var user = User.Create(
-            Username.Create("testuser"),
-            eiti.Domain.Customers.Email.Create("test@example.com"),
-            PasswordHash.Create("hashed"),
-            CompanyId.New(),
-            [SystemRoles.Owner]);
+        var user = CreateUserWithPermissions(PermissionCodes.UsersManage, PermissionCodes.SalesAccess);
 
         var (_, permissions) = AuthenticationMapper.MapRolesAndPermissions(user);
 
@@ -42,33 +45,45 @@ public sealed class AuthenticationMapperTests
     [Fact]
     public void MapRolesAndPermissions_ShouldReturnCorrectPermissions_ForSellerRole()
     {
+        var companyId = CompanyId.New();
+        var profile = AccessProfile.Create(companyId, "Seller", "Seller", [
+            PermissionCodes.SalesAccess,
+            PermissionCodes.SalesCreate,
+            PermissionCodes.SalesUpdate,
+            PermissionCodes.SalesPay
+        ]);
         var user = User.Create(
             Username.Create("seller"),
             eiti.Domain.Customers.Email.Create("seller@example.com"),
             PasswordHash.Create("hashed"),
-            CompanyId.New(),
-            [SystemRoles.Seller]);
+            companyId,
+            profile);
 
         var (roles, permissions) = AuthenticationMapper.MapRolesAndPermissions(user);
 
-        roles.Should().ContainSingle().Which.Should().Be(SystemRoles.Seller);
+        roles.Should().BeEmpty();
         permissions.Should().Contain(PermissionCodes.SalesAccess);
         permissions.Should().NotContain(PermissionCodes.CashAccess);
     }
 
     [Fact]
-    public void MapRolesAndPermissions_ShouldMergePermissions_ForMultipleRoles()
+    public void MapRolesAndPermissions_ShouldReadPermissions_FromAssignedProfile()
     {
+        var companyId = CompanyId.New();
+        var profile = AccessProfile.Create(companyId, "Combo", "Combo", [
+            PermissionCodes.SalesAccess,
+            PermissionCodes.CashAccess
+        ]);
         var user = User.Create(
             Username.Create("multirole"),
             eiti.Domain.Customers.Email.Create("multi@example.com"),
             PasswordHash.Create("hashed"),
-            CompanyId.New(),
-            [SystemRoles.Seller, SystemRoles.Cashier]);
+            companyId,
+            profile);
 
         var (roles, permissions) = AuthenticationMapper.MapRolesAndPermissions(user);
 
-        roles.Should().HaveCount(2);
+        roles.Should().BeEmpty();
         permissions.Should().Contain(PermissionCodes.SalesAccess);
         permissions.Should().Contain(PermissionCodes.CashAccess);
     }

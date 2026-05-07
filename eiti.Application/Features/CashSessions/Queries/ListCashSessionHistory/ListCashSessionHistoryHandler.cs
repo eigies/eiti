@@ -49,17 +49,11 @@ public sealed class ListCashSessionHistoryHandler : IRequestHandler<ListCashSess
             to,
             cancellationToken);
 
-        // Collect all sale IDs across all sessions in a single pass
-        var allSaleIds = sessions
-            .SelectMany(session => session.Movements)
-            .Where(movement => movement.ReferenceId.HasValue)
-            .Select(movement => movement.ReferenceId!.Value)
-            .Distinct()
-            .ToList();
+        // Load all payments for these sessions (includes transfer-only sales with no cash movements)
+        var sessionIds = sessions.Select(s => s.Id).ToList();
+        IReadOnlyList<SalePayment> allPayments = await _saleRepository.GetPaymentsByCashSessionIdsAsync(sessionIds, cancellationToken);
 
-        IReadOnlyList<SalePayment> allPayments = allSaleIds.Count > 0
-            ? await _saleRepository.GetPaymentsBySaleIdsAsync(allSaleIds, cancellationToken)
-            : [];
+        var allSaleIds = allPayments.Select(p => p.SaleId.Value).Distinct().ToList();
 
         Dictionary<Guid, string?> allSaleCodes = allSaleIds.Count > 0
             ? await _saleRepository.GetCodesBySaleIdsAsync(allSaleIds, cancellationToken)
@@ -81,7 +75,7 @@ public sealed class ListCashSessionHistoryHandler : IRequestHandler<ListCashSess
         var result = sessions.Select(session =>
         {
             var sessionSaleIds = session.Movements
-                .Where(movement => movement.Type == CashMovementType.SaleIncome && movement.ReferenceId.HasValue)
+                .Where(movement => (movement.Type == CashMovementType.SaleIncome || movement.Type == CashMovementType.TransferIncome) && movement.ReferenceId.HasValue)
                 .Select(movement => movement.ReferenceId!.Value)
                 .Distinct();
 

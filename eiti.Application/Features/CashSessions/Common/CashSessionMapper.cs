@@ -56,7 +56,10 @@ internal static class CashSessionMapper
             breakdown);
     }
 
-    public static CashSessionSummaryResponse MapSummary(CashSession session)
+    public static CashSessionSummaryResponse MapSummary(
+        CashSession session,
+        IReadOnlyList<SalePayment>? payments = null,
+        IReadOnlyDictionary<int, string>? bankNames = null)
     {
         var salesIncome = session.Movements
             .Where(movement => movement.Type == CashMovementType.SaleIncome)
@@ -70,6 +73,8 @@ internal static class CashSessionMapper
             .Where(movement => movement.Type == CashMovementType.SaleCancellation)
             .Sum(movement => movement.Amount);
 
+        var transferBreakdown = BuildTransferBankBreakdown(payments ?? [], bankNames ?? new Dictionary<int, string>());
+
         return new CashSessionSummaryResponse(
             session.Id.Value,
             session.OpeningAmount,
@@ -78,17 +83,40 @@ internal static class CashSessionMapper
             salesCancellations,
             session.ExpectedClosingAmount,
             session.ActualClosingAmount,
-            session.Difference);
+            session.Difference,
+            transferBreakdown);
+    }
+
+    private static IReadOnlyList<TransferBankBreakdownItem> BuildTransferBankBreakdown(
+        IReadOnlyList<SalePayment> payments,
+        IReadOnlyDictionary<int, string> bankNames)
+    {
+        return payments
+            .Where(p => p.Method == SalePaymentMethod.Transfer && p.TransferBankId.HasValue)
+            .GroupBy(p => p.TransferBankId!.Value)
+            .Select(g => new TransferBankBreakdownItem(
+                g.Key,
+                bankNames.GetValueOrDefault(g.Key, "Banco desconocido"),
+                g.Sum(p => p.Amount)))
+            .OrderBy(x => x.BankName)
+            .ToList();
     }
 
     private static IReadOnlyList<PaymentMethodBreakdownItem> BuildBreakdown(IReadOnlyList<SalePayment> payments)
     {
         return payments
             .GroupBy(payment => payment.Method)
-            .Select(group => new PaymentMethodBreakdownItem(
-                (int)group.Key,
-                MethodNames.GetValueOrDefault(group.Key, group.Key.ToString()),
-                group.Sum(payment => payment.Amount)))
+            .Select(group =>
+            {
+                var isCard = group.Key == SalePaymentMethod.Card;
+                var surcharge = isCard ? group.Sum(p => p.CardSurchargeAmt ?? 0m) : 0m;
+                var baseAmount = group.Sum(p => p.Amount) - surcharge;
+                return new PaymentMethodBreakdownItem(
+                    (int)group.Key,
+                    MethodNames.GetValueOrDefault(group.Key, group.Key.ToString()),
+                    baseAmount,
+                    surcharge);
+            })
             .Where(item => item.Amount > 0)
             .OrderBy(item => item.Method)
             .ToList();

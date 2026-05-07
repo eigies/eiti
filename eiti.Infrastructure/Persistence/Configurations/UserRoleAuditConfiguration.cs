@@ -37,6 +37,34 @@ public sealed class UserRoleAuditConfiguration : IEntityTypeConfiguration<UserRo
                 value => value.HasValue ? new UserId(value.Value) : null)
             .IsRequired(false);
 
+        builder.Property(audit => audit.PreviousAccessProfileId)
+            .HasConversion(
+                id => id == null ? (Guid?)null : id.Value,
+                value => value.HasValue ? new AccessProfileId(value.Value) : null)
+            .IsRequired(false);
+
+        builder.Property(audit => audit.PreviousAccessProfileName)
+            .HasMaxLength(120)
+            .IsRequired(false);
+
+        builder.Property(audit => audit.PreviousPermissionCodesCsv)
+            .HasMaxLength(1200)
+            .IsRequired();
+
+        builder.Property(audit => audit.NewAccessProfileId)
+            .HasConversion(
+                id => id == null ? (Guid?)null : id.Value,
+                value => value.HasValue ? new AccessProfileId(value.Value) : null)
+            .IsRequired(false);
+
+        builder.Property(audit => audit.NewAccessProfileName)
+            .HasMaxLength(120)
+            .IsRequired(false);
+
+        builder.Property(audit => audit.NewPermissionCodesCsv)
+            .HasMaxLength(1200)
+            .IsRequired();
+
         builder.Property(audit => audit.PreviousRolesCsv)
             .HasMaxLength(500)
             .IsRequired();

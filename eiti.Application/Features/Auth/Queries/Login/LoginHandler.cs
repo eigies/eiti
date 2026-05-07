@@ -88,6 +88,8 @@ public sealed class LoginHandler
                 user.Email.Value,
                 token,
                 roles,
+                user.AccessProfileId.Value,
+                user.AccessProfile.Name,
                 permissions,
                 assignedDrawer?.Id.Value));
     }

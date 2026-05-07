@@ -17,26 +17,32 @@ public sealed record UserResponse(
     bool IsActive,
     Guid? EmployeeId,
     string? EmployeeName,
-    IReadOnlyList<string> Roles,
+    Guid? ProfileId,
+    string? ProfileName,
     IReadOnlyList<string> Permissions,
     DateTime CreatedAt,
-    DateTime? LastLoginAt);
+    DateTime? LastLoginAt,
+    IReadOnlyList<string> Roles);
 
-public sealed record UserRoleAuditResponse(
+public sealed record UserProfileAuditResponse(
     Guid Id,
     Guid TargetUserId,
     string TargetUsername,
     Guid? ChangedByUserId,
     string? ChangedByUsername,
-    IReadOnlyList<string> PreviousRoles,
-    IReadOnlyList<string> NewRoles,
+    Guid? PreviousProfileId,
+    string? PreviousProfileName,
+    Guid? NewProfileId,
+    string? NewProfileName,
+    IReadOnlyList<string> PreviousPermissionCodes,
+    IReadOnlyList<string> NewPermissionCodes,
     DateTime ChangedAt);
 
 public sealed record CreateUserCommand(
     string Username,
     string Email,
     string Password,
-    IReadOnlyList<string> RoleCodes,
+    Guid ProfileId,
     Guid? EmployeeId) : IRequest<Result<UserResponse>>, IRequirePermissions
 {
     public IReadOnlyCollection<string> RequiredPermissions => [PermissionCodes.UsersManage];
@@ -54,9 +60,9 @@ public sealed record ListUsersQuery() : IRequest<Result<IReadOnlyList<UserRespon
     public IReadOnlyCollection<string> RequiredPermissions => [PermissionCodes.UsersManage];
 }
 
-public sealed record UpdateUserRolesCommand(
+public sealed record UpdateUserProfileCommand(
     Guid Id,
-    IReadOnlyList<string> RoleCodes,
+    Guid ProfileId,
     Guid? EmployeeId) : IRequest<Result<UserResponse>>, IRequirePermissions
 {
     public IReadOnlyCollection<string> RequiredPermissions => [PermissionCodes.UsersManage];
@@ -69,9 +75,9 @@ public sealed record SetUserActiveStatusCommand(
     public IReadOnlyCollection<string> RequiredPermissions => [PermissionCodes.UsersManage];
 }
 
-public sealed record ListUserRoleAuditsQuery(
+public sealed record ListUserProfileAuditsQuery(
     Guid? UserId,
-    int Take = 50) : IRequest<Result<IReadOnlyList<UserRoleAuditResponse>>>;
+    int Take = 50) : IRequest<Result<IReadOnlyList<UserProfileAuditResponse>>>;
 
 public sealed class CreateUserHandler : IRequestHandler<CreateUserCommand, Result<UserResponse>>
 {
@@ -79,6 +85,7 @@ public sealed class CreateUserHandler : IRequestHandler<CreateUserCommand, Resul
     private readonly IUserRepository _userRepository;
     private readonly IUserRoleAuditRepository _userRoleAuditRepository;
     private readonly IEmployeeRepository _employeeRepository;
+    private readonly IAccessProfileRepository _accessProfileRepository;
     private readonly IPasswordHasher _passwordHasher;
     private readonly IUnitOfWork _unitOfWork;
 
@@ -87,6 +94,7 @@ public sealed class CreateUserHandler : IRequestHandler<CreateUserCommand, Resul
         IUserRepository userRepository,
         IUserRoleAuditRepository userRoleAuditRepository,
         IEmployeeRepository employeeRepository,
+        IAccessProfileRepository accessProfileRepository,
         IPasswordHasher passwordHasher,
         IUnitOfWork unitOfWork)
     {
@@ -94,6 +102,7 @@ public sealed class CreateUserHandler : IRequestHandler<CreateUserCommand, Resul
         _userRepository = userRepository;
         _userRoleAuditRepository = userRoleAuditRepository;
         _employeeRepository = employeeRepository;
+        _accessProfileRepository = accessProfileRepository;
         _passwordHasher = passwordHasher;
         _unitOfWork = unitOfWork;
     }
@@ -103,12 +112,6 @@ public sealed class CreateUserHandler : IRequestHandler<CreateUserCommand, Resul
         var authCheck = _currentUserService.EnsureAuthenticated();
         if (authCheck.IsFailure)
             return Result<UserResponse>.Failure(authCheck.Error);
-
-        var normalizedRoles = NormalizeRoles(request.RoleCodes);
-        if (normalizedRoles.Count == 0)
-        {
-            return Result<UserResponse>.Failure(Error.Validation("Users.Create.RoleRequired", "Select at least one role."));
-        }
 
         Username username;
         Email email;
@@ -133,6 +136,12 @@ public sealed class CreateUserHandler : IRequestHandler<CreateUserCommand, Resul
             return Result<UserResponse>.Failure(Error.Conflict("Users.Create.EmailExists", "An user with the same email already exists."));
         }
 
+        var accessProfile = await _accessProfileRepository.GetByIdAsync(new AccessProfileId(request.ProfileId), cancellationToken);
+        if (accessProfile is null || accessProfile.CompanyId != _currentUserService.CompanyId)
+        {
+            return Result<UserResponse>.Failure(Error.Validation("Users.Create.InvalidProfile", "Select a valid access profile."));
+        }
+
         Employee? employee = await ResolveEmployeeAsync(request.EmployeeId, cancellationToken);
         if (request.EmployeeId.HasValue && employee is null)
         {
@@ -140,7 +149,7 @@ public sealed class CreateUserHandler : IRequestHandler<CreateUserCommand, Resul
         }
 
         var passwordHash = PasswordHash.Create(_passwordHasher.HashPassword(request.Password));
-        var user = User.Create(username, email, passwordHash, _currentUserService.CompanyId, normalizedRoles, employee?.Id);
+        var user = User.Create(username, email, passwordHash, _currentUserService.CompanyId, accessProfile, employee?.Id);
 
         await _userRepository.AddAsync(user, cancellationToken);
         await _userRoleAuditRepository.AddAsync(
@@ -148,28 +157,12 @@ public sealed class CreateUserHandler : IRequestHandler<CreateUserCommand, Resul
                 _currentUserService.CompanyId,
                 user.Id,
                 _currentUserService.UserId,
-                [],
-                normalizedRoles),
+                null,
+                accessProfile),
             cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-        return Result<UserResponse>.Success(UserMappings.Map(user, employee));
-    }
-
-    private IReadOnlyList<string> NormalizeRoles(IEnumerable<string> roleCodes)
-    {
-        var normalized = roleCodes
-            .Where(roleCode => !string.IsNullOrWhiteSpace(roleCode))
-            .Select(roleCode => roleCode.Trim().ToLowerInvariant())
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-
-        if (normalized.Any(roleCode => !RoleCatalog.IsValid(roleCode)))
-        {
-            return Array.Empty<string>();
-        }
-
-        return normalized;
+        return Result<UserResponse>.Success(UserMappings.Map(user, employee, accessProfile));
     }
 
     private async Task<Employee?> ResolveEmployeeAsync(Guid? employeeId, CancellationToken cancellationToken)
@@ -293,29 +286,32 @@ public sealed class ListUsersHandler : IRequestHandler<ListUsersQuery, Result<IR
     }
 }
 
-public sealed class UpdateUserRolesHandler : IRequestHandler<UpdateUserRolesCommand, Result<UserResponse>>
+public sealed class UpdateUserProfileHandler : IRequestHandler<UpdateUserProfileCommand, Result<UserResponse>>
 {
     private readonly ICurrentUserService _currentUserService;
     private readonly IUserRepository _userRepository;
     private readonly IUserRoleAuditRepository _userRoleAuditRepository;
     private readonly IEmployeeRepository _employeeRepository;
+    private readonly IAccessProfileRepository _accessProfileRepository;
     private readonly IUnitOfWork _unitOfWork;
 
-    public UpdateUserRolesHandler(
+    public UpdateUserProfileHandler(
         ICurrentUserService currentUserService,
         IUserRepository userRepository,
         IUserRoleAuditRepository userRoleAuditRepository,
         IEmployeeRepository employeeRepository,
+        IAccessProfileRepository accessProfileRepository,
         IUnitOfWork unitOfWork)
     {
         _currentUserService = currentUserService;
         _userRepository = userRepository;
         _userRoleAuditRepository = userRoleAuditRepository;
         _employeeRepository = employeeRepository;
+        _accessProfileRepository = accessProfileRepository;
         _unitOfWork = unitOfWork;
     }
 
-    public async Task<Result<UserResponse>> Handle(UpdateUserRolesCommand request, CancellationToken cancellationToken)
+    public async Task<Result<UserResponse>> Handle(UpdateUserProfileCommand request, CancellationToken cancellationToken)
     {
         var authCheck = _currentUserService.EnsureAuthenticated();
         if (authCheck.IsFailure)
@@ -327,20 +323,10 @@ public sealed class UpdateUserRolesHandler : IRequestHandler<UpdateUserRolesComm
             return Result<UserResponse>.Failure(Error.NotFound("Users.Update.NotFound", "The requested user was not found."));
         }
 
-        var normalizedRoles = request.RoleCodes
-            .Where(roleCode => !string.IsNullOrWhiteSpace(roleCode))
-            .Select(roleCode => roleCode.Trim().ToLowerInvariant())
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-
-        if (normalizedRoles.Length == 0)
+        var accessProfile = await _accessProfileRepository.GetByIdAsync(new AccessProfileId(request.ProfileId), cancellationToken);
+        if (accessProfile is null || accessProfile.CompanyId != _currentUserService.CompanyId)
         {
-            return Result<UserResponse>.Failure(Error.Validation("Users.Update.RoleRequired", "Select at least one role."));
-        }
-
-        if (normalizedRoles.Any(roleCode => !RoleCatalog.IsValid(roleCode)))
-        {
-            return Result<UserResponse>.Failure(Error.Validation("Users.Update.InvalidRole", "One or more selected roles are invalid."));
+            return Result<UserResponse>.Failure(Error.Validation("Users.Update.InvalidProfile", "Select a valid access profile."));
         }
 
         var employee = await ResolveEmployeeAsync(request.EmployeeId, cancellationToken);
@@ -349,29 +335,27 @@ public sealed class UpdateUserRolesHandler : IRequestHandler<UpdateUserRolesComm
             return Result<UserResponse>.Failure(Error.NotFound("Users.Update.EmployeeNotFound", "The selected employee was not found."));
         }
 
-        var previousRoles = user.Roles
-            .Select(role => role.RoleCode)
-            .OrderBy(role => role)
-            .ToArray();
+        var previousProfile = user.AccessProfile;
+        var hasProfileChanged = previousProfile.Id != accessProfile.Id;
 
-        user.AssignRoles(normalizedRoles);
+        user.AssignProfile(accessProfile);
         user.LinkEmployee(employee?.Id);
 
-        if (!previousRoles.SequenceEqual(normalizedRoles, StringComparer.OrdinalIgnoreCase))
+        if (hasProfileChanged)
         {
             await _userRoleAuditRepository.AddAsync(
                 UserRoleAudit.Create(
                     _currentUserService.CompanyId,
                     user.Id,
                     _currentUserService.UserId,
-                    previousRoles,
-                    normalizedRoles),
+                    previousProfile,
+                    accessProfile),
                 cancellationToken);
         }
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-        return Result<UserResponse>.Success(UserMappings.Map(user, employee));
+        return Result<UserResponse>.Success(UserMappings.Map(user, employee, accessProfile));
     }
 
     private Task<Employee?> ResolveEmployeeAsync(Guid? employeeId, CancellationToken cancellationToken)
@@ -439,13 +423,13 @@ public sealed class SetUserActiveStatusHandler : IRequestHandler<SetUserActiveSt
     }
 }
 
-public sealed class ListUserRoleAuditsHandler : IRequestHandler<ListUserRoleAuditsQuery, Result<IReadOnlyList<UserRoleAuditResponse>>>
+public sealed class ListUserProfileAuditsHandler : IRequestHandler<ListUserProfileAuditsQuery, Result<IReadOnlyList<UserProfileAuditResponse>>>
 {
     private readonly ICurrentUserService _currentUserService;
     private readonly IUserRoleAuditRepository _userRoleAuditRepository;
     private readonly IUserRepository _userRepository;
 
-    public ListUserRoleAuditsHandler(
+    public ListUserProfileAuditsHandler(
         ICurrentUserService currentUserService,
         IUserRoleAuditRepository userRoleAuditRepository,
         IUserRepository userRepository)
@@ -455,11 +439,11 @@ public sealed class ListUserRoleAuditsHandler : IRequestHandler<ListUserRoleAudi
         _userRepository = userRepository;
     }
 
-    public async Task<Result<IReadOnlyList<UserRoleAuditResponse>>> Handle(ListUserRoleAuditsQuery request, CancellationToken cancellationToken)
+    public async Task<Result<IReadOnlyList<UserProfileAuditResponse>>> Handle(ListUserProfileAuditsQuery request, CancellationToken cancellationToken)
     {
         var authCheck = _currentUserService.EnsureAuthenticatedWithContext();
         if (authCheck.IsFailure)
-            return Result<IReadOnlyList<UserRoleAuditResponse>>.Failure(authCheck.Error);
+            return Result<IReadOnlyList<UserProfileAuditResponse>>.Failure(authCheck.Error);
 
         var canReadAllAudits = _currentUserService.HasPermission(PermissionCodes.UsersManage);
         UserId? targetUserId = request.UserId.HasValue ? new UserId(request.UserId.Value) : null;
@@ -468,7 +452,7 @@ public sealed class ListUserRoleAuditsHandler : IRequestHandler<ListUserRoleAudi
         {
             if (targetUserId is not null && targetUserId != _currentUserService.UserId)
             {
-                return Result<IReadOnlyList<UserRoleAuditResponse>>.Failure(Error.Forbidden("Users.Audit.Forbidden", "You cannot access role changes for another user."));
+                return Result<IReadOnlyList<UserProfileAuditResponse>>.Failure(Error.Forbidden("Users.Audit.Forbidden", "You cannot access profile changes for another user."));
             }
 
             targetUserId = _currentUserService.UserId;
@@ -489,19 +473,17 @@ public sealed class ListUserRoleAuditsHandler : IRequestHandler<ListUserRoleAudi
             .Select(audit => UserMappings.MapAudit(audit, usernameMap))
             .ToArray();
 
-        return Result<IReadOnlyList<UserRoleAuditResponse>>.Success(response);
+        return Result<IReadOnlyList<UserProfileAuditResponse>>.Success(response);
     }
 }
 
 internal static class UserMappings
 {
-    public static UserResponse Map(User user, Employee? employee)
+    public static UserResponse Map(User user, Employee? employee, AccessProfile? accessProfile = null)
     {
-        var roles = user.Roles
-            .Select(role => role.RoleCode)
-            .OrderBy(role => role)
-            .ToArray();
-        var permissions = RoleCatalog.PermissionsFor(roles)
+        var profile = accessProfile ?? user.AccessProfile;
+        var permissions = profile.Permissions
+            .Select(permission => permission.PermissionCode)
             .OrderBy(permission => permission)
             .ToArray();
 
@@ -512,13 +494,15 @@ internal static class UserMappings
             user.IsActive,
             user.EmployeeId?.Value,
             employee?.FullName,
-            roles,
+            profile.Id.Value,
+            profile.Name,
             permissions,
             user.CreatedAt,
-            user.LastLoginAt);
+            user.LastLoginAt,
+            []);
     }
 
-    public static UserRoleAuditResponse MapAudit(UserRoleAudit audit, IReadOnlyDictionary<UserId, string> usernameMap)
+    public static UserProfileAuditResponse MapAudit(UserRoleAudit audit, IReadOnlyDictionary<UserId, string> usernameMap)
     {
         usernameMap.TryGetValue(audit.TargetUserId, out var targetUsername);
 
@@ -528,20 +512,24 @@ internal static class UserMappings
             changedByUsername = changedByValue;
         }
 
-        return new UserRoleAuditResponse(
+        return new UserProfileAuditResponse(
             audit.Id.Value,
             audit.TargetUserId.Value,
             targetUsername ?? audit.TargetUserId.Value.ToString("N"),
             audit.ChangedByUserId?.Value,
             changedByUsername,
-            SplitRoles(audit.PreviousRolesCsv),
-            SplitRoles(audit.NewRolesCsv),
+            audit.PreviousAccessProfileId?.Value,
+            audit.PreviousAccessProfileName,
+            audit.NewAccessProfileId?.Value,
+            audit.NewAccessProfileName,
+            SplitCsv(audit.PreviousPermissionCodesCsv),
+            SplitCsv(audit.NewPermissionCodesCsv),
             audit.ChangedAt);
     }
 
-    private static IReadOnlyList<string> SplitRoles(string csv) =>
+    private static IReadOnlyList<string> SplitCsv(string csv) =>
         csv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(role => role)
+            .OrderBy(value => value)
             .ToArray();
 }

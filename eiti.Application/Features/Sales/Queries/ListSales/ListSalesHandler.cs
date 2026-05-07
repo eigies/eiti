@@ -188,7 +188,8 @@ public sealed class ListSalesHandler : IRequestHandler<ListSalesQuery, Result<IR
                             payment.Reference,
                             payment.CardBankId,
                             payment.CardCuotas,
-                            payment.CardSurchargeAmt)).ToList(),
+                            payment.CardSurchargeAmt,
+                            payment.TransferBankId)).ToList(),
                         sale.TradeIns.Select(tradeIn =>
                         {
                             productMap.TryGetValue(tradeIn.ProductId.Value, out var product);

@@ -10,5 +10,6 @@ public enum CashMovementType
     CashTransferIn = 6,
     SaleCancellation = 7,
     CuentaCorrienteIncome = 8,
-    CuentaCorrienteCancellation = 9
+    CuentaCorrienteCancellation = 9,
+    TransferIncome = 10
 }

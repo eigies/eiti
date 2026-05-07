@@ -22,4 +22,6 @@ public static class PermissionCodes
 
     public const string BanksManage = "banks.manage";
     public const string ChequesManage = "cheques.manage";
+
+    public const string ProductsViewCost = "products.view_cost";
 }

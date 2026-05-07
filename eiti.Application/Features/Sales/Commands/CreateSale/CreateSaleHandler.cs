@@ -212,9 +212,12 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
             : branch.Name.ToUpper()[..Math.Min(3, branch.Name.Length)];
         var saleCode = $"{codePrefix}-{(branchSaleCount + 1).ToString().PadLeft(3, '0')}";
 
-        // Pre-compute card surcharge total so TotalAmount includes it from the start.
-        // Amount from frontend is already the total charged (base + surcharge),
-        // so surcharge = amount * pct / (100 + pct).
+        // Card surcharge is applied to the sale subtotal (not back-computed from payment amount).
+        // Surcharge = saleSubtotal * plan.SurchargePct / 100, computed once for the sale.
+        var itemsSubtotal = saleDetails.Sum(d => d.TotalAmount) + (request.NoDeliverySurchargeTotal ?? 0m);
+        if (request.GeneralDiscountPercent > 0)
+            itemsSubtotal = itemsSubtotal * (1m - request.GeneralDiscountPercent / 100m);
+
         var cardSurchargeTotal = 0m;
         foreach (var reqPayment in request.Payments)
         {
@@ -227,9 +230,10 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
                 if (plan is not null && plan.SurchargePct > 0)
                 {
                     cardSurchargeTotal += decimal.Round(
-                        reqPayment.Amount * plan.SurchargePct / (100 + plan.SurchargePct),
+                        itemsSubtotal * plan.SurchargePct / 100m,
                         2,
                         MidpointRounding.AwayFromZero);
+                    break; // One surcharge applies to the sale, even with multiple card payments
                 }
             }
         }
@@ -263,6 +267,7 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
         if (requestedStatus == SaleStatus.Paid)
         {
             var cashAmount = sale.GetPaymentAmount(SalePaymentMethod.Cash);
+            var transferAmount = sale.GetPaymentAmount(SalePaymentMethod.Transfer);
             CashSession? session = null;
 
             if (cashAmount > 0)
@@ -283,6 +288,14 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
                     return Result<CreateSaleResponse>.Failure(CreateSaleErrors.CashSessionRequired);
                 }
             }
+            else if (transferAmount > 0 && request.CashDrawerId.HasValue && _currentUserService.UserId is not null)
+            {
+                session = await _cashSessionRepository.GetOpenForBranchAsync(
+                    branch.Id,
+                    new CashDrawerId(request.CashDrawerId.Value),
+                    companyId,
+                    cancellationToken);
+            }
 
             try
             {
@@ -291,6 +304,11 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
                 if (cashAmount > 0)
                 {
                     session!.RegisterSaleIncome(cashAmount, sale.Id.Value, _currentUserService.UserId!);
+                }
+
+                if (transferAmount > 0 && session is not null)
+                {
+                    session.RegisterTransferIncome(transferAmount, sale.Id.Value, _currentUserService.UserId!);
                 }
 
                 foreach (var detail in groupedDetails)
@@ -367,10 +385,14 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
                     var plan = bank.InstallmentPlans.FirstOrDefault(p => p.Cuotas == reqLine.CardCuotas.Value && p.Active);
                     if (plan is not null)
                     {
-                        var surchargeAmt = decimal.Round(payment.Amount * plan.SurchargePct / (100 + plan.SurchargePct), 2, MidpointRounding.AwayFromZero);
-                        payment.SetCardData(bank.Id, plan.Cuotas, plan.SurchargePct, surchargeAmt);
+                        payment.SetCardData(bank.Id, plan.Cuotas, plan.SurchargePct, cardSurchargeTotal);
                     }
                 }
+            }
+
+            if (payment.Method == SalePaymentMethod.Transfer && reqLine.TransferBankId.HasValue)
+            {
+                payment.SetTransferBank(reqLine.TransferBankId.Value);
             }
 
             if (payment.Method == SalePaymentMethod.Check && reqLine.Cheque is not null)

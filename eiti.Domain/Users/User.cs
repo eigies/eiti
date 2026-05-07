@@ -7,16 +7,16 @@ namespace eiti.Domain.Users;
 
 public sealed class User : AggregateRoot<UserId>
 {
-    public Username Username { get; private set; }
-    public Email Email { get; private set; }
-    public PasswordHash PasswordHash { get; private set; }
-    public CompanyId CompanyId { get; private set; }
+    public Username Username { get; private set; } = null!;
+    public Email Email { get; private set; } = null!;
+    public PasswordHash PasswordHash { get; private set; } = null!;
+    public CompanyId CompanyId { get; private set; } = null!;
     public EmployeeId? EmployeeId { get; private set; }
+    public AccessProfileId AccessProfileId { get; private set; } = null!;
+    public AccessProfile AccessProfile { get; private set; } = null!;
     public bool IsActive { get; private set; }
     public DateTime CreatedAt { get; private set; }
     public DateTime? LastLoginAt { get; private set; }
-    private readonly List<UserRoleAssignment> _roles = [];
-    public IReadOnlyCollection<UserRoleAssignment> Roles => _roles;
 
     private User()
     {
@@ -28,6 +28,7 @@ public sealed class User : AggregateRoot<UserId>
         Email email,
         PasswordHash passwordHash,
         CompanyId companyId,
+        AccessProfileId accessProfileId,
         EmployeeId? employeeId,
         DateTime createdAt)
         : base(id)
@@ -36,6 +37,7 @@ public sealed class User : AggregateRoot<UserId>
         Email = email;
         PasswordHash = passwordHash;
         CompanyId = companyId;
+        AccessProfileId = accessProfileId;
         EmployeeId = employeeId;
         IsActive = true;
         CreatedAt = createdAt;
@@ -46,7 +48,7 @@ public sealed class User : AggregateRoot<UserId>
         Email email,
         PasswordHash passwordHash,
         CompanyId companyId,
-        IEnumerable<string> roleCodes,
+        AccessProfile accessProfile,
         EmployeeId? employeeId = null)
     {
         var user = new User(
@@ -55,10 +57,11 @@ public sealed class User : AggregateRoot<UserId>
             email,
             passwordHash,
             companyId,
+            accessProfile.Id,
             employeeId,
             DateTime.UtcNow);
 
-        user.AssignRoles(roleCodes);
+        user.AccessProfile = accessProfile;
         return user;
     }
 
@@ -67,22 +70,10 @@ public sealed class User : AggregateRoot<UserId>
         LastLoginAt = DateTime.UtcNow;
     }
 
-    public void AssignRoles(IEnumerable<string> roleCodes)
+    public void AssignProfile(AccessProfile accessProfile)
     {
-        _roles.Clear();
-
-        foreach (var roleCode in roleCodes
-                     .Where(code => !string.IsNullOrWhiteSpace(code))
-                     .Select(code => code.Trim().ToLowerInvariant())
-                     .Distinct(StringComparer.OrdinalIgnoreCase))
-        {
-            _roles.Add(UserRoleAssignment.Create(Id, roleCode));
-        }
-
-        if (_roles.Count == 0)
-        {
-            throw new ArgumentException("At least one role is required.", nameof(roleCodes));
-        }
+        AccessProfileId = accessProfile.Id;
+        AccessProfile = accessProfile;
     }
 
     public void LinkEmployee(EmployeeId? employeeId)

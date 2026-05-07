@@ -45,6 +45,7 @@ public sealed record CreateSalePaymentItemRequest(
     string? Reference,
     int? CardBankId = null,
     int? CardCuotas = null,
+    int? TransferBankId = null,
     CreateSalePaymentChequeData? Cheque = null);
 
 public sealed record CreateSaleTradeInItemRequest(

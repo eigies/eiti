@@ -17,6 +17,7 @@ public sealed class RegisterHandler
     private readonly ICompanyRepository _companyRepository;
     private readonly ICompanyOnboardingRepository _companyOnboardingRepository;
     private readonly IUserRepository _userRepository;
+    private readonly IAccessProfileRepository _accessProfileRepository;
     private readonly IPasswordHasher _passwordHasher;
     private readonly IJwtTokenGenerator _jwtTokenGenerator;
     private readonly IUnitOfWork _unitOfWork;
@@ -25,6 +26,7 @@ public sealed class RegisterHandler
         ICompanyRepository companyRepository,
         ICompanyOnboardingRepository companyOnboardingRepository,
         IUserRepository userRepository,
+        IAccessProfileRepository accessProfileRepository,
         IPasswordHasher passwordHasher,
         IJwtTokenGenerator jwtTokenGenerator,
         IUnitOfWork unitOfWork)
@@ -32,6 +34,7 @@ public sealed class RegisterHandler
         _companyRepository = companyRepository;
         _companyOnboardingRepository = companyOnboardingRepository;
         _userRepository = userRepository;
+        _accessProfileRepository = accessProfileRepository;
         _passwordHasher = passwordHasher;
         _jwtTokenGenerator = jwtTokenGenerator;
         _unitOfWork = unitOfWork;
@@ -75,8 +78,15 @@ public sealed class RegisterHandler
         var company = Company.Create(companyName, companyDomain);
         await _companyRepository.AddAsync(company, cancellationToken);
         await _companyOnboardingRepository.AddAsync(CompanyOnboarding.CreateIncomplete(company.Id), cancellationToken);
+        var accessProfiles = AccessProfileSeedCatalog.CreateInitialProfiles(company.Id);
+        foreach (var profile in accessProfiles)
+        {
+            await _accessProfileRepository.AddAsync(profile, cancellationToken);
+        }
 
-        var user = User.Create(username, email, passwordHash, company.Id, [SystemRoles.Owner]);
+        var ownerProfile = accessProfiles.First(profile => profile.SystemKey == SystemRoles.Owner);
+
+        var user = User.Create(username, email, passwordHash, company.Id, ownerProfile);
 
         await _userRepository.AddAsync(user, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
@@ -91,6 +101,8 @@ public sealed class RegisterHandler
                 user.Email.Value,
                 token,
                 roles,
+                user.AccessProfileId.Value,
+                ownerProfile.Name,
                 permissions));
     }
 }

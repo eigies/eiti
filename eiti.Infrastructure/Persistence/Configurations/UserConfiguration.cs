@@ -58,6 +58,12 @@ public sealed class UserConfiguration : IEntityTypeConfiguration<User>
                 value => value.HasValue ? new EmployeeId(value.Value) : null)
             .IsRequired(false);
 
+        builder.Property(u => u.AccessProfileId)
+            .HasConversion(
+                id => id.Value,
+                value => new AccessProfileId(value))
+            .IsRequired();
+
         builder.Property(u => u.IsActive).IsRequired();
         builder.Property(u => u.CreatedAt).IsRequired();
         builder.Property(u => u.LastLoginAt).IsRequired(false);
@@ -67,9 +73,9 @@ public sealed class UserConfiguration : IEntityTypeConfiguration<User>
             .HasForeignKey(u => u.CompanyId)
             .OnDelete(DeleteBehavior.Restrict);
 
-        builder.HasMany(u => u.Roles)
-            .WithOne()
-            .HasForeignKey(role => role.UserId)
-            .OnDelete(DeleteBehavior.Cascade);
+        builder.HasOne(u => u.AccessProfile)
+            .WithMany()
+            .HasForeignKey(u => u.AccessProfileId)
+            .OnDelete(DeleteBehavior.Restrict);
     }
 }

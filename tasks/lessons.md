@@ -25,6 +25,18 @@
 
 ---
 
+## Codex - 2026-05-06
+### Correccion solicitada por el usuario
+
+**Problema anterior:** se implemento solo el frontend del cambio de perfiles y no se verifico si el backend real tambien estaba disponible en otro workspace relacionado.
+
+### Lecciones aprendidas
+- Cuando el plan incluye contrato frontend + backend, confirmar explicitamente si existe un segundo repo local antes de dar por terminado el trabajo
+- No asumir que el `cwd` visible es todo el sistema cuando el dominio funcional depende de otro proceso local
+- Si el frontend apunta a endpoints nuevos, la tarea no esta terminada hasta verificar que esos endpoints existen realmente en el backend que corre
+
+---
+
 ## Agent-F3 - 2026-03-17
 ### Cambios realizados
 - Creado `PaymentMethodBreakdownItem.cs` (record) en `eiti.Application/Features/CashSessions/Common/`

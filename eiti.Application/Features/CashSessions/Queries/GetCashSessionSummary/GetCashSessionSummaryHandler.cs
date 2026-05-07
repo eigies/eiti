@@ -11,13 +11,19 @@ public sealed class GetCashSessionSummaryHandler : IRequestHandler<GetCashSessio
 {
     private readonly ICurrentUserService _currentUserService;
     private readonly ICashSessionRepository _cashSessionRepository;
+    private readonly ISaleRepository _saleRepository;
+    private readonly IBankRepository _bankRepository;
 
     public GetCashSessionSummaryHandler(
         ICurrentUserService currentUserService,
-        ICashSessionRepository cashSessionRepository)
+        ICashSessionRepository cashSessionRepository,
+        ISaleRepository saleRepository,
+        IBankRepository bankRepository)
     {
         _currentUserService = currentUserService;
         _cashSessionRepository = cashSessionRepository;
+        _saleRepository = saleRepository;
+        _bankRepository = bankRepository;
     }
 
     public async Task<Result<CashSessionSummaryResponse>> Handle(GetCashSessionSummaryQuery request, CancellationToken cancellationToken)
@@ -26,13 +32,20 @@ public sealed class GetCashSessionSummaryHandler : IRequestHandler<GetCashSessio
         if (authCheck.IsFailure)
             return Result<CashSessionSummaryResponse>.Failure(authCheck.Error);
 
-        var session = await _cashSessionRepository.GetByIdAsync(new CashSessionId(request.Id), _currentUserService.CompanyId, cancellationToken);
+        var companyId = _currentUserService.CompanyId!;
+
+        var session = await _cashSessionRepository.GetByIdAsync(new CashSessionId(request.Id), companyId, cancellationToken);
 
         if (session is null)
         {
             return Result<CashSessionSummaryResponse>.Failure(Error.NotFound("CashSessions.Summary.NotFound", "The requested cash session was not found."));
         }
 
-        return Result<CashSessionSummaryResponse>.Success(CashSessionMapper.MapSummary(session));
+        var payments = await _saleRepository.GetPaymentsByCashSessionIdAsync(session.Id, cancellationToken);
+
+        var banks = await _bankRepository.ListAsync(activeOnly: false, companyId, cancellationToken);
+        var bankNames = banks.ToDictionary(b => b.Id, b => b.Name);
+
+        return Result<CashSessionSummaryResponse>.Success(CashSessionMapper.MapSummary(session, payments, bankNames));
     }
 }

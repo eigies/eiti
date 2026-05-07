@@ -1,5 +1,6 @@
 using eiti.Application.Abstractions.Repositories;
 using eiti.Domain.Branches;
+using eiti.Domain.Cash;
 using eiti.Domain.Companies;
 using eiti.Domain.Customers;
 using eiti.Domain.Sales;
@@ -82,6 +83,44 @@ public sealed class SaleRepository : ISaleRepository
 
         return await _context.SalePayments
             .Where(payment => ids.Contains(payment.SaleId))
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<SalePayment>> GetPaymentsByCashSessionIdAsync(
+        CashSessionId sessionId,
+        CancellationToken cancellationToken = default)
+    {
+        var saleIds = await _context.Sales
+            .Where(sale => sale.CashSessionId == sessionId)
+            .Select(sale => sale.Id)
+            .ToListAsync(cancellationToken);
+
+        if (saleIds.Count == 0)
+            return [];
+
+        return await _context.SalePayments
+            .Where(payment => saleIds.Contains(payment.SaleId))
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<SalePayment>> GetPaymentsByCashSessionIdsAsync(
+        IEnumerable<CashSessionId> sessionIds,
+        CancellationToken cancellationToken = default)
+    {
+        var ids = sessionIds.ToList();
+        if (ids.Count == 0)
+            return [];
+
+        var saleIds = await _context.Sales
+            .Where(sale => sale.CashSessionId != null && ids.Contains(sale.CashSessionId))
+            .Select(sale => sale.Id)
+            .ToListAsync(cancellationToken);
+
+        if (saleIds.Count == 0)
+            return [];
+
+        return await _context.SalePayments
+            .Where(payment => saleIds.Contains(payment.SaleId))
             .ToListAsync(cancellationToken);
     }
 

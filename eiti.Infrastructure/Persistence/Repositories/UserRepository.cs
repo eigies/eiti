@@ -20,7 +20,8 @@ public sealed class UserRepository : IUserRepository
         CancellationToken cancellationToken = default)
     {
         return await _context.Users
-            .Include(u => u.Roles)
+            .Include(u => u.AccessProfile)
+            .ThenInclude(profile => profile.Permissions)
             .FirstOrDefaultAsync(u => u.Id == id, cancellationToken);
     }
 
@@ -29,7 +30,8 @@ public sealed class UserRepository : IUserRepository
         CancellationToken cancellationToken = default)
     {
         var users = await _context.Users
-            .Include(u => u.Roles)
+            .Include(u => u.AccessProfile)
+            .ThenInclude(profile => profile.Permissions)
             .ToListAsync(cancellationToken);
 
         return users.FirstOrDefault(u => u.Username.Value == username.Value);
@@ -40,7 +42,8 @@ public sealed class UserRepository : IUserRepository
         CancellationToken cancellationToken = default)
     {
         var users = await _context.Users
-            .Include(u => u.Roles)
+            .Include(u => u.AccessProfile)
+            .ThenInclude(profile => profile.Permissions)
             .ToListAsync(cancellationToken);
 
         return users.FirstOrDefault(u => u.Email.Value == email.Value);
@@ -51,7 +54,8 @@ public sealed class UserRepository : IUserRepository
         CancellationToken cancellationToken = default)
     {
         return await _context.Users
-            .Include(u => u.Roles)
+            .Include(u => u.AccessProfile)
+            .ThenInclude(profile => profile.Permissions)
             .Where(u => u.CompanyId == companyId)
             .OrderBy(u => u.Username)
             .ToListAsync(cancellationToken);

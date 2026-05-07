@@ -86,6 +86,7 @@ public sealed class GetSaleByIdHandler : IRequestHandler<GetSaleByIdQuery, Resul
                 sale.GeneralDiscountPercent,
                 sale.OriginalTotal,
                 sale.TotalAmount,
+                sale.CardSurchargeTotal,
                 sale.ManualOverridePrice,
                 sale.OverriddenByUserId,
                 sale.OverriddenAt,
@@ -110,7 +111,8 @@ public sealed class GetSaleByIdHandler : IRequestHandler<GetSaleByIdQuery, Resul
                     (int)payment.Method,
                     payment.Method.ToString(),
                     payment.Amount,
-                    payment.Reference)).ToList(),
+                    payment.Reference,
+                    payment.TransferBankId)).ToList(),
                 sale.CcPayments.Select(payment => new GetSaleByIdCcPaymentResponse(
                     payment.Id.Value,
                     (int)payment.Method,

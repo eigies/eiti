@@ -11,6 +11,7 @@ public sealed class SalePayment
     public decimal? CardSurchargePct { get; private set; }
     public decimal? CardSurchargeAmt { get; private set; }
     public decimal? TotalCobrado { get; private set; }
+    public int? TransferBankId { get; private set; }
 
     private SalePayment()
     {
@@ -58,6 +59,8 @@ public sealed class SalePayment
     {
         SaleId = saleId;
     }
+
+    public void SetTransferBank(int? bankId) => TransferBankId = bankId;
 
     public void SetCardData(int bankId, int cuotas, decimal surchargePct, decimal surchargeAmt)
     {

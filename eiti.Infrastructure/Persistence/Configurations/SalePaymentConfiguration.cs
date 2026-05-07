@@ -30,6 +30,7 @@ public sealed class SalePaymentConfiguration : IEntityTypeConfiguration<SalePaym
             .HasMaxLength(120)
             .IsRequired(false);
 
+        builder.Property(p => p.TransferBankId).IsRequired(false);
         builder.Property(p => p.CardBankId).IsRequired(false);
         builder.Property(p => p.CardCuotas).IsRequired(false);
         builder.Property(p => p.CardSurchargePct).HasColumnType("decimal(5,2)").IsRequired(false);

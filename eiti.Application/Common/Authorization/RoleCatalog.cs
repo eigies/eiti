@@ -25,7 +25,8 @@ public static class RoleCatalog
                 PermissionCodes.UsersManage,
                 PermissionCodes.SalesPriceOverride,
                 PermissionCodes.BanksManage,
-                PermissionCodes.ChequesManage
+                PermissionCodes.ChequesManage,
+                PermissionCodes.ProductsViewCost
             }),
         new RoleDefinition(
             SystemRoles.Admin,
@@ -48,7 +49,8 @@ public static class RoleCatalog
                 PermissionCodes.UsersManage,
                 PermissionCodes.SalesPriceOverride,
                 PermissionCodes.BanksManage,
-                PermissionCodes.ChequesManage
+                PermissionCodes.ChequesManage,
+                PermissionCodes.ProductsViewCost
             }),
         new RoleDefinition(
             SystemRoles.Seller,

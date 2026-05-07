@@ -46,8 +46,8 @@ public sealed class UsersController : ControllerBase
         return result.ToActionResult();
     }
 
-    [HttpPut("{id:guid}/roles")]
-    public async Task<IActionResult> UpdateRoles(Guid id, [FromBody] UpdateUserRolesCommand command, CancellationToken cancellationToken)
+    [HttpPut("{id:guid}/profile")]
+    public async Task<IActionResult> UpdateProfile(Guid id, [FromBody] UpdateUserProfileCommand command, CancellationToken cancellationToken)
     {
         var result = await _sender.Send(command with { Id = id }, cancellationToken);
         return result.ToActionResult();
@@ -60,10 +60,10 @@ public sealed class UsersController : ControllerBase
         return result.ToActionResult();
     }
 
-    [HttpGet("role-audits")]
-    public async Task<IActionResult> ListRoleAudits([FromQuery] Guid? userId, [FromQuery] int take = 50, CancellationToken cancellationToken = default)
+    [HttpGet("profile-audits")]
+    public async Task<IActionResult> ListProfileAudits([FromQuery] Guid? userId, [FromQuery] int take = 50, CancellationToken cancellationToken = default)
     {
-        var result = await _sender.Send(new ListUserRoleAuditsQuery(userId, take), cancellationToken);
+        var result = await _sender.Send(new ListUserProfileAuditsQuery(userId, take), cancellationToken);
         return result.ToActionResult();
     }
 }

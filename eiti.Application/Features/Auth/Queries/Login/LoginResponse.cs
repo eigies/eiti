@@ -6,5 +6,7 @@ public sealed record LoginResponse(
     string Email,
     string Token,
     IReadOnlyList<string> Roles,
+    Guid? ProfileId,
+    string? ProfileName,
     IReadOnlyList<string> Permissions,
     Guid? AssignedCashDrawerId);

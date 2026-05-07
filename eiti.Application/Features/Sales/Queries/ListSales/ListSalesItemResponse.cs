@@ -56,7 +56,8 @@ public sealed record ListSalesPaymentItemResponse(
     string? Reference,
     int? CardBankId = null,
     int? CardCuotas = null,
-    decimal? CardSurchargeAmt = null);
+    decimal? CardSurchargeAmt = null,
+    int? TransferBankId = null);
 
 public sealed record ListSalesTradeInItemResponse(
     Guid ProductId,

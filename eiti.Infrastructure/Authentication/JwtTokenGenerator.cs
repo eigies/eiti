@@ -2,7 +2,6 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
 using eiti.Application.Abstractions.Services;
-using eiti.Application.Common.Authorization;
 using eiti.Domain.Users;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
@@ -24,8 +23,10 @@ public sealed class JwtTokenGenerator : IJwtTokenGenerator
             new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_jwtSettings.Secret)),
             SecurityAlgorithms.HmacSha256);
 
-        var roleCodes = user.Roles.Select(role => role.RoleCode).ToArray();
-        var permissionCodes = RoleCatalog.PermissionsFor(roleCodes);
+        var permissionCodes = user.AccessProfile.Permissions
+            .Select(permission => permission.PermissionCode)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
 
         var claims = new List<Claim>
         {
@@ -33,10 +34,11 @@ public sealed class JwtTokenGenerator : IJwtTokenGenerator
             new Claim(JwtRegisteredClaimNames.UniqueName, user.Username.Value),
             new Claim(JwtRegisteredClaimNames.Email, user.Email.Value),
             new Claim("company_id", user.CompanyId.Value.ToString()),
+            new Claim("profile_id", user.AccessProfileId.Value.ToString()),
+            new Claim("profile_name", user.AccessProfile.Name),
             new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
         };
 
-        claims.AddRange(roleCodes.Select(roleCode => new Claim(ClaimTypes.Role, roleCode)));
         claims.AddRange(permissionCodes.Select(permissionCode => new Claim("permission", permissionCode)));
 
         var securityToken = new JwtSecurityToken(

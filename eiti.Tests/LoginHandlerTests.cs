@@ -15,20 +15,28 @@ public sealed class LoginHandlerTests
     private readonly Mock<IUserRepository> _userRepository = new();
     private readonly Mock<IPasswordHasher> _passwordHasher = new();
     private readonly Mock<IJwtTokenGenerator> _jwtTokenGenerator = new();
+    private readonly Mock<ICashDrawerRepository> _cashDrawerRepository = new();
     private readonly Mock<IUnitOfWork> _unitOfWork = new();
 
     private LoginHandler CreateHandler() =>
-        new(_userRepository.Object, _passwordHasher.Object, _jwtTokenGenerator.Object, _unitOfWork.Object);
+        new(_userRepository.Object, _passwordHasher.Object, _jwtTokenGenerator.Object, _cashDrawerRepository.Object, _unitOfWork.Object);
+
+    private static User CreateUser()
+    {
+        var companyId = CompanyId.New();
+        var profile = AccessProfile.Create(companyId, "Owner", "Owner", [PermissionCodes.UsersManage]);
+        return User.Create(
+            Username.Create("john"),
+            Email.Create("john@example.com"),
+            PasswordHash.Create("hashed"),
+            companyId,
+            profile);
+    }
 
     [Fact]
     public async Task Handle_ShouldSearchByUsername_WhenInputIsValidUsername()
     {
-        var user = User.Create(
-            Username.Create("john"),
-            Email.Create("john@example.com"),
-            PasswordHash.Create("hashed"),
-            CompanyId.New(),
-            ["owner"]);
+        var user = CreateUser();
 
         _userRepository
             .Setup(repository => repository.GetByUsernameAsync(
@@ -58,12 +66,7 @@ public sealed class LoginHandlerTests
     [Fact]
     public async Task Handle_ShouldSearchByEmail_WhenInputIsValidEmail()
     {
-        var user = User.Create(
-            Username.Create("john"),
-            Email.Create("john@example.com"),
-            PasswordHash.Create("hashed"),
-            CompanyId.New(),
-            ["owner"]);
+        var user = CreateUser();
 
         _userRepository
             .Setup(repository => repository.GetByUsernameAsync(

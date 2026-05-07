@@ -8,4 +8,7 @@ public sealed record CashSessionSummaryResponse(
     decimal SalesCancellations,
     decimal ExpectedClosingAmount,
     decimal? ActualClosingAmount,
-    decimal Difference);
+    decimal Difference,
+    IReadOnlyList<TransferBankBreakdownItem> TransferBankBreakdown);
+
+public sealed record TransferBankBreakdownItem(int BankId, string BankName, decimal Amount);

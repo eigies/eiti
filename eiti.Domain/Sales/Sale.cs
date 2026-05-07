@@ -48,8 +48,9 @@ public sealed class Sale : AggregateRoot<SaleId>
         .Where(p => p.Status == SaleCcPaymentStatus.Active)
         .Sum(p => p.Amount);
     public decimal CcPendingAmount => NormalizeAmount(TotalAmount - CcPaidTotal);
-    public decimal PendingAmount => NormalizeAmount(TotalAmount - SettledAmount);
-    public decimal ChangeAmount => NormalizeAmount(Math.Max(0m, SettledAmount - TotalAmount));
+    public decimal EffectiveTotal => TotalAmount + CardSurchargeTotal;
+    public decimal PendingAmount => NormalizeAmount(EffectiveTotal - SettledAmount);
+    public decimal ChangeAmount => NormalizeAmount(Math.Max(0m, SettledAmount - EffectiveTotal));
 
     private Sale()
     {
@@ -475,7 +476,8 @@ public sealed class Sale : AggregateRoot<SaleId>
             throw new InvalidOperationException("A cash session is required when cash payment amount is greater than zero.");
         }
 
-        CashSessionId = cashAmount > 0 ? cashSessionId : null;
+        var transferAmount = GetPaymentAmount(SalePaymentMethod.Transfer);
+        CashSessionId = (cashAmount > 0 || transferAmount > 0) ? cashSessionId : null;
         SaleStatus = SaleStatus.Paid;
         PaidAt = DateTime.UtcNow;
         UpdatedAt = DateTime.UtcNow;
@@ -534,7 +536,7 @@ public sealed class Sale : AggregateRoot<SaleId>
             subtotal = subtotal * (1m - GeneralDiscountPercent / 100m);
         }
 
-        TotalAmount = ManualOverridePrice ?? NormalizeAmount(subtotal + CardSurchargeTotal);
+        TotalAmount = ManualOverridePrice ?? NormalizeAmount(subtotal);
     }
 
     private void SetSettlement(
@@ -581,14 +583,14 @@ public sealed class Sale : AggregateRoot<SaleId>
     private void ValidateSettlement(bool requireAtLeastTotal)
     {
         var settledAmount = NormalizeAmount(SettledAmount);
-        var totalAmount = NormalizeAmount(TotalAmount);
+        var effectiveTotal = NormalizeAmount(TotalAmount + CardSurchargeTotal);
 
-        if (!requireAtLeastTotal && settledAmount > totalAmount)
+        if (!requireAtLeastTotal && settledAmount > effectiveTotal)
         {
             throw new InvalidOperationException("The settled amount cannot exceed the total amount.");
         }
 
-        if (requireAtLeastTotal && settledAmount < totalAmount)
+        if (requireAtLeastTotal && settledAmount < effectiveTotal)
         {
             throw new InvalidOperationException("The settled amount must cover the total amount to mark the sale as paid.");
         }

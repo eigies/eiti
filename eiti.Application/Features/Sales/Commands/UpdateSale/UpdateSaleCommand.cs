@@ -34,7 +34,8 @@ public sealed record UpdateSalePaymentItemRequest(
     decimal Amount,
     string? Reference,
     int? CardBankId = null,
-    int? CardCuotas = null);
+    int? CardCuotas = null,
+    int? TransferBankId = null);
 
 public sealed record UpdateSaleTradeInItemRequest(
     Guid ProductId,

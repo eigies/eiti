@@ -15,6 +15,7 @@ public sealed record GetSaleByIdResponse(
     decimal GeneralDiscountPercent,
     decimal OriginalTotal,
     decimal TotalAmount,
+    decimal CardSurchargeTotal,
     decimal? ManualOverridePrice,
     Guid? OverriddenByUserId,
     DateTime? OverriddenAt,
@@ -44,7 +45,8 @@ public sealed record GetSaleByIdPaymentResponse(
     int IdPaymentMethod,
     string PaymentMethod,
     decimal Amount,
-    string? Reference);
+    string? Reference,
+    int? TransferBankId = null);
 
 public sealed record GetSaleByIdCcPaymentResponse(
     Guid Id,
