@@ -2,6 +2,7 @@ using eiti.Application.Abstractions.Data;
 using eiti.Application.Abstractions.Repositories;
 using eiti.Application.Abstractions.Services;
 using eiti.Application.Common;
+using eiti.Application.Common.Authorization;
 using eiti.Domain.Cash;
 using MediatR;
 
@@ -10,15 +11,18 @@ namespace eiti.Application.Features.CashSessions.Commands.CreateCashTransfer;
 public sealed class CreateCashTransferHandler : IRequestHandler<CreateCashTransferCommand, Result>
 {
     private readonly ICurrentUserService _currentUserService;
+    private readonly ICashDrawerRepository _cashDrawerRepository;
     private readonly ICashSessionRepository _cashSessionRepository;
     private readonly IUnitOfWork _unitOfWork;
 
     public CreateCashTransferHandler(
         ICurrentUserService currentUserService,
+        ICashDrawerRepository cashDrawerRepository,
         ICashSessionRepository cashSessionRepository,
         IUnitOfWork unitOfWork)
     {
         _currentUserService = currentUserService;
+        _cashDrawerRepository = cashDrawerRepository;
         _cashSessionRepository = cashSessionRepository;
         _unitOfWork = unitOfWork;
     }
@@ -31,6 +35,14 @@ public sealed class CreateCashTransferHandler : IRequestHandler<CreateCashTransf
 
         if (request.SourceCashDrawerId == request.TargetCashDrawerId)
             return Result.Failure(CashTransferErrors.SameSession);
+
+        var accessCheck = await CashDrawerAccessPolicy.EnsureCanAccessDrawerAsync(
+            _currentUserService,
+            _cashDrawerRepository,
+            new CashDrawerId(request.SourceCashDrawerId),
+            cancellationToken);
+        if (accessCheck.IsFailure)
+            return Result.Failure(accessCheck.Error!);
 
         var sourceSession = await _cashSessionRepository.GetOpenByDrawerAsync(
             new CashDrawerId(request.SourceCashDrawerId),

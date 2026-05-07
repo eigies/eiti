@@ -22,6 +22,7 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
     private readonly IProductRepository _productRepository;
     private readonly IBranchProductStockRepository _branchProductStockRepository;
     private readonly IStockMovementRepository _stockMovementRepository;
+    private readonly ICashDrawerRepository _cashDrawerRepository;
     private readonly ICashSessionRepository _cashSessionRepository;
     private readonly ISaleTransportAssignmentRepository _saleTransportAssignmentRepository;
     private readonly IAddressRepository _addressRepository;
@@ -35,6 +36,7 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
         IProductRepository productRepository,
         IBranchProductStockRepository branchProductStockRepository,
         IStockMovementRepository stockMovementRepository,
+        ICashDrawerRepository cashDrawerRepository,
         ICashSessionRepository cashSessionRepository,
         ISaleTransportAssignmentRepository saleTransportAssignmentRepository,
         IAddressRepository addressRepository,
@@ -47,6 +49,7 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
         _productRepository = productRepository;
         _branchProductStockRepository = branchProductStockRepository;
         _stockMovementRepository = stockMovementRepository;
+        _cashDrawerRepository = cashDrawerRepository;
         _cashSessionRepository = cashSessionRepository;
         _saleTransportAssignmentRepository = saleTransportAssignmentRepository;
         _addressRepository = addressRepository;
@@ -60,6 +63,11 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
         if (authCheck.IsFailure)
             return Result<UpdateSaleResponse>.Failure(authCheck.Error);
         var companyId = _currentUserService.CompanyId!;
+        var resolvedCashDrawerId = await CashDrawerAccessPolicy.ResolveEffectiveDrawerIdAsync(
+            _currentUserService,
+            _cashDrawerRepository,
+            request.CashDrawerId,
+            cancellationToken);
 
         if (!Enum.IsDefined(typeof(SaleStatus), request.IdSaleStatus))
         {
@@ -103,6 +111,7 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
                 paidCustomer?.TaxId,
                 paidCustomerAddress,
                 sale.DeliveryAddress,
+                sale.CashDrawerId?.Value,
                 sale.CashSessionId?.Value,
                 sale.HasDelivery,
                 sale.TransportAssignmentId?.Value,
@@ -313,6 +322,8 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
         {
             if (requestedStatus == SaleStatus.Paid)
             {
+                var effectiveCashDrawerId = sale.CashDrawerId?.Value ?? resolvedCashDrawerId;
+
                 foreach (var detail in groupedDetails)
                 {
                     var stock = stockMap[detail.ProductId];
@@ -340,14 +351,14 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
 
                 if (cashAmount > 0)
                 {
-                    if (_currentUserService.UserId is null || request.CashDrawerId is null)
+                    if (_currentUserService.UserId is null || effectiveCashDrawerId is null)
                     {
                         return Result<UpdateSaleResponse>.Failure(UpdateSaleErrors.CashDrawerRequired);
                     }
 
                     session = await _cashSessionRepository.GetOpenForBranchAsync(
                         sale.BranchId,
-                        new CashDrawerId(request.CashDrawerId.Value),
+                        new CashDrawerId(effectiveCashDrawerId.Value),
                         companyId,
                         cancellationToken);
 
@@ -356,16 +367,18 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
                         return Result<UpdateSaleResponse>.Failure(UpdateSaleErrors.CashSessionRequired);
                     }
                 }
-                else if (transferAmount > 0 && request.CashDrawerId.HasValue && _currentUserService.UserId is not null)
+                else if (transferAmount > 0 && effectiveCashDrawerId.HasValue && _currentUserService.UserId is not null)
                 {
                     session = await _cashSessionRepository.GetOpenForBranchAsync(
                         sale.BranchId,
-                        new CashDrawerId(request.CashDrawerId.Value),
+                        new CashDrawerId(effectiveCashDrawerId.Value),
                         companyId,
                         cancellationToken);
                 }
 
-                sale.MarkAsPaid(session?.Id);
+                sale.MarkAsPaid(
+                    effectiveCashDrawerId.HasValue ? new CashDrawerId(effectiveCashDrawerId.Value) : null,
+                    session?.Id);
 
                 if (cashAmount > 0)
                 {
@@ -456,6 +469,7 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
                 }
 
                 sale.Update(customer?.Id, requestedStatus, request.HasDelivery, saleDetails, salePayments, saleTradeIns, noDeliverySurchargeTotal: request.NoDeliverySurchargeTotal ?? 0, deliveryAddress: request.DeliveryAddress, generalDiscountPercent: request.GeneralDiscountPercent, cardSurchargeTotal: cardSurchargeTotal);
+                sale.SetCashDrawer(resolvedCashDrawerId.HasValue ? new CashDrawerId(resolvedCashDrawerId.Value) : null);
             }
 
             if (requestedStatus == SaleStatus.Cancel && existingTransportAssignmentId is not null)
@@ -534,6 +548,7 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
                 customer?.TaxId,
                 customerAddress,
                 sale.DeliveryAddress,
+                sale.CashDrawerId?.Value,
                 sale.CashSessionId?.Value,
                 sale.HasDelivery,
                 sale.TransportAssignmentId?.Value,

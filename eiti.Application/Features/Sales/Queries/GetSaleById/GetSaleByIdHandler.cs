@@ -79,6 +79,7 @@ public sealed class GetSaleByIdHandler : IRequestHandler<GetSaleByIdQuery, Resul
                 customer?.FullName,
                 customerDocument,
                 customer?.TaxId,
+                sale.CashDrawerId?.Value,
                 sale.HasDelivery,
                 (int)sale.SaleStatus,
                 sale.SaleStatus.ToString(),

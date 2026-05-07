@@ -12,6 +12,10 @@ public static class CloseCashSessionErrors
         "CashSessions.Close.NotFound",
         "The requested cash session was not found.");
 
+    public static readonly Error PendingOnHoldSales = Error.Conflict(
+        "CashSessions.Close.PendingOnHoldSales",
+        "The cash session cannot be closed while it still has sales in OnHold status.");
+
     public static readonly Error InvalidOperation = Error.Conflict(
         "CashSessions.Close.InvalidOperation",
         "The cash session cannot be closed due to an invalid operation.");

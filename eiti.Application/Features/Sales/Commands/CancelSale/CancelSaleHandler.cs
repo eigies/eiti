@@ -109,16 +109,6 @@ public sealed class CancelSaleHandler : IRequestHandler<CancelSaleCommand, Resul
                     cancellationToken);
             }
 
-            var openSession = await _cashSessionRepository.GetAnyOpenByBranchAsync(
-                sale.BranchId,
-                companyId,
-                cancellationToken);
-
-            if (openSession is not null)
-            {
-                openSession.RegisterSaleCancel(sale.TotalAmount, sale.Id.Value, _currentUserService.UserId!);
-            }
-
             sale.Cancel();
         }
         else if (sale.SaleStatus == SaleStatus.Paid)

@@ -1,6 +1,7 @@
 using eiti.Application.Abstractions.Repositories;
 using eiti.Application.Abstractions.Services;
 using eiti.Application.Common;
+using eiti.Application.Common.Authorization;
 using eiti.Application.Features.CashSessions.Common;
 using eiti.Domain.Cash;
 using eiti.Domain.Sales;
@@ -11,17 +12,20 @@ namespace eiti.Application.Features.CashSessions.Queries.ListCashSessionHistory;
 public sealed class ListCashSessionHistoryHandler : IRequestHandler<ListCashSessionHistoryQuery, Result<IReadOnlyList<CashSessionResponse>>>
 {
     private readonly ICurrentUserService _currentUserService;
+    private readonly ICashDrawerRepository _cashDrawerRepository;
     private readonly ICashSessionRepository _cashSessionRepository;
     private readonly ISaleRepository _saleRepository;
     private readonly IUserRepository _userRepository;
 
     public ListCashSessionHistoryHandler(
         ICurrentUserService currentUserService,
+        ICashDrawerRepository cashDrawerRepository,
         ICashSessionRepository cashSessionRepository,
         ISaleRepository saleRepository,
         IUserRepository userRepository)
     {
         _currentUserService = currentUserService;
+        _cashDrawerRepository = cashDrawerRepository;
         _cashSessionRepository = cashSessionRepository;
         _saleRepository = saleRepository;
         _userRepository = userRepository;
@@ -32,6 +36,14 @@ public sealed class ListCashSessionHistoryHandler : IRequestHandler<ListCashSess
         var authCheck = _currentUserService.EnsureAuthenticated();
         if (authCheck.IsFailure)
             return Result<IReadOnlyList<CashSessionResponse>>.Failure(authCheck.Error);
+
+        var accessCheck = await CashDrawerAccessPolicy.EnsureCanAccessDrawerAsync(
+            _currentUserService,
+            _cashDrawerRepository,
+            new CashDrawerId(request.CashDrawerId),
+            cancellationToken);
+        if (accessCheck.IsFailure)
+            return Result<IReadOnlyList<CashSessionResponse>>.Failure(accessCheck.Error!);
 
         var from = request.From?.Date;
         var to = request.To?.Date.AddDays(1).AddTicks(-1);

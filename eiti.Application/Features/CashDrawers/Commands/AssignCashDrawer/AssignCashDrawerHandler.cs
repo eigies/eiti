@@ -44,19 +44,23 @@ public sealed class AssignCashDrawerHandler : IRequestHandler<AssignCashDrawerCo
         if (drawer is null)
             return Result.Failure(AssignCashDrawerErrors.DrawerNotFound);
 
-        UserId? assignedUserId = null;
+        var requestedUserIds = (request.UserIds ?? Array.Empty<Guid>())
+            .Distinct()
+            .ToArray();
 
-        if (request.UserId.HasValue)
+        var assignedUserIds = new List<UserId>(requestedUserIds.Length);
+
+        foreach (var userGuid in requestedUserIds)
         {
-            var user = await _userRepository.GetByIdAsync(new UserId(request.UserId.Value), cancellationToken);
+            var user = await _userRepository.GetByIdAsync(new UserId(userGuid), cancellationToken);
 
             if (user is null || user.CompanyId != companyId)
                 return Result.Failure(AssignCashDrawerErrors.UserNotFound);
 
-            assignedUserId = user.Id;
+            assignedUserIds.Add(user.Id);
         }
 
-        drawer.Assign(assignedUserId);
+        await _cashDrawerRepository.AssignUsersAsync(drawer.Id, companyId, assignedUserIds, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return Result.Success();

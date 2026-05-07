@@ -24,6 +24,7 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
     private readonly IBranchProductStockRepository _branchProductStockRepository;
     private readonly IStockMovementRepository _stockMovementRepository;
     private readonly ISaleRepository _saleRepository;
+    private readonly ICashDrawerRepository _cashDrawerRepository;
     private readonly ICashSessionRepository _cashSessionRepository;
     private readonly IAddressRepository _addressRepository;
     private readonly IBankRepository _bankRepository;
@@ -38,6 +39,7 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
         IBranchProductStockRepository branchProductStockRepository,
         IStockMovementRepository stockMovementRepository,
         ISaleRepository saleRepository,
+        ICashDrawerRepository cashDrawerRepository,
         ICashSessionRepository cashSessionRepository,
         IAddressRepository addressRepository,
         IBankRepository bankRepository,
@@ -51,6 +53,7 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
         _branchProductStockRepository = branchProductStockRepository;
         _stockMovementRepository = stockMovementRepository;
         _saleRepository = saleRepository;
+        _cashDrawerRepository = cashDrawerRepository;
         _cashSessionRepository = cashSessionRepository;
         _addressRepository = addressRepository;
         _bankRepository = bankRepository;
@@ -69,6 +72,12 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
         {
             return Result<CreateSaleResponse>.Failure(CreateSaleErrors.Unauthorized);
         }
+
+        var effectiveCashDrawerId = await CashDrawerAccessPolicy.ResolveEffectiveDrawerIdAsync(
+            _currentUserService,
+            _cashDrawerRepository,
+            request.CashDrawerId,
+            cancellationToken);
 
         if (!Enum.IsDefined(typeof(SaleStatus), request.IdSaleStatus))
         {
@@ -264,6 +273,8 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
                 Error.Validation("Sales.Create.InvalidInput", ex.Message));
         }
 
+        sale.SetCashDrawer(effectiveCashDrawerId.HasValue ? new CashDrawerId(effectiveCashDrawerId.Value) : null);
+
         if (requestedStatus == SaleStatus.Paid)
         {
             var cashAmount = sale.GetPaymentAmount(SalePaymentMethod.Cash);
@@ -272,14 +283,14 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
 
             if (cashAmount > 0)
             {
-                if (_currentUserService.UserId is null || request.CashDrawerId is null)
+                if (_currentUserService.UserId is null || effectiveCashDrawerId is null)
                 {
                     return Result<CreateSaleResponse>.Failure(CreateSaleErrors.CashDrawerRequired);
                 }
 
                 session = await _cashSessionRepository.GetOpenForBranchAsync(
                     branch.Id,
-                    new CashDrawerId(request.CashDrawerId.Value),
+                    new CashDrawerId(effectiveCashDrawerId.Value),
                     companyId,
                     cancellationToken);
 
@@ -288,18 +299,20 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
                     return Result<CreateSaleResponse>.Failure(CreateSaleErrors.CashSessionRequired);
                 }
             }
-            else if (transferAmount > 0 && request.CashDrawerId.HasValue && _currentUserService.UserId is not null)
+            else if (transferAmount > 0 && effectiveCashDrawerId.HasValue && _currentUserService.UserId is not null)
             {
                 session = await _cashSessionRepository.GetOpenForBranchAsync(
                     branch.Id,
-                    new CashDrawerId(request.CashDrawerId.Value),
+                    new CashDrawerId(effectiveCashDrawerId.Value),
                     companyId,
                     cancellationToken);
             }
 
             try
             {
-                sale.MarkAsPaid(session?.Id);
+                sale.MarkAsPaid(
+                    effectiveCashDrawerId.HasValue ? new CashDrawerId(effectiveCashDrawerId.Value) : null,
+                    session?.Id);
 
                 if (cashAmount > 0)
                 {
@@ -430,6 +443,7 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
                 customer?.TaxId,
                 customerAddress,
                 sale.DeliveryAddress,
+                sale.CashDrawerId?.Value,
                 sale.CashSessionId?.Value,
                 sale.HasDelivery,
                 sale.TransportAssignmentId?.Value,

@@ -8,4 +8,5 @@ public sealed record CashDrawerResponse(
     DateTime CreatedAt,
     DateTime? UpdatedAt,
     Guid? AssignedUserId,
+    IReadOnlyList<Guid>? AssignedUserIds = null,
     bool HasOpenSession = false);

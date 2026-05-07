@@ -41,6 +41,12 @@ public sealed class SaleConfiguration : IEntityTypeConfiguration<Sale>
                 value => value.HasValue ? new CustomerId(value.Value) : null)
             .IsRequired(false);
 
+        builder.Property(sale => sale.CashDrawerId)
+            .HasConversion(
+                id => id == null ? (Guid?)null : id.Value,
+                value => value.HasValue ? new CashDrawerId(value.Value) : null)
+            .IsRequired(false);
+
         builder.Property(sale => sale.CashSessionId)
             .HasConversion(
                 id => id == null ? (Guid?)null : id.Value,
@@ -94,6 +100,11 @@ public sealed class SaleConfiguration : IEntityTypeConfiguration<Sale>
         builder.HasOne<Customer>()
             .WithMany()
             .HasForeignKey(sale => sale.CustomerId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne<CashDrawer>()
+            .WithMany()
+            .HasForeignKey(sale => sale.CashDrawerId)
             .OnDelete(DeleteBehavior.Restrict);
 
         builder.HasOne<CashSession>()

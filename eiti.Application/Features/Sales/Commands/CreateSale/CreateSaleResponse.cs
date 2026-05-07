@@ -10,6 +10,7 @@ public sealed record CreateSaleResponse(
     string? CustomerTaxId,
     string? CustomerAddress,
     string? DeliveryAddress,
+    Guid? CashDrawerId,
     Guid? CashSessionId,
     bool HasDelivery,
     Guid? TransportAssignmentId,

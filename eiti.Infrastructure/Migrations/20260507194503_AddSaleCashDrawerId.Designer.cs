@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using eiti.Infrastructure.Persistence;
 
@@ -11,9 +12,11 @@ using eiti.Infrastructure.Persistence;
 namespace eiti.Infrastructure.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260507194503_AddSaleCashDrawerId")]
+    partial class AddSaleCashDrawerId
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -187,6 +190,9 @@ namespace eiti.Infrastructure.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<Guid?>("AssignedUserId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<Guid>("BranchId")
                         .HasColumnType("uniqueidentifier");
 
@@ -209,36 +215,14 @@ namespace eiti.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("AssignedUserId");
+
                     b.HasIndex("CompanyId");
 
                     b.HasIndex("BranchId", "Name")
                         .IsUnique();
 
                     b.ToTable("CashDrawers", (string)null);
-                });
-
-            modelBuilder.Entity("eiti.Domain.Cash.CashDrawerUserAssignment", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<DateTime>("AssignedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<Guid>("CashDrawerId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CashDrawerId");
-
-                    b.HasIndex("UserId")
-                        .IsUnique();
-
-                    b.ToTable("CashDrawerUserAssignments", (string)null);
                 });
 
             modelBuilder.Entity("eiti.Domain.Cash.CashMovement", b =>
@@ -1465,15 +1449,6 @@ namespace eiti.Infrastructure.Migrations
                     b.HasOne("eiti.Domain.Cash.CashSession", null)
                         .WithMany("Movements")
                         .HasForeignKey("CashSessionId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("eiti.Domain.Cash.CashDrawerUserAssignment", b =>
-                {
-                    b.HasOne("eiti.Domain.Cash.CashDrawer", null)
-                        .WithMany()
-                        .HasForeignKey("CashDrawerId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });

@@ -14,6 +14,7 @@ public static class PermissionCatalog
         PermissionCodes.CashClose,
         PermissionCodes.CashWithdraw,
         PermissionCodes.CashDrawerManage,
+        PermissionCodes.CashDrawerViewAll,
         PermissionCodes.CashHistoryExport,
         PermissionCodes.UsersManage,
         PermissionCodes.SalesPriceOverride,

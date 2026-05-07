@@ -8,6 +8,7 @@ public sealed record GetSaleByIdResponse(
     string? CustomerFullName,
     string? CustomerDocument,
     string? CustomerTaxId,
+    Guid? CashDrawerId,
     bool HasDelivery,
     int IdSaleStatus,
     string SaleStatus,

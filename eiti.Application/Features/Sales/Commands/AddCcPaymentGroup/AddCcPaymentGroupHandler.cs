@@ -2,6 +2,7 @@ using eiti.Application.Abstractions.Data;
 using eiti.Application.Abstractions.Repositories;
 using eiti.Application.Abstractions.Services;
 using eiti.Application.Common;
+using eiti.Application.Common.Authorization;
 using eiti.Domain.Cash;
 using eiti.Domain.Cheques;
 using eiti.Domain.Sales;
@@ -16,6 +17,7 @@ public sealed class AddCcPaymentGroupHandler : IRequestHandler<AddCcPaymentGroup
     private readonly ISaleRepository _saleRepository;
     private readonly IBranchProductStockRepository _branchProductStockRepository;
     private readonly IStockMovementRepository _stockMovementRepository;
+    private readonly ICashDrawerRepository _cashDrawerRepository;
     private readonly ICashSessionRepository _cashSessionRepository;
     private readonly IBankRepository _bankRepository;
     private readonly IChequeRepository _chequeRepository;
@@ -26,6 +28,7 @@ public sealed class AddCcPaymentGroupHandler : IRequestHandler<AddCcPaymentGroup
         ISaleRepository saleRepository,
         IBranchProductStockRepository branchProductStockRepository,
         IStockMovementRepository stockMovementRepository,
+        ICashDrawerRepository cashDrawerRepository,
         ICashSessionRepository cashSessionRepository,
         IBankRepository bankRepository,
         IChequeRepository chequeRepository,
@@ -35,6 +38,7 @@ public sealed class AddCcPaymentGroupHandler : IRequestHandler<AddCcPaymentGroup
         _saleRepository = saleRepository;
         _branchProductStockRepository = branchProductStockRepository;
         _stockMovementRepository = stockMovementRepository;
+        _cashDrawerRepository = cashDrawerRepository;
         _cashSessionRepository = cashSessionRepository;
         _bankRepository = bankRepository;
         _chequeRepository = chequeRepository;
@@ -52,6 +56,12 @@ public sealed class AddCcPaymentGroupHandler : IRequestHandler<AddCcPaymentGroup
         {
             return Result<AddCcPaymentGroupResponse>.Failure(AddCcPaymentGroupErrors.Unauthorized);
         }
+
+        var effectiveCashDrawerId = await CashDrawerAccessPolicy.ResolveEffectiveDrawerIdAsync(
+            _currentUserService,
+            _cashDrawerRepository,
+            request.CashDrawerId,
+            cancellationToken);
 
         // Validate payment methods
         foreach (var method in request.Methods)
@@ -91,11 +101,11 @@ public sealed class AddCcPaymentGroupHandler : IRequestHandler<AddCcPaymentGroup
         }
 
         // Caja integration
-        if (request.CashDrawerId.HasValue)
+        if (effectiveCashDrawerId.HasValue)
         {
             var session = await _cashSessionRepository.GetOpenForBranchAsync(
                 sale.BranchId,
-                new CashDrawerId(request.CashDrawerId.Value),
+                new CashDrawerId(effectiveCashDrawerId.Value),
                 companyId,
                 cancellationToken);
 

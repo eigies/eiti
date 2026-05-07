@@ -2,6 +2,7 @@ using eiti.Application.Abstractions.Data;
 using eiti.Application.Abstractions.Repositories;
 using eiti.Application.Abstractions.Services;
 using eiti.Application.Common;
+using eiti.Application.Common.Authorization;
 using eiti.Application.Features.CashSessions.Common;
 using eiti.Domain.Cash;
 using MediatR;
@@ -11,15 +12,18 @@ namespace eiti.Application.Features.CashSessions.Commands.CreateCashWithdrawal;
 public sealed class CreateCashWithdrawalHandler : IRequestHandler<CreateCashWithdrawalCommand, Result<CashSessionResponse>>
 {
     private readonly ICurrentUserService _currentUserService;
+    private readonly ICashDrawerRepository _cashDrawerRepository;
     private readonly ICashSessionRepository _cashSessionRepository;
     private readonly IUnitOfWork _unitOfWork;
 
     public CreateCashWithdrawalHandler(
         ICurrentUserService currentUserService,
+        ICashDrawerRepository cashDrawerRepository,
         ICashSessionRepository cashSessionRepository,
         IUnitOfWork unitOfWork)
     {
         _currentUserService = currentUserService;
+        _cashDrawerRepository = cashDrawerRepository;
         _cashSessionRepository = cashSessionRepository;
         _unitOfWork = unitOfWork;
     }
@@ -36,6 +40,14 @@ public sealed class CreateCashWithdrawalHandler : IRequestHandler<CreateCashWith
         {
             return Result<CashSessionResponse>.Failure(Error.NotFound("CashSessions.Withdraw.NotFound", "The requested cash session was not found."));
         }
+
+        var accessCheck = await CashDrawerAccessPolicy.EnsureCanAccessDrawerAsync(
+            _currentUserService,
+            _cashDrawerRepository,
+            session.CashDrawerId,
+            cancellationToken);
+        if (accessCheck.IsFailure)
+            return Result<CashSessionResponse>.Failure(accessCheck.Error!);
 
         try
         {

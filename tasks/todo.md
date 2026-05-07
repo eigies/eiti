@@ -83,3 +83,16 @@
 - [x] Agregar filtro por canal en la lista (HTML + TS)
 - [x] Build frontend (0 errores)
 - [x] Documentar en tasks/lessons.md
+
+---
+
+# F6: Caja con multiples usuarios asignados
+
+- [x] Relevar modelo actual de asignacion de caja en backend y frontend
+- [x] Reemplazar asignacion singular por tabla `CashDrawerUserAssignments`
+- [x] Mantener restriccion de negocio: un usuario solo puede pertenecer a una caja
+- [x] Ajustar repositorio y login para resolver la caja efectiva del usuario desde la nueva tabla
+- [x] Adaptar administracion frontend para asignar varios usuarios por caja
+- [x] Crear migracion con backfill desde `CashDrawers.AssignedUserId`
+- [x] Incluir `Designer.cs` y snapshot consistentes para la migracion
+- [x] Verificar build frontend final

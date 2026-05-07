@@ -13,6 +13,7 @@ public sealed class Sale : AggregateRoot<SaleId>
     public CompanyId CompanyId { get; private set; } = null!;
     public BranchId BranchId { get; private set; } = null!;
     public CustomerId? CustomerId { get; private set; }
+    public CashDrawerId? CashDrawerId { get; private set; }
     public CashSessionId? CashSessionId { get; private set; }
     public bool HasDelivery { get; private set; }
     public SaleTransportAssignmentId? TransportAssignmentId { get; private set; }
@@ -456,7 +457,14 @@ public sealed class Sale : AggregateRoot<SaleId>
         IsModified = true;
     }
 
-    public void MarkAsPaid(CashSessionId? cashSessionId)
+    public void SetCashDrawer(CashDrawerId? cashDrawerId)
+    {
+        CashDrawerId = cashDrawerId;
+        UpdatedAt = DateTime.UtcNow;
+        IsModified = true;
+    }
+
+    public void MarkAsPaid(CashDrawerId? cashDrawerId, CashSessionId? cashSessionId)
     {
         if (SaleStatus == SaleStatus.Paid)
         {
@@ -477,6 +485,12 @@ public sealed class Sale : AggregateRoot<SaleId>
         }
 
         var transferAmount = GetPaymentAmount(SalePaymentMethod.Transfer);
+        if (CashDrawerId is not null && cashDrawerId is not null && CashDrawerId != cashDrawerId)
+        {
+            throw new InvalidOperationException("The sale must be paid using the originally assigned cash drawer.");
+        }
+
+        CashDrawerId = cashDrawerId ?? CashDrawerId;
         CashSessionId = (cashAmount > 0 || transferAmount > 0) ? cashSessionId : null;
         SaleStatus = SaleStatus.Paid;
         PaidAt = DateTime.UtcNow;

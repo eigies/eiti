@@ -1,6 +1,7 @@
 using eiti.Application.Abstractions.Repositories;
 using eiti.Application.Abstractions.Services;
 using eiti.Application.Common;
+using eiti.Application.Common.Authorization;
 using eiti.Domain.Cash;
 using MediatR;
 
@@ -9,13 +10,16 @@ namespace eiti.Application.Features.CashSessions.Queries.GetLastClosedCashSessio
 public sealed class GetLastClosedCashSessionHandler : IRequestHandler<GetLastClosedCashSessionQuery, Result<LastClosedCashSessionResponse>>
 {
     private readonly ICurrentUserService _currentUserService;
+    private readonly ICashDrawerRepository _cashDrawerRepository;
     private readonly ICashSessionRepository _cashSessionRepository;
 
     public GetLastClosedCashSessionHandler(
         ICurrentUserService currentUserService,
+        ICashDrawerRepository cashDrawerRepository,
         ICashSessionRepository cashSessionRepository)
     {
         _currentUserService = currentUserService;
+        _cashDrawerRepository = cashDrawerRepository;
         _cashSessionRepository = cashSessionRepository;
     }
 
@@ -24,6 +28,14 @@ public sealed class GetLastClosedCashSessionHandler : IRequestHandler<GetLastClo
         var authCheck = _currentUserService.EnsureAuthenticated();
         if (authCheck.IsFailure)
             return Result<LastClosedCashSessionResponse>.Failure(authCheck.Error);
+
+        var accessCheck = await CashDrawerAccessPolicy.EnsureCanAccessDrawerAsync(
+            _currentUserService,
+            _cashDrawerRepository,
+            new CashDrawerId(request.CashDrawerId),
+            cancellationToken);
+        if (accessCheck.IsFailure)
+            return Result<LastClosedCashSessionResponse>.Failure(accessCheck.Error!);
 
         var session = await _cashSessionRepository.GetLastClosedByDrawerAsync(
             new CashDrawerId(request.CashDrawerId),

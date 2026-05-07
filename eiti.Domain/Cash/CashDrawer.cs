@@ -1,7 +1,6 @@
 using eiti.Domain.Branches;
 using eiti.Domain.Companies;
 using eiti.Domain.Primitives;
-using eiti.Domain.Users;
 
 namespace eiti.Domain.Cash;
 
@@ -13,7 +12,6 @@ public sealed class CashDrawer : AggregateRoot<CashDrawerId>
     public bool IsActive { get; private set; }
     public DateTime CreatedAt { get; private set; }
     public DateTime? UpdatedAt { get; private set; }
-    public UserId? AssignedUserId { get; private set; }
 
     private CashDrawer()
     {
@@ -51,12 +49,6 @@ public sealed class CashDrawer : AggregateRoot<CashDrawerId>
     {
         Name = NormalizeName(name);
         IsActive = isActive;
-        UpdatedAt = DateTime.UtcNow;
-    }
-
-    public void Assign(UserId? userId)
-    {
-        AssignedUserId = userId;
         UpdatedAt = DateTime.UtcNow;
     }
 

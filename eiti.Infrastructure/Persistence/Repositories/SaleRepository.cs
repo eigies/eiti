@@ -75,6 +75,19 @@ public sealed class SaleRepository : ISaleRepository
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<bool> HasOnHoldSalesByCashDrawerAsync(
+        CompanyId companyId,
+        CashDrawerId cashDrawerId,
+        CancellationToken cancellationToken = default)
+    {
+        return await _context.Sales.AnyAsync(
+            sale => sale.CompanyId == companyId
+                && !sale.IsCuentaCorriente
+                && sale.CashDrawerId == cashDrawerId
+                && sale.SaleStatus == SaleStatus.OnHold,
+            cancellationToken);
+    }
+
     public async Task<IReadOnlyList<SalePayment>> GetPaymentsBySaleIdsAsync(
         IEnumerable<Guid> saleIds,
         CancellationToken cancellationToken = default)

@@ -25,6 +25,11 @@ public interface ISaleRepository
         int? idSaleStatus,
         CancellationToken cancellationToken = default);
 
+    Task<bool> HasOnHoldSalesByCashDrawerAsync(
+        CompanyId companyId,
+        CashDrawerId cashDrawerId,
+        CancellationToken cancellationToken = default);
+
     Task<IReadOnlyList<SalePayment>> GetPaymentsBySaleIdsAsync(
         IEnumerable<Guid> saleIds,
         CancellationToken cancellationToken = default);

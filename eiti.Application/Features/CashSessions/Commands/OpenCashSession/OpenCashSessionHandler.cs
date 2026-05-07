@@ -2,6 +2,7 @@ using eiti.Application.Abstractions.Data;
 using eiti.Application.Abstractions.Repositories;
 using eiti.Application.Abstractions.Services;
 using eiti.Application.Common;
+using eiti.Application.Common.Authorization;
 using eiti.Application.Features.CashSessions.Common;
 using eiti.Domain.Cash;
 using MediatR;
@@ -32,6 +33,14 @@ public sealed class OpenCashSessionHandler : IRequestHandler<OpenCashSessionComm
         var authCheck = _currentUserService.EnsureAuthenticatedWithContext();
         if (authCheck.IsFailure)
             return Result<CashSessionResponse>.Failure(authCheck.Error);
+
+        var accessCheck = await CashDrawerAccessPolicy.EnsureCanAccessDrawerAsync(
+            _currentUserService,
+            _cashDrawerRepository,
+            new CashDrawerId(request.CashDrawerId),
+            cancellationToken);
+        if (accessCheck.IsFailure)
+            return Result<CashSessionResponse>.Failure(accessCheck.Error!);
 
         var drawer = await _cashDrawerRepository.GetByIdAsync(new CashDrawerId(request.CashDrawerId), _currentUserService.CompanyId, cancellationToken);
 

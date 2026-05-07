@@ -30,6 +30,7 @@ public sealed class ApplicationDbContext : DbContext
     public DbSet<Branch> Branches { get; set; }
     public DbSet<Address> Addresses { get; set; }
     public DbSet<CashDrawer> CashDrawers { get; set; }
+    public DbSet<CashDrawerUserAssignment> CashDrawerUserAssignments { get; set; }
     public DbSet<CashSession> CashSessions { get; set; }
     public DbSet<CashMovement> CashMovements { get; set; }
     public DbSet<Customer> Customers { get; set; }

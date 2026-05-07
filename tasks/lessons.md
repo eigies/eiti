@@ -125,3 +125,16 @@
 - El getter de columnas visibles debe estar en el componente (no en el template) para mantener el template limpio y la lógica testeeable
 - Al reducir padding de celdas, reducir también el min-width de la tabla para que con menos columnas no sobre espacio horizontal vacío
 - El botón de detalle en la columna Acciones debe tener `*ngIf="!bulkEditMode"` igual que Editar y Eliminar para no confundir en modo bulk
+
+## 2026-05-07
+### Cambios realizados
+- Se reemplazo la asignacion singular `CashDrawers.AssignedUserId` por la tabla `CashDrawerUserAssignments`
+- Se mantuvo la regla operativa `usuario -> una sola caja` mediante indice unico en `UserId`
+- El login y las restricciones de caja siguen resolviendo una sola caja efectiva por usuario usando repositorio
+- La pantalla de asignacion de cajas ahora permite seleccionar varios usuarios por caja y reasignarlos entre cajas
+- Se agrego la migracion `AddCashDrawerUserAssignments` con backfill desde la columna vieja y se elimino `AssignedUserId` del modelo actual
+
+### Lecciones aprendidas
+- En este proyecto, una migracion EF no se considera entregable si no incluye los tres artefactos sincronizados: `.cs`, `.Designer.cs` y `ApplicationDbContextModelSnapshot.cs`
+- Cuando se migra de una columna legacy a una tabla nueva, conviene preservar compatibilidad en contratos API por una iteracion (`AssignedUserId` + `AssignedUserIds`) y mover la persistencia por debajo
+- Si el negocio es `una caja muchos usuarios` pero `un usuario una caja`, la restriccion correcta va en base de datos con `UNIQUE(UserId)`, no en validaciones dispersas de UI

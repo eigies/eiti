@@ -31,4 +31,14 @@ public interface ICashDrawerRepository
         UserId userId,
         CompanyId companyId,
         CancellationToken cancellationToken = default);
+
+    Task<Dictionary<Guid, IReadOnlyList<Guid>>> GetAssignedUserIdsByDrawerIdsAsync(
+        IEnumerable<Guid> drawerIds,
+        CancellationToken cancellationToken = default);
+
+    Task AssignUsersAsync(
+        CashDrawerId drawerId,
+        CompanyId companyId,
+        IReadOnlyCollection<UserId> userIds,
+        CancellationToken cancellationToken = default);
 }

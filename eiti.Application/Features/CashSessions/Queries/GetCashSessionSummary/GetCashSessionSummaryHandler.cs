@@ -1,6 +1,7 @@
 using eiti.Application.Abstractions.Repositories;
 using eiti.Application.Abstractions.Services;
 using eiti.Application.Common;
+using eiti.Application.Common.Authorization;
 using eiti.Application.Features.CashSessions.Common;
 using eiti.Domain.Cash;
 using MediatR;
@@ -10,17 +11,20 @@ namespace eiti.Application.Features.CashSessions.Queries.GetCashSessionSummary;
 public sealed class GetCashSessionSummaryHandler : IRequestHandler<GetCashSessionSummaryQuery, Result<CashSessionSummaryResponse>>
 {
     private readonly ICurrentUserService _currentUserService;
+    private readonly ICashDrawerRepository _cashDrawerRepository;
     private readonly ICashSessionRepository _cashSessionRepository;
     private readonly ISaleRepository _saleRepository;
     private readonly IBankRepository _bankRepository;
 
     public GetCashSessionSummaryHandler(
         ICurrentUserService currentUserService,
+        ICashDrawerRepository cashDrawerRepository,
         ICashSessionRepository cashSessionRepository,
         ISaleRepository saleRepository,
         IBankRepository bankRepository)
     {
         _currentUserService = currentUserService;
+        _cashDrawerRepository = cashDrawerRepository;
         _cashSessionRepository = cashSessionRepository;
         _saleRepository = saleRepository;
         _bankRepository = bankRepository;
@@ -40,6 +44,14 @@ public sealed class GetCashSessionSummaryHandler : IRequestHandler<GetCashSessio
         {
             return Result<CashSessionSummaryResponse>.Failure(Error.NotFound("CashSessions.Summary.NotFound", "The requested cash session was not found."));
         }
+
+        var accessCheck = await CashDrawerAccessPolicy.EnsureCanAccessDrawerAsync(
+            _currentUserService,
+            _cashDrawerRepository,
+            session.CashDrawerId,
+            cancellationToken);
+        if (accessCheck.IsFailure)
+            return Result<CashSessionSummaryResponse>.Failure(accessCheck.Error!);
 
         var payments = await _saleRepository.GetPaymentsByCashSessionIdAsync(session.Id, cancellationToken);
 
