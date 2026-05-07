@@ -5,13 +5,9 @@ namespace eiti.Application.Features.Auth.Common;
 
 public static class AuthenticationMapper
 {
-    public static (IReadOnlyList<string> Roles, IReadOnlyList<string> Permissions) MapRolesAndPermissions(User user)
-    {
-        var permissions = user.AccessProfile.Permissions
-            .Select(permission => permission.PermissionCode)
-            .OrderBy(permission => permission)
+    public static IReadOnlyList<string> MapPermissions(User user) =>
+        user.AccessProfile.Permissions
+            .Select(p => p.PermissionCode)
+            .OrderBy(p => p)
             .ToArray();
-
-        return (Array.Empty<string>(), permissions);
-    }
 }

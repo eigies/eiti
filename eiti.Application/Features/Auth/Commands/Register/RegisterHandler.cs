@@ -92,7 +92,7 @@ public sealed class RegisterHandler
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         var token = _jwtTokenGenerator.GenerateToken(user);
-        var (roles, permissions) = AuthenticationMapper.MapRolesAndPermissions(user);
+        var permissions = AuthenticationMapper.MapPermissions(user);
 
         return Result<RegisterResponse>.Success(
             new RegisterResponse(
@@ -100,7 +100,6 @@ public sealed class RegisterHandler
                 user.Username.Value,
                 user.Email.Value,
                 token,
-                roles,
                 user.AccessProfileId.Value,
                 ownerProfile.Name,
                 permissions));

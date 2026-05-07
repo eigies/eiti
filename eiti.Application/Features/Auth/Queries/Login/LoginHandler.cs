@@ -74,7 +74,7 @@ public sealed class LoginHandler
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         var token = _jwtTokenGenerator.GenerateToken(user);
-        var (roles, permissions) = AuthenticationMapper.MapRolesAndPermissions(user);
+        var permissions = AuthenticationMapper.MapPermissions(user);
 
         var assignedDrawer = await _cashDrawerRepository.GetByAssignedUserAsync(
             user.Id,
@@ -87,7 +87,6 @@ public sealed class LoginHandler
                 user.Username.Value,
                 user.Email.Value,
                 token,
-                roles,
                 user.AccessProfileId.Value,
                 user.AccessProfile.Name,
                 permissions,

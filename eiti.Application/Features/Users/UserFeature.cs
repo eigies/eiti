@@ -21,8 +21,7 @@ public sealed record UserResponse(
     string? ProfileName,
     IReadOnlyList<string> Permissions,
     DateTime CreatedAt,
-    DateTime? LastLoginAt,
-    IReadOnlyList<string> Roles);
+    DateTime? LastLoginAt);
 
 public sealed record UserProfileAuditResponse(
     Guid Id,
@@ -498,8 +497,7 @@ internal static class UserMappings
             profile.Name,
             permissions,
             user.CreatedAt,
-            user.LastLoginAt,
-            []);
+            user.LastLoginAt);
     }
 
     public static UserProfileAuditResponse MapAudit(UserRoleAudit audit, IReadOnlyDictionary<UserId, string> usernameMap)
