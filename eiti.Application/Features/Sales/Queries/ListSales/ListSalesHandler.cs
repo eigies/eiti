@@ -216,26 +216,17 @@ public sealed class ListSalesHandler : IRequestHandler<ListSalesQuery, Result<IR
 
     private static string? FormatAddress(Address address)
     {
-        var parts = new List<string>();
+        if (string.IsNullOrWhiteSpace(address.Street))
+            return null;
 
-        if (!string.IsNullOrWhiteSpace(address.Street))
-        {
-            var street = address.Street;
-            if (!string.IsNullOrWhiteSpace(address.StreetNumber))
-                street += $" {address.StreetNumber}";
-            if (!string.IsNullOrWhiteSpace(address.Floor))
-                street += $", Piso {address.Floor}";
-            if (!string.IsNullOrWhiteSpace(address.Apartment))
-                street += $", Depto {address.Apartment}";
-            parts.Add(street);
-        }
+        var street = address.Street;
+        if (!string.IsNullOrWhiteSpace(address.StreetNumber))
+            street += $" {address.StreetNumber}";
+        if (!string.IsNullOrWhiteSpace(address.Floor))
+            street += $", Piso {address.Floor}";
+        if (!string.IsNullOrWhiteSpace(address.Apartment))
+            street += $", Depto {address.Apartment}";
 
-        if (!string.IsNullOrWhiteSpace(address.City))
-            parts.Add(address.City);
-
-        if (!string.IsNullOrWhiteSpace(address.StateOrProvince))
-            parts.Add(address.StateOrProvince);
-
-        return parts.Count > 0 ? string.Join(", ", parts) : null;
+        return street;
     }
 }
