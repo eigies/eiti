@@ -59,7 +59,7 @@ public sealed class ImportProductsHandler
             companyId,
             cancellationToken);
 
-        var branches = await _branchRepository.ListByCompanyAsync(companyId, cancellationToken);
+        var branches = await _branchRepository.ListByCompanyAsync(companyId, cancellationToken) ?? [];
         var branchesByName = branches.ToDictionary(b => b.Name, StringComparer.OrdinalIgnoreCase);
 
         var productsByCode = products.ToDictionary(product => product.Code, StringComparer.OrdinalIgnoreCase);

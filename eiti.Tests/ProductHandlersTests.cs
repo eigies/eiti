@@ -201,12 +201,15 @@ public sealed class ProductHandlersTests
         var handler = new ImportProductsHandler(
             currentUserService.Object,
             productRepository.Object,
+            new Mock<IBranchRepository>().Object,
+            new Mock<IBranchProductStockRepository>().Object,
+            new Mock<IStockMovementRepository>().Object,
             companyOnboardingRepository.Object,
             unitOfWork.Object);
 
         var result = await handler.Handle(
             new ImportProductsCommand([
-                new ImportProductRowRequest("BAT-001", "BAT-001", "Contoso", "Bateria", null, 100m, 70m, 10m, false, 5m)
+                new ImportProductRowRequest("BAT-001", "BAT-001", "Contoso", "Bateria", null, 100m, 70m, 10m, false, 5m, null, null)
             ]),
             CancellationToken.None);
 
@@ -243,12 +246,15 @@ public sealed class ProductHandlersTests
         var handler = new ImportProductsHandler(
             currentUserService.Object,
             productRepository.Object,
+            new Mock<IBranchRepository>().Object,
+            new Mock<IBranchProductStockRepository>().Object,
+            new Mock<IStockMovementRepository>().Object,
             companyOnboardingRepository.Object,
             unitOfWork.Object);
 
         var result = await handler.Handle(
             new ImportProductsCommand([
-                new ImportProductRowRequest("BAT-001", "BAT-002", "Acme", "Bateria Premium", "Nueva", 140m, 80m, 12m, false, 8m)
+                new ImportProductRowRequest("BAT-001", "BAT-002", "Acme", "Bateria Premium", "Nueva", 140m, 80m, 12m, false, 8m, null, null)
             ]),
             CancellationToken.None);
 
@@ -300,17 +306,20 @@ public sealed class ProductHandlersTests
         var handler = new ImportProductsHandler(
             currentUserService.Object,
             productRepository.Object,
+            new Mock<IBranchRepository>().Object,
+            new Mock<IBranchProductStockRepository>().Object,
+            new Mock<IStockMovementRepository>().Object,
             companyOnboardingRepository.Object,
             unitOfWork.Object);
 
         var result = await handler.Handle(
             new ImportProductsCommand([
-                new ImportProductRowRequest("NEW-001", "NEW-001", "Acme", "Nuevo", null, 120m, 60m, null, false, null),
-                new ImportProductRowRequest("DUP-001", "DUP-001", "Acme", "Duplicado A", null, 120m, 60m, null, false, null),
-                new ImportProductRowRequest("DUP-001", "DUP-002", "Acme", "Duplicado B", null, 130m, 60m, null, false, null),
-                new ImportProductRowRequest("SKU-CLASH", "BAT-001", "Acme", "Choque SKU", null, 140m, 70m, null, false, null),
-                new ImportProductRowRequest("USED-001", "USED-001", "Contoso", "Usado", null, 0m, 0m, null, true, null),
-                new ImportProductRowRequest("BAD-001", "BAD-001", "Acme", "Precio invalido", null, 0m, 50m, null, false, null)
+                new ImportProductRowRequest("NEW-001", "NEW-001", "Acme", "Nuevo", null, 120m, 60m, null, false, null, null, null),
+                new ImportProductRowRequest("DUP-001", "DUP-001", "Acme", "Duplicado A", null, 120m, 60m, null, false, null, null, null),
+                new ImportProductRowRequest("DUP-001", "DUP-002", "Acme", "Duplicado B", null, 130m, 60m, null, false, null, null, null),
+                new ImportProductRowRequest("SKU-CLASH", "BAT-001", "Acme", "Choque SKU", null, 140m, 70m, null, false, null, null, null),
+                new ImportProductRowRequest("USED-001", "USED-001", "Contoso", "Usado", null, 0m, 0m, null, true, null, null, null),
+                new ImportProductRowRequest("BAD-001", "BAD-001", "Acme", "Precio invalido", null, 0m, 50m, null, false, null, null, null)
             ]),
             CancellationToken.None);
 

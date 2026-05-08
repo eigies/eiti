@@ -22,28 +22,18 @@ public sealed class AuthenticationMapperTests
     }
 
     [Fact]
-    public void MapRolesAndPermissions_ShouldReturnEmptyLegacyRoles()
-    {
-        var user = CreateUserWithPermissions(PermissionCodes.UsersManage);
-
-        var (roles, _) = AuthenticationMapper.MapRolesAndPermissions(user);
-
-        roles.Should().BeEmpty();
-    }
-
-    [Fact]
-    public void MapRolesAndPermissions_ShouldReturnPermissionsSorted()
+    public void MapPermissions_ShouldReturnPermissionsSorted()
     {
         var user = CreateUserWithPermissions(PermissionCodes.UsersManage, PermissionCodes.SalesAccess);
 
-        var (_, permissions) = AuthenticationMapper.MapRolesAndPermissions(user);
+        var permissions = AuthenticationMapper.MapPermissions(user);
 
         permissions.Should().NotBeEmpty();
         permissions.Should().BeInAscendingOrder();
     }
 
     [Fact]
-    public void MapRolesAndPermissions_ShouldReturnCorrectPermissions_ForSellerRole()
+    public void MapPermissions_ShouldReturnCorrectPermissions_ForSellerRole()
     {
         var companyId = CompanyId.New();
         var profile = AccessProfile.Create(companyId, "Seller", "Seller", [
@@ -59,15 +49,14 @@ public sealed class AuthenticationMapperTests
             companyId,
             profile);
 
-        var (roles, permissions) = AuthenticationMapper.MapRolesAndPermissions(user);
+        var permissions = AuthenticationMapper.MapPermissions(user);
 
-        roles.Should().BeEmpty();
         permissions.Should().Contain(PermissionCodes.SalesAccess);
         permissions.Should().NotContain(PermissionCodes.CashAccess);
     }
 
     [Fact]
-    public void MapRolesAndPermissions_ShouldReadPermissions_FromAssignedProfile()
+    public void MapPermissions_ShouldReadPermissions_FromAssignedProfile()
     {
         var companyId = CompanyId.New();
         var profile = AccessProfile.Create(companyId, "Combo", "Combo", [
@@ -81,9 +70,8 @@ public sealed class AuthenticationMapperTests
             companyId,
             profile);
 
-        var (roles, permissions) = AuthenticationMapper.MapRolesAndPermissions(user);
+        var permissions = AuthenticationMapper.MapPermissions(user);
 
-        roles.Should().BeEmpty();
         permissions.Should().Contain(PermissionCodes.SalesAccess);
         permissions.Should().Contain(PermissionCodes.CashAccess);
     }

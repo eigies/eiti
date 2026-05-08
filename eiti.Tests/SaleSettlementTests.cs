@@ -15,7 +15,7 @@ public sealed class SaleSettlementTests
             [SalePayment.Create(SalePaymentMethod.Transfer, 50m, null)],
             []);
 
-        var act = () => sale.MarkAsPaid(null);
+        var act = () => sale.MarkAsPaid(null, null);
 
         act.Should().Throw<InvalidOperationException>()
             .WithMessage("*must cover the total amount*");
@@ -29,7 +29,7 @@ public sealed class SaleSettlementTests
             [],
             allowOverpayment: true);
 
-        sale.MarkAsPaid(null);
+        sale.MarkAsPaid(null, null);
 
         sale.SaleStatus.Should().Be(SaleStatus.Paid);
         sale.ChangeAmount.Should().Be(50m);
@@ -42,7 +42,7 @@ public sealed class SaleSettlementTests
             [SalePayment.Create(SalePaymentMethod.Cash, 100m, null)],
             []);
 
-        var act = () => sale.MarkAsPaid(null);
+        var act = () => sale.MarkAsPaid(null, null);
 
         act.Should().Throw<InvalidOperationException>()
             .WithMessage("*cash session is required*");
@@ -55,7 +55,7 @@ public sealed class SaleSettlementTests
             [SalePayment.Create(SalePaymentMethod.Transfer, 100m, "TRX-001")],
             []);
 
-        sale.MarkAsPaid(null);
+        sale.MarkAsPaid(null, null);
 
         sale.SaleStatus.Should().Be(SaleStatus.Paid);
         sale.CashSessionId.Should().BeNull();

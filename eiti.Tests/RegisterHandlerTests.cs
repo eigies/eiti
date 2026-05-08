@@ -1,6 +1,7 @@
 using eiti.Application.Abstractions.Data;
 using eiti.Application.Abstractions.Repositories;
 using eiti.Application.Abstractions.Services;
+using eiti.Application.Common.Authorization;
 using eiti.Application.Features.Auth.Commands.Register;
 using eiti.Domain.Companies;
 using eiti.Domain.Users;

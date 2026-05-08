@@ -31,7 +31,7 @@ public sealed class SendSaleWhatsAppHandlerTests
             [SaleDetail.Create(product.Id, 1, product.Price)],
             [SalePayment.Create(SalePaymentMethod.Transfer, 100m, null)],
             []);
-        sale.MarkAsPaid(null);
+        sale.MarkAsPaid(null, null);
 
         var company = Company.Create(CompanyName.Create("Mi Empresa"), CompanyDomain.Create("miempresa.local"));
         company.Update(CompanyName.Create("Mi Empresa"), CompanyDomain.Create("miempresa.local"), true, "+5491199988877");
@@ -102,7 +102,7 @@ public sealed class SendSaleWhatsAppHandlerTests
             [SaleDetail.Create(product.Id, 1, product.Price)],
             [SalePayment.Create(SalePaymentMethod.Transfer, 100m, null)],
             []);
-        sale.MarkAsPaid(null);
+        sale.MarkAsPaid(null, null);
 
         var company = Company.Create(CompanyName.Create("Mi Empresa"), CompanyDomain.Create("miempresa.local"));
 
