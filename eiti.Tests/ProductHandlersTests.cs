@@ -3,6 +3,7 @@ using eiti.Application.Abstractions.Repositories;
 using eiti.Application.Abstractions.Services;
 using eiti.Application.Features.Products.Commands.CreateProduct;
 using eiti.Application.Features.Products.Commands.DeleteProduct;
+using eiti.Application.Features.Products.Commands.ImportProducts;
 using eiti.Application.Features.Products.Queries.ListPagedProducts;
 using eiti.Application.Features.Products.Queries.ListProducts;
 using eiti.Domain.Companies;
@@ -162,6 +163,168 @@ public sealed class ProductHandlersTests
 
         result.IsSuccess.Should().BeFalse();
         result.Error!.Code.Should().Be("Products.Create.PublicPriceMustBePositive");
+    }
+
+    [Fact]
+    public async Task ImportProducts_ShouldCreateNewProducts()
+    {
+        var companyId = CompanyId.New();
+        var products = new List<Product>();
+
+        var currentUserService = new Mock<ICurrentUserService>();
+        var productRepository = new Mock<IProductRepository>();
+        var companyOnboardingRepository = new Mock<ICompanyOnboardingRepository>();
+        var unitOfWork = new Mock<IUnitOfWork>();
+
+        currentUserService.SetupGet(service => service.IsAuthenticated).Returns(true);
+        currentUserService.SetupGet(service => service.CompanyId).Returns(companyId);
+
+        productRepository
+            .Setup(repository => repository.GetByCompanyIdAsync(
+                companyId,
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(products);
+
+        productRepository
+            .Setup(repository => repository.AddAsync(
+                It.IsAny<Product>(),
+                It.IsAny<CancellationToken>()))
+            .Callback<Product, CancellationToken>((product, _) => products.Add(product))
+            .Returns(Task.CompletedTask);
+
+        companyOnboardingRepository
+            .Setup(repository => repository.GetByCompanyIdAsync(
+                companyId,
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync((CompanyOnboarding?)null);
+
+        var handler = new ImportProductsHandler(
+            currentUserService.Object,
+            productRepository.Object,
+            companyOnboardingRepository.Object,
+            unitOfWork.Object);
+
+        var result = await handler.Handle(
+            new ImportProductsCommand([
+                new ImportProductRowRequest("BAT-001", "BAT-001", "Contoso", "Bateria", null, 100m, 70m, 10m, false, 5m)
+            ]),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.CreatedCount.Should().Be(1);
+        result.Value.UpdatedCount.Should().Be(0);
+        result.Value.ErrorCount.Should().Be(0);
+        result.Value.Rows.Should().ContainSingle(row => row.Action == "created" && row.Code == "BAT-001");
+        products.Should().ContainSingle(product => product.Code == "BAT-001" && product.Price == 100m);
+        unitOfWork.Verify(workflow => workflow.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ImportProducts_ShouldUpdateExistingProduct_WhenCodeMatches()
+    {
+        var companyId = CompanyId.New();
+        var existingProduct = Product.Create(companyId, "BAT-001", "BAT-001", "Contoso", "Bateria", null, 100m, 70m, 10m);
+        var products = new List<Product> { existingProduct };
+
+        var currentUserService = new Mock<ICurrentUserService>();
+        var productRepository = new Mock<IProductRepository>();
+        var companyOnboardingRepository = new Mock<ICompanyOnboardingRepository>();
+        var unitOfWork = new Mock<IUnitOfWork>();
+
+        currentUserService.SetupGet(service => service.IsAuthenticated).Returns(true);
+        currentUserService.SetupGet(service => service.CompanyId).Returns(companyId);
+
+        productRepository
+            .Setup(repository => repository.GetByCompanyIdAsync(
+                companyId,
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(products);
+
+        var handler = new ImportProductsHandler(
+            currentUserService.Object,
+            productRepository.Object,
+            companyOnboardingRepository.Object,
+            unitOfWork.Object);
+
+        var result = await handler.Handle(
+            new ImportProductsCommand([
+                new ImportProductRowRequest("BAT-001", "BAT-002", "Acme", "Bateria Premium", "Nueva", 140m, 80m, 12m, false, 8m)
+            ]),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.CreatedCount.Should().Be(0);
+        result.Value.UpdatedCount.Should().Be(1);
+        result.Value.ErrorCount.Should().Be(0);
+        existingProduct.Sku.Should().Be("BAT-002");
+        existingProduct.Brand.Should().Be("Acme");
+        existingProduct.Name.Should().Be("Bateria Premium");
+        existingProduct.Price.Should().Be(140m);
+    }
+
+    [Fact]
+    public async Task ImportProducts_ShouldReturnPartialResults_ForMixedRows()
+    {
+        var companyId = CompanyId.New();
+        var existingProduct = Product.Create(companyId, "USED-001", "USED-001", "Contoso", "Usado", null, 0m, 0m, null, true);
+        var skuOwner = Product.Create(companyId, "BAT-001", "BAT-001", "Contoso", "Bateria", null, 100m, 70m, 10m);
+        var products = new List<Product> { existingProduct, skuOwner };
+
+        var currentUserService = new Mock<ICurrentUserService>();
+        var productRepository = new Mock<IProductRepository>();
+        var companyOnboardingRepository = new Mock<ICompanyOnboardingRepository>();
+        var unitOfWork = new Mock<IUnitOfWork>();
+
+        currentUserService.SetupGet(service => service.IsAuthenticated).Returns(true);
+        currentUserService.SetupGet(service => service.CompanyId).Returns(companyId);
+
+        productRepository
+            .Setup(repository => repository.GetByCompanyIdAsync(
+                companyId,
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(products);
+
+        productRepository
+            .Setup(repository => repository.AddAsync(
+                It.IsAny<Product>(),
+                It.IsAny<CancellationToken>()))
+            .Callback<Product, CancellationToken>((product, _) => products.Add(product))
+            .Returns(Task.CompletedTask);
+
+        companyOnboardingRepository
+            .Setup(repository => repository.GetByCompanyIdAsync(
+                companyId,
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync((CompanyOnboarding?)null);
+
+        var handler = new ImportProductsHandler(
+            currentUserService.Object,
+            productRepository.Object,
+            companyOnboardingRepository.Object,
+            unitOfWork.Object);
+
+        var result = await handler.Handle(
+            new ImportProductsCommand([
+                new ImportProductRowRequest("NEW-001", "NEW-001", "Acme", "Nuevo", null, 120m, 60m, null, false, null),
+                new ImportProductRowRequest("DUP-001", "DUP-001", "Acme", "Duplicado A", null, 120m, 60m, null, false, null),
+                new ImportProductRowRequest("DUP-001", "DUP-002", "Acme", "Duplicado B", null, 130m, 60m, null, false, null),
+                new ImportProductRowRequest("SKU-CLASH", "BAT-001", "Acme", "Choque SKU", null, 140m, 70m, null, false, null),
+                new ImportProductRowRequest("USED-001", "USED-001", "Contoso", "Usado", null, 0m, 0m, null, true, null),
+                new ImportProductRowRequest("BAD-001", "BAD-001", "Acme", "Precio invalido", null, 0m, 50m, null, false, null)
+            ]),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.TotalRows.Should().Be(6);
+        result.Value.CreatedCount.Should().Be(1);
+        result.Value.UpdatedCount.Should().Be(1);
+        result.Value.ErrorCount.Should().Be(4);
+        result.Value.Rows.Should().Contain(row => row.RowNumber == 3 && row.Action == "error");
+        result.Value.Rows.Should().Contain(row => row.RowNumber == 4 && row.Action == "error");
+        result.Value.Rows.Should().Contain(row => row.RowNumber == 5 && row.Action == "error");
+        result.Value.Rows.Should().Contain(row => row.RowNumber == 7 && row.Action == "error");
+        result.Value.Rows.Should().Contain(row => row.RowNumber == 6 && row.Action == "updated");
+        products.Should().Contain(product => product.Code == "NEW-001");
     }
 
     [Fact]

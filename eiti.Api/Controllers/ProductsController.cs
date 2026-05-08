@@ -1,6 +1,7 @@
 using eiti.Api.Extensions;
 using eiti.Application.Features.Products.Commands.CreateProduct;
 using eiti.Application.Features.Products.Commands.DeleteProduct;
+using eiti.Application.Features.Products.Commands.ImportProducts;
 using eiti.Application.Features.Products.Commands.UpdateProduct;
 using eiti.Application.Features.Products.Queries.ListPagedProducts;
 using eiti.Application.Features.Products.Queries.ListProducts;
@@ -25,6 +26,15 @@ public sealed class ProductsController : ControllerBase
     [HttpPost]
     public async Task<IActionResult> CreateProduct(
         [FromBody] CreateProductCommand command,
+        CancellationToken cancellationToken)
+    {
+        var result = await _sender.Send(command, cancellationToken);
+        return result.ToActionResult();
+    }
+
+    [HttpPost("import")]
+    public async Task<IActionResult> ImportProducts(
+        [FromBody] ImportProductsCommand command,
         CancellationToken cancellationToken)
     {
         var result = await _sender.Send(command, cancellationToken);
