@@ -1,4 +1,5 @@
 using eiti.Api.Extensions;
+using eiti.Application.Features.Auth.Commands.RefreshToken;
 using eiti.Application.Features.Auth.Commands.Register;
 using eiti.Application.Features.Auth.Commands.RequestPasswordReset;
 using eiti.Application.Features.Auth.Commands.ResetPassword;
@@ -40,6 +41,16 @@ public sealed class AuthController : ControllerBase
         CancellationToken cancellationToken)
     {
         var result = await _sender.Send(query, cancellationToken);
+        return result.ToActionResult();
+    }
+
+    [HttpPost("refresh")]
+    [AllowAnonymous]
+    public async Task<IActionResult> RefreshToken(
+        [FromBody] RefreshTokenCommand command,
+        CancellationToken cancellationToken)
+    {
+        var result = await _sender.Send(command, cancellationToken);
         return result.ToActionResult();
     }
 

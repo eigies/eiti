@@ -71,9 +71,11 @@ public sealed class LoginHandler
         }
 
         user.UpdateLastLogin();
+        var token = _jwtTokenGenerator.GenerateToken(user);
+        var refreshToken = _jwtTokenGenerator.GenerateRefreshToken();
+        user.SetRefreshToken(refreshToken, DateTime.UtcNow.AddDays(7));
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-        var token = _jwtTokenGenerator.GenerateToken(user);
         var permissions = AuthenticationMapper.MapPermissions(user);
 
         var assignedDrawer = await _cashDrawerRepository.GetByAssignedUserAsync(
@@ -87,6 +89,7 @@ public sealed class LoginHandler
                 user.Username.Value,
                 user.Email.Value,
                 token,
+                refreshToken,
                 user.AccessProfileId.Value,
                 user.AccessProfile.Name,
                 permissions,

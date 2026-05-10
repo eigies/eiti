@@ -35,4 +35,8 @@ public static class CreateSaleErrors
     public static readonly Error CashSessionRequired = Error.Conflict(
         "Sales.Create.CashSessionRequired",
         "An open cash session is required for the selected cash drawer.");
+
+    public static readonly Error CashSessionFromPreviousDay = Error.Conflict(
+        "Sales.Create.CashSessionFromPreviousDay",
+        "The open cash session belongs to a previous day. Please close it and open a new one before creating sales.");
 }

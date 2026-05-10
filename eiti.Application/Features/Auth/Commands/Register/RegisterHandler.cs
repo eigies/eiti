@@ -88,10 +88,12 @@ public sealed class RegisterHandler
 
         var user = User.Create(username, email, passwordHash, company.Id, ownerProfile);
 
+        var token = _jwtTokenGenerator.GenerateToken(user);
+        var refreshToken = _jwtTokenGenerator.GenerateRefreshToken();
+        user.SetRefreshToken(refreshToken, DateTime.UtcNow.AddDays(7));
         await _userRepository.AddAsync(user, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-        var token = _jwtTokenGenerator.GenerateToken(user);
         var permissions = AuthenticationMapper.MapPermissions(user);
 
         return Result<RegisterResponse>.Success(
@@ -100,6 +102,7 @@ public sealed class RegisterHandler
                 user.Username.Value,
                 user.Email.Value,
                 token,
+                refreshToken,
                 user.AccessProfileId.Value,
                 ownerProfile.Name,
                 permissions));

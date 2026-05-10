@@ -109,6 +109,16 @@ public sealed class UserRepository : IUserRepository
             .ToDictionaryAsync(x => x.Id, x => x.Username, cancellationToken);
     }
 
+    public async Task<User?> GetByRefreshTokenAsync(
+        string refreshToken,
+        CancellationToken cancellationToken = default)
+    {
+        return await _context.Users
+            .Include(u => u.AccessProfile)
+            .ThenInclude(profile => profile.Permissions)
+            .FirstOrDefaultAsync(u => u.RefreshToken == refreshToken, cancellationToken);
+    }
+
     public async Task AddAsync(
         User user,
         CancellationToken cancellationToken = default)

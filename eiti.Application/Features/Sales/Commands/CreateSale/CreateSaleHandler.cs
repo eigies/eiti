@@ -102,6 +102,20 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
             return Result<CreateSaleResponse>.Failure(CreateSaleErrors.BranchNotFound);
         }
 
+        if (effectiveCashDrawerId.HasValue)
+        {
+            var openSession = await _cashSessionRepository.GetOpenForBranchAsync(
+                branch.Id,
+                new CashDrawerId(effectiveCashDrawerId.Value),
+                companyId,
+                cancellationToken);
+
+            if (openSession is not null && openSession.OpenedAt.Date < DateTime.UtcNow.Date)
+            {
+                return Result<CreateSaleResponse>.Failure(CreateSaleErrors.CashSessionFromPreviousDay);
+            }
+        }
+
         Customer? customer = null;
         if (request.CustomerId.HasValue)
         {

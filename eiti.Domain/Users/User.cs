@@ -17,6 +17,8 @@ public sealed class User : AggregateRoot<UserId>
     public bool IsActive { get; private set; }
     public DateTime CreatedAt { get; private set; }
     public DateTime? LastLoginAt { get; private set; }
+    public string? RefreshToken { get; private set; }
+    public DateTime? RefreshTokenExpiresAt { get; private set; }
 
     private User()
     {
@@ -95,4 +97,13 @@ public sealed class User : AggregateRoot<UserId>
     {
         PasswordHash = newHash;
     }
+
+    public void SetRefreshToken(string token, DateTime expiresAt)
+    {
+        RefreshToken = token;
+        RefreshTokenExpiresAt = expiresAt;
+    }
+
+    public bool IsRefreshTokenValid(string token)
+        => RefreshToken == token && RefreshTokenExpiresAt > DateTime.UtcNow;
 }
