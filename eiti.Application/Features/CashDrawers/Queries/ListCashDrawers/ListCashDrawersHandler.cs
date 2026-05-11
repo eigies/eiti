@@ -47,7 +47,7 @@ public sealed class ListCashDrawersHandler : IRequestHandler<ListCashDrawersQuer
             _cashDrawerRepository,
             cancellationToken);
 
-        if (assignedDrawer is not null)
+        if (assignedDrawer is not null && !_currentUserService.HasPermission(PermissionCodes.CashDrawerManage))
         {
             drawers = drawers.Where(drawer => drawer.Id == assignedDrawer.Id).ToList();
         }
