@@ -54,7 +54,12 @@ public sealed class GetCurrentCashSessionHandler : IRequestHandler<GetCurrentCas
 
         IReadOnlyList<SalePayment> payments = await _saleRepository.GetPaymentsByCashSessionIdAsync(session.Id, cancellationToken);
 
-        var saleIds = payments.Select(p => p.SaleId.Value).Distinct().ToList();
+        var saleIds = session.Movements
+            .Where(m => m.ReferenceType == CashReferenceTypes.Sale && m.ReferenceId.HasValue)
+            .Select(m => m.ReferenceId!.Value)
+            .Concat(payments.Select(p => p.SaleId.Value))
+            .Distinct()
+            .ToList();
 
         Dictionary<Guid, string?> saleCodes = saleIds.Count > 0
             ? await _saleRepository.GetCodesBySaleIdsAsync(saleIds, cancellationToken)

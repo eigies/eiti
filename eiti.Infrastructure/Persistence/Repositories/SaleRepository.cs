@@ -104,7 +104,7 @@ public sealed class SaleRepository : ISaleRepository
         CancellationToken cancellationToken = default)
     {
         var saleIds = await _context.Sales
-            .Where(sale => sale.CashSessionId == sessionId)
+            .Where(sale => sale.CashSessionId == sessionId && sale.SaleStatus != SaleStatus.Cancel)
             .Select(sale => sale.Id)
             .ToListAsync(cancellationToken);
 
@@ -125,7 +125,9 @@ public sealed class SaleRepository : ISaleRepository
             return [];
 
         var saleIds = await _context.Sales
-            .Where(sale => sale.CashSessionId != null && ids.Contains(sale.CashSessionId))
+            .Where(sale => sale.CashSessionId != null
+                && ids.Contains(sale.CashSessionId)
+                && sale.SaleStatus != SaleStatus.Cancel)
             .Select(sale => sale.Id)
             .ToListAsync(cancellationToken);
 

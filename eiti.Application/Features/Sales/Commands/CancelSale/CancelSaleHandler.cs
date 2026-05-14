@@ -155,14 +155,42 @@ public sealed class CancelSaleHandler : IRequestHandler<CancelSaleCommand, Resul
                     cancellationToken);
             }
 
-            var openSessionForPaid = await _cashSessionRepository.GetAnyOpenByBranchAsync(
-                sale.BranchId,
-                companyId,
-                cancellationToken);
+            CashSession? openSessionForPaid = null;
+
+            if (sale.CashSessionId is not null)
+            {
+                openSessionForPaid = await _cashSessionRepository.GetByIdAsync(
+                    sale.CashSessionId,
+                    companyId,
+                    cancellationToken);
+
+                if (openSessionForPaid is null)
+                {
+                    return Result.Failure(CancelSaleErrors.CashSessionNotFound);
+                }
+
+                if (openSessionForPaid.Status != CashSessionStatus.Open)
+                {
+                    return Result.Failure(CancelSaleErrors.CashSessionClosed);
+                }
+            }
+            else if (sale.CashDrawerId is not null)
+            {
+                openSessionForPaid = await _cashSessionRepository.GetOpenForBranchAsync(
+                    sale.BranchId,
+                    sale.CashDrawerId,
+                    companyId,
+                    cancellationToken);
+
+                if (openSessionForPaid is null)
+                {
+                    return Result.Failure(CancelSaleErrors.CashSessionNotFound);
+                }
+            }
 
             if (openSessionForPaid is not null)
             {
-                openSessionForPaid.RegisterSaleCancel(sale.TotalAmount, sale.Id.Value, _currentUserService.UserId!);
+                openSessionForPaid.RegisterSaleCancellation(sale.Payments, sale.Id.Value, _currentUserService.UserId!);
             }
 
             sale.Cancel();

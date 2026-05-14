@@ -65,7 +65,13 @@ public sealed class ListCashSessionHistoryHandler : IRequestHandler<ListCashSess
         var sessionIds = sessions.Select(s => s.Id).ToList();
         IReadOnlyList<SalePayment> allPayments = await _saleRepository.GetPaymentsByCashSessionIdsAsync(sessionIds, cancellationToken);
 
-        var allSaleIds = allPayments.Select(p => p.SaleId.Value).Distinct().ToList();
+        var allSaleIds = sessions
+            .SelectMany(s => s.Movements)
+            .Where(m => m.ReferenceType == CashReferenceTypes.Sale && m.ReferenceId.HasValue)
+            .Select(m => m.ReferenceId!.Value)
+            .Concat(allPayments.Select(p => p.SaleId.Value))
+            .Distinct()
+            .ToList();
 
         Dictionary<Guid, string?> allSaleCodes = allSaleIds.Count > 0
             ? await _saleRepository.GetCodesBySaleIdsAsync(allSaleIds, cancellationToken)

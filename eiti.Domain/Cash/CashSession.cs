@@ -1,6 +1,7 @@
 using eiti.Domain.Branches;
 using eiti.Domain.Companies;
 using eiti.Domain.Primitives;
+using eiti.Domain.Sales;
 using eiti.Domain.Users;
 
 namespace eiti.Domain.Cash;
@@ -74,7 +75,7 @@ public sealed class CashSession : AggregateRoot<CashSessionId>
                 CashMovementType.OpeningFloat,
                 CashMovementDirection.In,
                 openingAmount,
-                "Session",
+                CashReferenceTypes.Session,
                 session.Id.Value,
                 "Opening float",
                 openedByUserId);
@@ -93,7 +94,7 @@ public sealed class CashSession : AggregateRoot<CashSessionId>
             CashMovementType.SaleIncome,
             CashMovementDirection.In,
             amount,
-            "Sale",
+            CashReferenceTypes.Sale,
             saleId,
             "Sale payment",
             createdByUserId);
@@ -109,7 +110,7 @@ public sealed class CashSession : AggregateRoot<CashSessionId>
             CashMovementType.TransferIncome,
             CashMovementDirection.In,
             amount,
-            "Sale",
+            CashReferenceTypes.Sale,
             saleId,
             "Pago por transferencia",
             createdByUserId);
@@ -125,7 +126,7 @@ public sealed class CashSession : AggregateRoot<CashSessionId>
             CashMovementType.CuentaCorrienteIncome,
             CashMovementDirection.In,
             amount,
-            "CuentaCorriente",
+            CashReferenceTypes.CuentaCorriente,
             saleId,
             "Pago cuenta corriente",
             createdByUserId);
@@ -141,26 +142,39 @@ public sealed class CashSession : AggregateRoot<CashSessionId>
             CashMovementType.CuentaCorrienteCancellation,
             CashMovementDirection.Out,
             amount,
-            "CuentaCorriente",
+            CashReferenceTypes.CuentaCorriente,
             saleId,
             "Pago CC anulado",
             createdByUserId);
     }
 
-    public void RegisterSaleCancel(
-        decimal totalAmount,
+    public void RegisterSaleCancellation(
+        IEnumerable<SalePayment> payments,
         Guid saleId,
         UserId createdByUserId)
     {
         EnsureOpen();
-        AddMovement(
-            CashMovementType.SaleCancellation,
-            CashMovementDirection.None,
-            totalAmount,
-            "Sale",
-            saleId,
-            "Venta cancelada",
-            createdByUserId);
+
+        foreach (var payment in payments.Where(payment => payment.Amount > 0))
+        {
+            var (direction, description) = payment.Method switch
+            {
+                SalePaymentMethod.Cash => (CashMovementDirection.Out, "Venta cancelada - efectivo"),
+                SalePaymentMethod.Transfer => (CashMovementDirection.None, "Venta cancelada - transferencia"),
+                SalePaymentMethod.Card => (CashMovementDirection.None, "Venta cancelada - tarjeta"),
+                SalePaymentMethod.Check => (CashMovementDirection.None, "Venta cancelada - cheque"),
+                _ => (CashMovementDirection.None, "Venta cancelada - otros")
+            };
+
+            AddMovement(
+                CashMovementType.SaleCancellation,
+                direction,
+                payment.Amount,
+                CashReferenceTypes.Sale,
+                saleId,
+                description,
+                createdByUserId);
+        }
     }
 
     public void RegisterWithdrawal(
@@ -179,7 +193,7 @@ public sealed class CashSession : AggregateRoot<CashSessionId>
             CashMovementType.CashWithdrawal,
             CashMovementDirection.Out,
             amount,
-            "Withdrawal",
+            CashReferenceTypes.Withdrawal,
             null,
             description,
             createdByUserId);
@@ -203,7 +217,7 @@ public sealed class CashSession : AggregateRoot<CashSessionId>
             CashMovementType.CashTransferOut,
             CashMovementDirection.Out,
             amount,
-            "Transfer",
+            CashReferenceTypes.Transfer,
             null,
             description,
             createdByUserId,
@@ -223,7 +237,7 @@ public sealed class CashSession : AggregateRoot<CashSessionId>
             CashMovementType.CashTransferIn,
             CashMovementDirection.In,
             amount,
-            "Transfer",
+            CashReferenceTypes.Transfer,
             null,
             description,
             createdByUserId,
