@@ -9,7 +9,7 @@ public sealed record UpdateCustomerCommand(
     string? Name,
     string? FirstName,
     string? LastName,
-    string Email,
+    string? Email,
     string? Phone,
     int? DocumentType,
     string? DocumentNumber,

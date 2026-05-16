@@ -41,21 +41,25 @@ public sealed class UpdateCustomerHandler : IRequestHandler<UpdateCustomerComman
                 Error.NotFound("Customer.Update.NotFound", "El cliente no fue encontrado."));
         }
 
-        Email email;
-        try
-        {
-            email = Email.Create(request.Email);
-        }
-        catch (ArgumentException ex)
-        {
-            return Result<UpdateCustomerResponse>.Failure(
-                Error.Validation("Customer.Update.InvalidEmail", ex.Message));
-        }
+        Email? email = null;
 
-        if (customer.Email != email && await _customerRepository.EmailExistsAsync(email, _currentUserService.CompanyId, cancellationToken))
+        if (!string.IsNullOrWhiteSpace(request.Email))
         {
-            return Result<UpdateCustomerResponse>.Failure(
-                Error.Conflict("Customer.Update.EmailExists", "Ya existe un cliente con ese email."));
+            try
+            {
+                email = Email.Create(request.Email);
+            }
+            catch (ArgumentException ex)
+            {
+                return Result<UpdateCustomerResponse>.Failure(
+                    Error.Validation("Customer.Update.InvalidEmail", ex.Message));
+            }
+
+            if (customer.Email != email && await _customerRepository.EmailExistsAsync(email, _currentUserService.CompanyId, cancellationToken))
+            {
+                return Result<UpdateCustomerResponse>.Failure(
+                    Error.Conflict("Customer.Update.EmailExists", "Ya existe un cliente con ese email."));
+            }
         }
 
         var parsedNames = CreateCustomerHandler.ParseNames(request.Name, request.FirstName, request.LastName);
@@ -165,7 +169,7 @@ public sealed class UpdateCustomerHandler : IRequestHandler<UpdateCustomerComman
                 customer.FirstName,
                 customer.LastName,
                 customer.FullName,
-                customer.Email.Value,
+                customer.Email?.Value,
                 customer.Phone,
                 customer.DocumentType.HasValue ? (int)customer.DocumentType.Value : null,
                 customer.DocumentType?.ToString(),

@@ -9,8 +9,8 @@ public sealed class UpdateCustomerValidator : AbstractValidator<UpdateCustomerCo
         RuleFor(x => x.Id).NotEmpty();
 
         RuleFor(x => x.Email)
-            .NotEmpty()
-            .EmailAddress();
+            .EmailAddress()
+            .When(x => !string.IsNullOrWhiteSpace(x.Email));
 
         RuleFor(x => x)
             .Must(x => !string.IsNullOrWhiteSpace(x.Name) || !string.IsNullOrWhiteSpace(x.FirstName))

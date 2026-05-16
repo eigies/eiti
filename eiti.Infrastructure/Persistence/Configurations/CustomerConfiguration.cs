@@ -40,14 +40,14 @@ public sealed class CustomerConfiguration : IEntityTypeConfiguration<Customer>
 
         builder.Property(customer => customer.Email)
             .HasConversion(
-                email => email.Value,
-                value => Email.Create(value))
+                email => email == null ? null : email.Value,
+                value => value == null ? null : Email.Create(value))
             .HasMaxLength(255)
-            .IsRequired();
+            .IsRequired(false);
 
         builder.Property(customer => customer.Phone)
             .HasMaxLength(30)
-            .IsRequired();
+            .IsRequired(false);
 
         builder.Property(customer => customer.DocumentType)
             .HasConversion<int?>()
@@ -67,7 +67,9 @@ public sealed class CustomerConfiguration : IEntityTypeConfiguration<Customer>
                 value => value.HasValue ? new AddressId(value.Value) : null)
             .IsRequired(false);
 
-        builder.HasIndex(customer => new { customer.CompanyId, customer.Email }).IsUnique();
+        builder.HasIndex(customer => new { customer.CompanyId, customer.Email })
+            .IsUnique()
+            .HasFilter("[Email] IS NOT NULL");
         builder.HasIndex(customer => new { customer.CompanyId, customer.DocumentType, customer.DocumentNumber })
             .IsUnique()
             .HasFilter("[DocumentType] IS NOT NULL AND [DocumentNumber] IS NOT NULL");

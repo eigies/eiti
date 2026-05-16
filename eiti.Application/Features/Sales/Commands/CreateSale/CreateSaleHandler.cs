@@ -110,7 +110,7 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
                 companyId,
                 cancellationToken);
 
-            if (openSession is not null && openSession.OpenedAt.Date < DateTime.UtcNow.Date)
+            if (openSession is not null && IsFromPreviousBusinessDay(openSession.OpenedAt))
             {
                 return Result<CreateSaleResponse>.Failure(CreateSaleErrors.CashSessionFromPreviousDay);
             }
@@ -616,5 +616,15 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
         }
 
         return Result<List<SaleTradeIn>>.Success(tradeIns);
+    }
+
+    // Argentina is UTC-3 with no DST — compare calendar dates in local business time.
+    private static readonly TimeSpan ArgentinaOffset = TimeSpan.FromHours(-3);
+
+    private static bool IsFromPreviousBusinessDay(DateTime openedAtUtc)
+    {
+        var openedLocal = openedAtUtc + ArgentinaOffset;
+        var nowLocal = DateTime.UtcNow + ArgentinaOffset;
+        return openedLocal.Date < nowLocal.Date;
     }
 }

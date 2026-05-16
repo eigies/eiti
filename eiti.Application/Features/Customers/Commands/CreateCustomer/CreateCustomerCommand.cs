@@ -7,7 +7,7 @@ public sealed record CreateCustomerCommand(
     string? Name,
     string? FirstName,
     string? LastName,
-    string Email,
+    string? Email,
     string? Phone,
     int? DocumentType,
     string? DocumentNumber,

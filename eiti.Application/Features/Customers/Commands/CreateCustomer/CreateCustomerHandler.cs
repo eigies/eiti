@@ -33,21 +33,24 @@ public sealed class CreateCustomerHandler : IRequestHandler<CreateCustomerComman
         if (authCheck.IsFailure)
             return Result<CreateCustomerResponse>.Failure(authCheck.Error);
 
-        Email email;
+        Email? email = null;
 
-        try
+        if (!string.IsNullOrWhiteSpace(request.Email))
         {
-            email = Email.Create(request.Email);
-        }
-        catch (ArgumentException ex)
-        {
-            return Result<CreateCustomerResponse>.Failure(
-                Error.Validation("Customer.Create.InvalidEmail", ex.Message));
-        }
+            try
+            {
+                email = Email.Create(request.Email);
+            }
+            catch (ArgumentException ex)
+            {
+                return Result<CreateCustomerResponse>.Failure(
+                    Error.Validation("Customer.Create.InvalidEmail", ex.Message));
+            }
 
-        if (await _customerRepository.EmailExistsAsync(email, _currentUserService.CompanyId, cancellationToken))
-        {
-            return Result<CreateCustomerResponse>.Failure(CreateCustomerErrors.EmailAlreadyExists);
+            if (await _customerRepository.EmailExistsAsync(email, _currentUserService.CompanyId, cancellationToken))
+            {
+                return Result<CreateCustomerResponse>.Failure(CreateCustomerErrors.EmailAlreadyExists);
+            }
         }
 
         var parsedNames = ParseNames(request.Name, request.FirstName, request.LastName);
@@ -185,7 +188,7 @@ public sealed class CreateCustomerHandler : IRequestHandler<CreateCustomerComman
             customer.FirstName,
             customer.LastName,
             customer.FullName,
-            customer.Email.Value,
+            customer.Email?.Value,
             customer.Phone,
             customer.DocumentType.HasValue ? (int)customer.DocumentType.Value : null,
             customer.DocumentType?.ToString(),

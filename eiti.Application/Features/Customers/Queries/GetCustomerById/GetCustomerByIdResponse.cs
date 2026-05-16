@@ -8,7 +8,7 @@ public sealed record GetCustomerByIdResponse(
     string FirstName,
     string LastName,
     string FullName,
-    string Email,
+    string? Email,
     string Phone,
     int? DocumentType,
     string? DocumentTypeName,

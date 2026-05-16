@@ -44,7 +44,7 @@ public sealed class GetCustomerByIdHandler : IRequestHandler<GetCustomerByIdQuer
                 customer.FirstName,
                 customer.LastName,
                 customer.FullName,
-                customer.Email.Value,
+                customer.Email?.Value,
                 customer.Phone,
                 customer.DocumentType.HasValue ? (int)customer.DocumentType.Value : null,
                 customer.DocumentType?.ToString(),

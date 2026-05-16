@@ -10,8 +10,8 @@ public sealed class Customer : AggregateRoot<CustomerId>
     public string Name { get; private set; } = string.Empty;
     public string FirstName { get; private set; } = string.Empty;
     public string LastName { get; private set; } = string.Empty;
-    public Email Email { get; private set; } = null!;
-    public string Phone { get; private set; } = string.Empty;
+    public Email? Email { get; private set; }
+    public string? Phone { get; private set; }
     public DocumentType? DocumentType { get; private set; }
     public string? DocumentNumber { get; private set; }
     public string? TaxId { get; private set; }
@@ -31,7 +31,7 @@ public sealed class Customer : AggregateRoot<CustomerId>
         CompanyId companyId,
         string firstName,
         string lastName,
-        Email email,
+        Email? email,
         string? phone,
         DocumentType? documentType,
         string? documentNumber,
@@ -45,7 +45,7 @@ public sealed class Customer : AggregateRoot<CustomerId>
         LastName = NormalizeOptional(lastName, 100) ?? string.Empty;
         Name = BuildDisplayName(FirstName, LastName);
         Email = email;
-        Phone = NormalizeOptional(phone, 30) ?? string.Empty;
+        Phone = NormalizeOptional(phone, 30);
         DocumentType = documentType;
         DocumentNumber = NormalizeOptional(documentNumber, 30);
         TaxId = NormalizeOptional(taxId, 20);
@@ -57,7 +57,7 @@ public sealed class Customer : AggregateRoot<CustomerId>
         CompanyId companyId,
         string firstName,
         string lastName,
-        Email email,
+        Email? email,
         string? phone = null,
         DocumentType? documentType = null,
         string? documentNumber = null,
@@ -90,7 +90,7 @@ public sealed class Customer : AggregateRoot<CustomerId>
         FirstName = NormalizeRequired(firstName, nameof(firstName), 100);
         LastName = NormalizeOptional(lastName, 100) ?? string.Empty;
         Name = BuildDisplayName(FirstName, LastName);
-        Phone = NormalizeOptional(phone, 30) ?? string.Empty;
+        Phone = NormalizeOptional(phone, 30);
         DocumentType = documentType;
         DocumentNumber = NormalizeOptional(documentNumber, 30);
         TaxId = NormalizeOptional(taxId, 20);
@@ -98,7 +98,7 @@ public sealed class Customer : AggregateRoot<CustomerId>
         UpdatedAt = DateTime.UtcNow;
     }
 
-    public void UpdateEmail(Email newEmail)
+    public void UpdateEmail(Email? newEmail)
     {
         Email = newEmail;
         UpdatedAt = DateTime.UtcNow;

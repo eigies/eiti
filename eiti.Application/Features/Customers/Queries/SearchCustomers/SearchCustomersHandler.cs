@@ -34,7 +34,7 @@ public sealed class SearchCustomersHandler : IRequestHandler<SearchCustomersQuer
                     customer.Id.Value,
                     customer.Name,
                     customer.FullName,
-                    customer.Email.Value,
+                    customer.Email?.Value,
                     customer.Phone,
                     customer.DocumentType.HasValue ? (int)customer.DocumentType.Value : null,
                     customer.DocumentType?.ToString(),

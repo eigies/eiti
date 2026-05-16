@@ -7,10 +7,9 @@ public sealed class CreateCustomerValidator : AbstractValidator<CreateCustomerCo
     public CreateCustomerValidator()
     {
         RuleFor(x => x.Email)
-            .NotEmpty()
-            .WithMessage("El email es requerido.")
             .EmailAddress()
-            .WithMessage("El email debe tener un formato valido.");
+            .WithMessage("El email debe tener un formato valido.")
+            .When(x => !string.IsNullOrWhiteSpace(x.Email));
 
         RuleFor(x => x)
             .Must(x => !string.IsNullOrWhiteSpace(x.Name) || !string.IsNullOrWhiteSpace(x.FirstName))

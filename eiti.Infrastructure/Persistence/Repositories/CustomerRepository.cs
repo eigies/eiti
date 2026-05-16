@@ -55,14 +55,14 @@ public sealed class CustomerRepository : ICustomerRepository
             var normalized = trimmed.ToLowerInvariant();
             filtered = filtered.Where(customer =>
                 customer.Name.ToLowerInvariant().Contains(normalized) ||
-                customer.Email.Value.ToLowerInvariant().Contains(normalized) ||
+                (customer.Email != null && customer.Email.Value.ToLowerInvariant().Contains(normalized)) ||
                 (!string.IsNullOrWhiteSpace(customer.DocumentNumber) && customer.DocumentNumber.Contains(trimmed, StringComparison.OrdinalIgnoreCase)));
         }
 
         if (!string.IsNullOrWhiteSpace(email))
         {
             var normalized = email.Trim().ToLowerInvariant();
-            filtered = filtered.Where(customer => customer.Email.Value.ToLowerInvariant() == normalized);
+            filtered = filtered.Where(customer => customer.Email != null && customer.Email.Value.ToLowerInvariant() == normalized);
         }
 
         if (!string.IsNullOrWhiteSpace(documentNumber))
