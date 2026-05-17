@@ -347,6 +347,7 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
 
                 var cashAmount = sale.GetPaymentAmount(SalePaymentMethod.Cash);
                 var transferAmount = sale.GetPaymentAmount(SalePaymentMethod.Transfer);
+                var cardAmount = sale.GetPaymentAmount(SalePaymentMethod.Card);
                 CashSession? session = null;
 
                 if (cashAmount > 0)
@@ -367,7 +368,7 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
                         return Result<UpdateSaleResponse>.Failure(UpdateSaleErrors.CashSessionRequired);
                     }
                 }
-                else if (transferAmount > 0 && effectiveCashDrawerId.HasValue && _currentUserService.UserId is not null)
+                else if ((transferAmount > 0 || cardAmount > 0) && effectiveCashDrawerId.HasValue && _currentUserService.UserId is not null)
                 {
                     session = await _cashSessionRepository.GetOpenForBranchAsync(
                         sale.BranchId,
@@ -388,6 +389,11 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
                 if (transferAmount > 0 && session is not null)
                 {
                     session.RegisterTransferIncome(transferAmount, sale.Id.Value, _currentUserService.UserId!);
+                }
+
+                if (cardAmount > 0 && session is not null)
+                {
+                    session.RegisterCardIncome(cardAmount, sale.Id.Value, _currentUserService.UserId!);
                 }
 
                 foreach (var detail in groupedDetails)

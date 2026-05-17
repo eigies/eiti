@@ -293,6 +293,7 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
         {
             var cashAmount = sale.GetPaymentAmount(SalePaymentMethod.Cash);
             var transferAmount = sale.GetPaymentAmount(SalePaymentMethod.Transfer);
+            var cardAmount = sale.GetPaymentAmount(SalePaymentMethod.Card);
             CashSession? session = null;
 
             if (cashAmount > 0)
@@ -313,7 +314,7 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
                     return Result<CreateSaleResponse>.Failure(CreateSaleErrors.CashSessionRequired);
                 }
             }
-            else if (transferAmount > 0 && effectiveCashDrawerId.HasValue && _currentUserService.UserId is not null)
+            else if ((transferAmount > 0 || cardAmount > 0) && effectiveCashDrawerId.HasValue && _currentUserService.UserId is not null)
             {
                 session = await _cashSessionRepository.GetOpenForBranchAsync(
                     branch.Id,
@@ -336,6 +337,11 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
                 if (transferAmount > 0 && session is not null)
                 {
                     session.RegisterTransferIncome(transferAmount, sale.Id.Value, _currentUserService.UserId!);
+                }
+
+                if (cardAmount > 0 && session is not null)
+                {
+                    session.RegisterCardIncome(cardAmount, sale.Id.Value, _currentUserService.UserId!);
                 }
 
                 foreach (var detail in groupedDetails)

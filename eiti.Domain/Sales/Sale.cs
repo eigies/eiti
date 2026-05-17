@@ -491,7 +491,9 @@ public sealed class Sale : AggregateRoot<SaleId>
         }
 
         CashDrawerId = cashDrawerId ?? CashDrawerId;
-        CashSessionId = (cashAmount > 0 || transferAmount > 0) ? cashSessionId : null;
+        var cardAmount = GetPaymentAmount(SalePaymentMethod.Card);
+        var checkAmount = GetPaymentAmount(SalePaymentMethod.Check);
+        CashSessionId = (cashAmount > 0 || transferAmount > 0 || cardAmount > 0 || checkAmount > 0) ? cashSessionId : null;
         SaleStatus = SaleStatus.Paid;
         PaidAt = DateTime.UtcNow;
         UpdatedAt = DateTime.UtcNow;

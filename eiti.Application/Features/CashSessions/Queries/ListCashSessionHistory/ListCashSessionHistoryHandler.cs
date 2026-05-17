@@ -93,7 +93,7 @@ public sealed class ListCashSessionHistoryHandler : IRequestHandler<ListCashSess
         var result = sessions.Select(session =>
         {
             var sessionSaleIds = session.Movements
-                .Where(movement => (movement.Type == CashMovementType.SaleIncome || movement.Type == CashMovementType.TransferIncome) && movement.ReferenceId.HasValue)
+                .Where(movement => (movement.Type == CashMovementType.SaleIncome || movement.Type == CashMovementType.TransferIncome || movement.Type == CashMovementType.CardIncome) && movement.ReferenceId.HasValue)
                 .Select(movement => movement.ReferenceId!.Value)
                 .Distinct();
 

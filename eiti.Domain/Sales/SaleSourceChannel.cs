@@ -10,6 +10,7 @@ public enum SaleSourceChannel
     Other = 6,
     PreviousCustomer = 7,
     MercadoLibre = 8,
-    Google = 9
+    Google = 9,
+    NoChannel = 10
 }
 

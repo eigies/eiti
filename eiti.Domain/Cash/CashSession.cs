@@ -116,6 +116,22 @@ public sealed class CashSession : AggregateRoot<CashSessionId>
             createdByUserId);
     }
 
+    public void RegisterCardIncome(
+        decimal amount,
+        Guid saleId,
+        UserId createdByUserId)
+    {
+        EnsureOpen();
+        AddMovement(
+            CashMovementType.CardIncome,
+            CashMovementDirection.In,
+            amount,
+            CashReferenceTypes.Sale,
+            saleId,
+            "Pago con tarjeta",
+            createdByUserId);
+    }
+
     public void RegisterCcPaymentIncome(
         decimal amount,
         Guid saleId,
