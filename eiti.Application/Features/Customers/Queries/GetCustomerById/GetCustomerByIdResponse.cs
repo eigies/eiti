@@ -17,4 +17,5 @@ public sealed record GetCustomerByIdResponse(
     Guid? AddressId,
     CustomerAddressResponse? Address,
     DateTime CreatedAt,
-    DateTime? UpdatedAt);
+    DateTime? UpdatedAt,
+    decimal CreditBalance);

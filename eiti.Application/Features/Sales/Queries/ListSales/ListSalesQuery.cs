@@ -7,7 +7,8 @@ namespace eiti.Application.Features.Sales.Queries.ListSales;
 public sealed record ListSalesQuery(
     DateTime? DateFrom,
     DateTime? DateTo,
-    int? IdSaleStatus
+    int? IdSaleStatus,
+    bool IncludeCuentaCorriente = false
 ) : IRequest<Result<IReadOnlyList<ListSalesItemResponse>>>, IRequirePermissions
 {
     public IReadOnlyCollection<string> RequiredPermissions => [PermissionCodes.SalesAccess];

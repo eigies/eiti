@@ -54,8 +54,17 @@ public sealed class GetCurrentCashSessionHandler : IRequestHandler<GetCurrentCas
 
         IReadOnlyList<SalePayment> payments = await _saleRepository.GetPaymentsByCashSessionIdAsync(session.Id, cancellationToken);
 
+        var ccGroupIds = session.Movements
+            .Where(m => m.CcPaymentGroupId.HasValue)
+            .Select(m => m.CcPaymentGroupId!.Value)
+            .Distinct()
+            .ToList();
+        IReadOnlyList<SaleCcPayment> ccPayments = ccGroupIds.Count > 0
+            ? await _saleRepository.GetCcPaymentsByGroupIdsAsync(ccGroupIds, cancellationToken)
+            : [];
+
         var saleIds = session.Movements
-            .Where(m => m.ReferenceType == CashReferenceTypes.Sale && m.ReferenceId.HasValue)
+            .Where(m => (m.ReferenceType == CashReferenceTypes.Sale || m.ReferenceType == CashReferenceTypes.CuentaCorriente) && m.ReferenceId.HasValue)
             .Select(m => m.ReferenceId!.Value)
             .Concat(payments.Select(p => p.SaleId.Value))
             .Distinct()
@@ -72,6 +81,6 @@ public sealed class GetCurrentCashSessionHandler : IRequestHandler<GetCurrentCas
 
         var usernames = await _userRepository.GetUsernamesByIdsAsync(userIds, cancellationToken);
 
-        return Result<CashSessionResponse>.Success(CashSessionMapper.Map(session, payments, saleCodes, usernames));
+        return Result<CashSessionResponse>.Success(CashSessionMapper.Map(session, payments, saleCodes, usernames, ccPayments));
     }
 }

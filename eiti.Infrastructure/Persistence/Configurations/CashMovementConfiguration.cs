@@ -49,7 +49,11 @@ public sealed class CashMovementConfiguration : IEntityTypeConfiguration<CashMov
             .HasConversion(id => id.Value, value => new UserId(value))
             .IsRequired();
 
+        builder.Property(movement => movement.CcPaymentGroupId).IsRequired(false);
+
         builder.Property(movement => movement.TransferCounterpartSessionId).IsRequired(false);
+
+        builder.Property(movement => movement.OriginalCashSessionId).IsRequired(false);
 
         builder.HasIndex(movement => new { movement.CashSessionId, movement.OccurredAt });
     }

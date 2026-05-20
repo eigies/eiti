@@ -5,6 +5,7 @@ using eiti.Application.Common;
 using eiti.Application.Common.Authorization;
 using eiti.Domain.Cash;
 using eiti.Domain.Cheques;
+using eiti.Domain.Customers;
 using eiti.Domain.Sales;
 using eiti.Domain.Stock;
 using MediatR;
@@ -21,6 +22,7 @@ public sealed class AddCcPaymentGroupHandler : IRequestHandler<AddCcPaymentGroup
     private readonly ICashSessionRepository _cashSessionRepository;
     private readonly IBankRepository _bankRepository;
     private readonly IChequeRepository _chequeRepository;
+    private readonly ICustomerRepository _customerRepository;
     private readonly IUnitOfWork _unitOfWork;
 
     public AddCcPaymentGroupHandler(
@@ -32,6 +34,7 @@ public sealed class AddCcPaymentGroupHandler : IRequestHandler<AddCcPaymentGroup
         ICashSessionRepository cashSessionRepository,
         IBankRepository bankRepository,
         IChequeRepository chequeRepository,
+        ICustomerRepository customerRepository,
         IUnitOfWork unitOfWork)
     {
         _currentUserService = currentUserService;
@@ -42,6 +45,7 @@ public sealed class AddCcPaymentGroupHandler : IRequestHandler<AddCcPaymentGroup
         _cashSessionRepository = cashSessionRepository;
         _bankRepository = bankRepository;
         _chequeRepository = chequeRepository;
+        _customerRepository = customerRepository;
         _unitOfWork = unitOfWork;
     }
 
@@ -89,10 +93,15 @@ public sealed class AddCcPaymentGroupHandler : IRequestHandler<AddCcPaymentGroup
             .Select(m => ((SalePaymentMethod)m.IdPaymentMethod, m.Amount))
             .ToList();
 
+        var remaining = sale.TotalAmount - sale.CcPaidTotal;
+        var totalPayment = request.Methods.Sum(m => m.Amount);
+        var excess = Math.Max(0m, totalPayment - remaining);
+        var allowOverpayment = excess > 0;
+
         IReadOnlyList<SaleCcPayment> payments;
         try
         {
-            payments = sale.AddCcPaymentGroup(methodLines, request.Date, request.Notes);
+            payments = sale.AddCcPaymentGroup(methodLines, request.Date, request.Notes, allowOverpayment);
         }
         catch (Exception ex) when (ex is InvalidOperationException or ArgumentException)
         {
@@ -115,7 +124,8 @@ public sealed class AddCcPaymentGroupHandler : IRequestHandler<AddCcPaymentGroup
             }
 
             var totalAmount = payments.Sum(p => p.Amount);
-            session.RegisterCcPaymentIncome(totalAmount, sale.Id.Value, _currentUserService.UserId!);
+            var ccGroupId = payments.First().GroupId!.Value;
+            session.RegisterCcPaymentIncome(totalAmount, sale.Id.Value, _currentUserService.UserId!, ccGroupId);
         }
 
         // Stock confirmation if sale transitioned to Paid
@@ -191,6 +201,17 @@ public sealed class AddCcPaymentGroupHandler : IRequestHandler<AddCcPaymentGroup
             }
         }
 
+        Customer? creditCustomer = null;
+        if (allowOverpayment && sale.CustomerId is not null)
+        {
+            creditCustomer = await _customerRepository.GetByIdAsync(sale.CustomerId, companyId, cancellationToken);
+            if (creditCustomer is not null)
+            {
+                creditCustomer.AddCredit(excess);
+                _customerRepository.Update(creditCustomer);
+            }
+        }
+
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         var groupId = payments.First().GroupId!.Value;
@@ -198,6 +219,8 @@ public sealed class AddCcPaymentGroupHandler : IRequestHandler<AddCcPaymentGroup
         return Result<AddCcPaymentGroupResponse>.Success(
             new AddCcPaymentGroupResponse(
                 groupId,
+                excess,
+                creditCustomer?.CreditBalance ?? 0m,
                 payments.Select(p => new AddCcPaymentGroupItemResponse(
                     p.Id.Value,
                     p.SaleId.Value,

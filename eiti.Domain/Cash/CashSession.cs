@@ -135,7 +135,8 @@ public sealed class CashSession : AggregateRoot<CashSessionId>
     public void RegisterCcPaymentIncome(
         decimal amount,
         Guid saleId,
-        UserId createdByUserId)
+        UserId createdByUserId,
+        Guid? ccPaymentGroupId = null)
     {
         EnsureOpen();
         AddMovement(
@@ -145,7 +146,8 @@ public sealed class CashSession : AggregateRoot<CashSessionId>
             CashReferenceTypes.CuentaCorriente,
             saleId,
             "Pago cuenta corriente",
-            createdByUserId);
+            createdByUserId,
+            ccPaymentGroupId: ccPaymentGroupId);
     }
 
     public void RegisterCcPaymentCancel(
@@ -167,7 +169,8 @@ public sealed class CashSession : AggregateRoot<CashSessionId>
     public void RegisterSaleCancellation(
         IEnumerable<SalePayment> payments,
         Guid saleId,
-        UserId createdByUserId)
+        UserId createdByUserId,
+        Guid? originalCashSessionId = null)
     {
         EnsureOpen();
 
@@ -189,7 +192,8 @@ public sealed class CashSession : AggregateRoot<CashSessionId>
                 CashReferenceTypes.Sale,
                 saleId,
                 description,
-                createdByUserId);
+                createdByUserId,
+                originalCashSessionId);
         }
     }
 
@@ -237,7 +241,7 @@ public sealed class CashSession : AggregateRoot<CashSessionId>
             null,
             description,
             createdByUserId,
-            targetSessionId));
+            transferCounterpartSessionId: targetSessionId));
     }
 
     public void RegisterTransferIn(
@@ -257,7 +261,7 @@ public sealed class CashSession : AggregateRoot<CashSessionId>
             null,
             description,
             createdByUserId,
-            sourceSessionId));
+            transferCounterpartSessionId: sourceSessionId));
     }
 
     public void Close(
@@ -299,7 +303,9 @@ public sealed class CashSession : AggregateRoot<CashSessionId>
         string? referenceType,
         Guid? referenceId,
         string description,
-        UserId createdByUserId)
+        UserId createdByUserId,
+        Guid? originalCashSessionId = null,
+        Guid? ccPaymentGroupId = null)
     {
         _movements.Add(CashMovement.Create(
             Id,
@@ -309,7 +315,9 @@ public sealed class CashSession : AggregateRoot<CashSessionId>
             referenceType,
             referenceId,
             description,
-            createdByUserId));
+            createdByUserId,
+            ccPaymentGroupId: ccPaymentGroupId,
+            originalCashSessionId: originalCashSessionId));
     }
 
     private void EnsureOpen()

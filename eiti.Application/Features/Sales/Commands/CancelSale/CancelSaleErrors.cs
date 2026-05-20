@@ -19,4 +19,8 @@ public static class CancelSaleErrors
     public static readonly Error CashSessionClosed = Error.Conflict(
         "Sales.Cancel.CashSessionClosed",
         "The cash session associated with this sale is no longer open.");
+
+    public static readonly Error NoOpenSessionForHistoricalCancel = Error.Conflict(
+        "Sales.Cancel.NoOpenSessionForHistoricalCancel",
+        "No hay una sesión de caja abierta para registrar la cancelación histórica.");
 }

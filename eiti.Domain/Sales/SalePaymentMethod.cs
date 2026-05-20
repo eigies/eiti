@@ -6,5 +6,6 @@ public enum SalePaymentMethod
     Transfer = 2,
     Card = 3,
     Check = 4,
-    Other = 5
+    Other = 5,
+    CustomerCredit = 6
 }

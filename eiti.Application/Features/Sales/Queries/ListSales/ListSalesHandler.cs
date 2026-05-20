@@ -55,6 +55,7 @@ public sealed class ListSalesHandler : IRequestHandler<ListSalesQuery, Result<IR
             request.DateFrom,
             request.DateTo,
             request.IdSaleStatus,
+            request.IncludeCuentaCorriente,
             cancellationToken);
 
         var productIds = sales

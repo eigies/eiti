@@ -14,6 +14,8 @@ public sealed record CreateCcSaleResponse(
     decimal? ManualOverridePrice,
     bool IsCuentaCorriente,
     DateTime CreatedAt,
+    decimal CreditApplied,
+    decimal RemainingCustomerCredit,
     IReadOnlyList<CreateCcSaleDetailItemResponse> Details);
 
 public sealed record CreateCcSaleDetailItemResponse(

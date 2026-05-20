@@ -16,6 +16,7 @@ public sealed class Customer : AggregateRoot<CustomerId>
     public string? DocumentNumber { get; private set; }
     public string? TaxId { get; private set; }
     public AddressId? AddressId { get; private set; }
+    public decimal CreditBalance { get; private set; }
     public DateTime CreatedAt { get; private set; }
     public DateTime? UpdatedAt { get; private set; }
     public string FullName => string.IsNullOrWhiteSpace(LastName)
@@ -101,6 +102,18 @@ public sealed class Customer : AggregateRoot<CustomerId>
     public void UpdateEmail(Email? newEmail)
     {
         Email = newEmail;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    public void AddCredit(decimal amount)
+    {
+        CreditBalance += amount;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    public void ConsumeCredit(decimal amount)
+    {
+        CreditBalance -= amount;
         UpdatedAt = DateTime.UtcNow;
     }
 

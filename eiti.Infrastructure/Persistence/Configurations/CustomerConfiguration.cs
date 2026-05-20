@@ -78,6 +78,8 @@ public sealed class CustomerConfiguration : IEntityTypeConfiguration<Customer>
             .HasFilter("[TaxId] IS NOT NULL");
         builder.HasIndex(customer => new { customer.CompanyId, customer.Name });
 
+        builder.Property(customer => customer.CreditBalance).HasColumnType("decimal(18,2)").IsRequired();
+
         builder.Property(customer => customer.CreatedAt).IsRequired();
         builder.Property(customer => customer.UpdatedAt).IsRequired(false);
 

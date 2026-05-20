@@ -36,7 +36,7 @@ public sealed class ListBranchesHandler : IRequestHandler<ListBranchesQuery, Res
             return Result<IReadOnlyList<BranchResponse>>.Failure(authCheck.Error);
 
         var branches = await _branchRepository.ListByCompanyAsync(_currentUserService.CompanyId, cancellationToken);
-        var sales = await _saleRepository.ListByCompanyAsync(_currentUserService.CompanyId, null, null, null, cancellationToken);
+        var sales = await _saleRepository.ListByCompanyAsync(_currentUserService.CompanyId, null, null, null, cancellationToken: cancellationToken);
         var salesCountByBranch = sales
             .GroupBy(sale => sale.BranchId.Value)
             .ToDictionary(group => group.Key, group => group.Count());

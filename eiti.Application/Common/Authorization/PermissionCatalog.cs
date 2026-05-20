@@ -21,7 +21,8 @@ public static class PermissionCatalog
         PermissionCodes.BanksManage,
         PermissionCodes.ChequesManage,
         PermissionCodes.CashDrawerAssign,
-        PermissionCodes.ProductsViewCost
+        PermissionCodes.ProductsViewCost,
+        PermissionCodes.SalesCancelHistorical
     };
 
     public static bool IsValid(string permissionCode) =>

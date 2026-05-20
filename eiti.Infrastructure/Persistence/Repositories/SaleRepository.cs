@@ -32,6 +32,7 @@ public sealed class SaleRepository : ISaleRepository
             .Include(sale => sale.Details)
             .Include(sale => sale.Payments)
             .Include(sale => sale.TradeIns)
+            .Include(sale => sale.CcPayments)
             .FirstOrDefaultAsync(sale => sale.Id == id, cancellationToken);
     }
 
@@ -45,6 +46,7 @@ public sealed class SaleRepository : ISaleRepository
         DateTime? dateFrom,
         DateTime? dateTo,
         int? idSaleStatus,
+        bool includeCuentaCorriente = false,
         CancellationToken cancellationToken = default)
     {
         var query = _context.Sales
@@ -52,7 +54,7 @@ public sealed class SaleRepository : ISaleRepository
             .Include(sale => sale.Payments)
             .Include(sale => sale.TradeIns)
             .Where(sale => sale.CompanyId == companyId)
-            .Where(sale => !sale.IsCuentaCorriente);
+            .Where(sale => includeCuentaCorriente || !sale.IsCuentaCorriente);
 
         if (dateFrom.HasValue)
         {
@@ -237,5 +239,18 @@ public sealed class SaleRepository : ISaleRepository
             .Where(sale => ids.Contains(sale.Id))
             .Select(sale => new { Id = sale.Id.Value, sale.Code })
             .ToDictionaryAsync(x => x.Id, x => x.Code, cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<SaleCcPayment>> GetCcPaymentsByGroupIdsAsync(
+        IEnumerable<Guid> groupIds,
+        CancellationToken cancellationToken = default)
+    {
+        var ids = groupIds.ToList();
+        if (ids.Count == 0)
+            return [];
+
+        return await _context.SaleCcPayments
+            .Where(p => p.GroupId.HasValue && ids.Contains(p.GroupId!.Value))
+            .ToListAsync(cancellationToken);
     }
 }

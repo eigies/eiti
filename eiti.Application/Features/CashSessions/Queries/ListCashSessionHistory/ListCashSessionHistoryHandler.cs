@@ -65,9 +65,19 @@ public sealed class ListCashSessionHistoryHandler : IRequestHandler<ListCashSess
         var sessionIds = sessions.Select(s => s.Id).ToList();
         IReadOnlyList<SalePayment> allPayments = await _saleRepository.GetPaymentsByCashSessionIdsAsync(sessionIds, cancellationToken);
 
+        var allCcGroupIds = sessions
+            .SelectMany(s => s.Movements)
+            .Where(m => m.CcPaymentGroupId.HasValue)
+            .Select(m => m.CcPaymentGroupId!.Value)
+            .Distinct()
+            .ToList();
+        IReadOnlyList<SaleCcPayment> allCcPayments = allCcGroupIds.Count > 0
+            ? await _saleRepository.GetCcPaymentsByGroupIdsAsync(allCcGroupIds, cancellationToken)
+            : [];
+
         var allSaleIds = sessions
             .SelectMany(s => s.Movements)
-            .Where(m => m.ReferenceType == CashReferenceTypes.Sale && m.ReferenceId.HasValue)
+            .Where(m => (m.ReferenceType == CashReferenceTypes.Sale || m.ReferenceType == CashReferenceTypes.CuentaCorriente) && m.ReferenceId.HasValue)
             .Select(m => m.ReferenceId!.Value)
             .Concat(allPayments.Select(p => p.SaleId.Value))
             .Distinct()
@@ -90,6 +100,15 @@ public sealed class ListCashSessionHistoryHandler : IRequestHandler<ListCashSess
             .GroupBy(payment => payment.SaleId.Value)
             .ToDictionary(group => group.Key, group => group.ToList());
 
+        var ccGroupsBySession = allCcGroupIds.Count > 0
+            ? sessions.ToDictionary(
+                s => s.Id.Value,
+                s => s.Movements
+                    .Where(m => m.CcPaymentGroupId.HasValue)
+                    .Select(m => m.CcPaymentGroupId!.Value)
+                    .ToHashSet())
+            : new Dictionary<Guid, HashSet<Guid>>();
+
         var result = sessions.Select(session =>
         {
             var sessionSaleIds = session.Movements
@@ -101,7 +120,11 @@ public sealed class ListCashSessionHistoryHandler : IRequestHandler<ListCashSess
                 .SelectMany(saleId => paymentsBySaleId.TryGetValue(saleId, out var payments) ? payments : [])
                 .ToList();
 
-            return CashSessionMapper.Map(session, sessionPayments, allSaleCodes, allUsernames);
+            IReadOnlyList<SaleCcPayment> sessionCcPayments = ccGroupsBySession.TryGetValue(session.Id.Value, out var sessionGroupIds)
+                ? allCcPayments.Where(p => p.GroupId.HasValue && sessionGroupIds.Contains(p.GroupId!.Value)).ToList()
+                : [];
+
+            return CashSessionMapper.Map(session, sessionPayments, allSaleCodes, allUsernames, sessionCcPayments);
         }).ToList();
 
         return Result<IReadOnlyList<CashSessionResponse>>.Success(result);

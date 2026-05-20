@@ -25,4 +25,6 @@ public static class PermissionCodes
     public const string ChequesManage = "cheques.manage";
 
     public const string ProductsViewCost = "products.view_cost";
+
+    public const string SalesCancelHistorical = "sales.cancel.historical";
 }

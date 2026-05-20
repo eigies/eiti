@@ -2,6 +2,7 @@ using eiti.Application.Abstractions.Data;
 using eiti.Application.Abstractions.Repositories;
 using eiti.Application.Abstractions.Services;
 using eiti.Application.Common;
+using eiti.Application.Common.Authorization;
 using eiti.Domain.Cash;
 using eiti.Domain.Products;
 using eiti.Domain.Sales;
@@ -109,7 +110,12 @@ public sealed class CancelSaleHandler : IRequestHandler<CancelSaleCommand, Resul
                     cancellationToken);
             }
 
+            var ccPaidOnHold = sale.CcPayments
+                .Where(p => p.Status == SaleCcPaymentStatus.Active)
+                .Sum(p => p.Amount);
             sale.Cancel();
+            CancelActiveCcPayments(sale);
+            await RegisterCcCancellationIfNeeded(sale, ccPaidOnHold, cancellationToken);
         }
         else if (sale.SaleStatus == SaleStatus.Paid)
         {
@@ -156,22 +162,40 @@ public sealed class CancelSaleHandler : IRequestHandler<CancelSaleCommand, Resul
             }
 
             CashSession? openSessionForPaid = null;
+            Guid? originalCashSessionId = null;
 
             if (sale.CashSessionId is not null)
             {
-                openSessionForPaid = await _cashSessionRepository.GetByIdAsync(
+                var originalSession = await _cashSessionRepository.GetByIdAsync(
                     sale.CashSessionId,
                     companyId,
                     cancellationToken);
 
-                if (openSessionForPaid is null)
+                if (originalSession is null)
                 {
                     return Result.Failure(CancelSaleErrors.CashSessionNotFound);
                 }
 
-                if (openSessionForPaid.Status != CashSessionStatus.Open)
+                if (originalSession.Status != CashSessionStatus.Open)
                 {
-                    return Result.Failure(CancelSaleErrors.CashSessionClosed);
+                    if (!_currentUserService.HasPermission(PermissionCodes.SalesCancelHistorical))
+                        return Result.Failure(CancelSaleErrors.CashSessionClosed);
+
+                    var currentOpenSession = await _cashSessionRepository.GetOpenForBranchAsync(
+                        originalSession.BranchId,
+                        originalSession.CashDrawerId,
+                        companyId,
+                        cancellationToken);
+
+                    if (currentOpenSession is null)
+                        return Result.Failure(CancelSaleErrors.NoOpenSessionForHistoricalCancel);
+
+                    originalCashSessionId = originalSession.Id.Value;
+                    openSessionForPaid = currentOpenSession;
+                }
+                else
+                {
+                    openSessionForPaid = originalSession;
                 }
             }
             else if (sale.CashDrawerId is not null)
@@ -190,10 +214,15 @@ public sealed class CancelSaleHandler : IRequestHandler<CancelSaleCommand, Resul
 
             if (openSessionForPaid is not null)
             {
-                openSessionForPaid.RegisterSaleCancellation(sale.Payments, sale.Id.Value, _currentUserService.UserId!);
+                openSessionForPaid.RegisterSaleCancellation(sale.Payments, sale.Id.Value, _currentUserService.UserId!, originalCashSessionId);
             }
 
+            var ccPaidOnPaid = sale.CcPayments
+                .Where(p => p.Status == SaleCcPaymentStatus.Active)
+                .Sum(p => p.Amount);
             sale.Cancel();
+            CancelActiveCcPayments(sale);
+            await RegisterCcCancellationIfNeeded(sale, ccPaidOnPaid, cancellationToken);
         }
 
         if (existingTransportAssignmentId is not null)
@@ -212,5 +241,27 @@ public sealed class CancelSaleHandler : IRequestHandler<CancelSaleCommand, Resul
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return Result.Success();
+    }
+
+    private static void CancelActiveCcPayments(Sale sale)
+    {
+        foreach (var payment in sale.CcPayments.Where(p => p.Status == SaleCcPaymentStatus.Active))
+        {
+            payment.Cancel();
+        }
+    }
+
+    private async Task RegisterCcCancellationIfNeeded(Sale sale, decimal ccPaidAmount, CancellationToken cancellationToken)
+    {
+        if (!sale.IsCuentaCorriente || ccPaidAmount <= 0 || _currentUserService.UserId is null)
+            return;
+
+        var session = await _cashSessionRepository.GetAnyOpenByBranchAsync(
+            sale.BranchId,
+            sale.CompanyId,
+            cancellationToken);
+
+        if (session is not null)
+            session.RegisterCcPaymentCancel(ccPaidAmount, sale.Id.Value, _currentUserService.UserId);
     }
 }

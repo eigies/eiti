@@ -227,7 +227,7 @@ public sealed class Sale : AggregateRoot<SaleId>
         RecalculateTotal();
     }
 
-    public SaleCcPayment AddCcPayment(SalePaymentMethod method, decimal amount, DateTime date, string? notes)
+    public SaleCcPayment AddCcPayment(SalePaymentMethod method, decimal amount, DateTime date, string? notes, bool allowOverpayment = false)
     {
         if (!IsCuentaCorriente)
         {
@@ -242,7 +242,7 @@ public sealed class Sale : AggregateRoot<SaleId>
         var remaining = NormalizeAmount(CcPendingAmount);
         var roundedAmount = NormalizeAmount(amount);
 
-        if (roundedAmount > remaining)
+        if (!allowOverpayment && roundedAmount > remaining)
         {
             throw new InvalidOperationException("Payment amount exceeds the remaining balance.");
         }
@@ -261,7 +261,8 @@ public sealed class Sale : AggregateRoot<SaleId>
     public IReadOnlyList<SaleCcPayment> AddCcPaymentGroup(
         IEnumerable<(SalePaymentMethod Method, decimal Amount)> methods,
         DateTime date,
-        string? notes)
+        string? notes,
+        bool allowOverpayment = false)
     {
         if (!IsCuentaCorriente)
         {
@@ -282,7 +283,7 @@ public sealed class Sale : AggregateRoot<SaleId>
         var totalPayment = methodList.Sum(m => NormalizeAmount(m.Amount));
         var remaining = NormalizeAmount(CcPendingAmount);
 
-        if (totalPayment > remaining)
+        if (!allowOverpayment && totalPayment > remaining)
         {
             throw new InvalidOperationException("Payment amount exceeds the remaining balance.");
         }

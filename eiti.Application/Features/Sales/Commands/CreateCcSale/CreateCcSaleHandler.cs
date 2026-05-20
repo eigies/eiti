@@ -182,6 +182,21 @@ public sealed class CreateCcSaleHandler : IRequestHandler<CreateCcSaleCommand, R
         }
 
         await _saleRepository.AddAsync(sale, cancellationToken);
+
+        decimal creditApplied = 0m;
+        if (customer.CreditBalance > 0)
+        {
+            creditApplied = Math.Min(customer.CreditBalance, sale.TotalAmount);
+            customer.ConsumeCredit(creditApplied);
+            sale.AddCcPayment(
+                SalePaymentMethod.CustomerCredit,
+                creditApplied,
+                DateTime.UtcNow,
+                "Saldo a favor aplicado automáticamente",
+                allowOverpayment: false);
+            _customerRepository.Update(customer);
+        }
+
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return Result<CreateCcSaleResponse>.Success(
@@ -199,6 +214,8 @@ public sealed class CreateCcSaleHandler : IRequestHandler<CreateCcSaleCommand, R
                 sale.ManualOverridePrice,
                 sale.IsCuentaCorriente,
                 sale.CreatedAt,
+                creditApplied,
+                customer.CreditBalance,
                 sale.Details.Select(detail => new CreateCcSaleDetailItemResponse(
                     detail.ProductId.Value,
                     GetProductName(productMap, detail.ProductId.Value),

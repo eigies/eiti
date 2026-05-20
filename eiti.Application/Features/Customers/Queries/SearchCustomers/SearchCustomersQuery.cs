@@ -18,4 +18,5 @@ public sealed record SearchCustomersItemResponse(
     int? DocumentType,
     string? DocumentTypeName,
     string? DocumentNumber,
-    string? TaxId);
+    string? TaxId,
+    decimal CreditBalance);

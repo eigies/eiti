@@ -46,10 +46,11 @@ public sealed class SalesController : ControllerBase
         [FromQuery] DateTime? dateFrom,
         [FromQuery] DateTime? dateTo,
         [FromQuery] int? idSaleStatus,
-        CancellationToken cancellationToken)
+        [FromQuery] bool includeCuentaCorriente = false,
+        CancellationToken cancellationToken = default)
     {
         var result = await _sender.Send(
-            new ListSalesQuery(dateFrom, dateTo, idSaleStatus),
+            new ListSalesQuery(dateFrom, dateTo, idSaleStatus, includeCuentaCorriente),
             cancellationToken);
         return result.ToActionResult();
     }

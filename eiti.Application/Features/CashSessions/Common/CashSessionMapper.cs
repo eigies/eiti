@@ -18,9 +18,10 @@ internal static class CashSessionMapper
         CashSession session,
         IReadOnlyList<SalePayment>? payments = null,
         Dictionary<Guid, string?>? saleCodes = null,
-        Dictionary<Guid, string>? usernames = null)
+        Dictionary<Guid, string>? usernames = null,
+        IReadOnlyList<SaleCcPayment>? ccPayments = null)
     {
-        var breakdown = BuildBreakdown(payments ?? []);
+        var breakdown = BuildBreakdown(payments ?? [], ccPayments);
 
         return new CashSessionResponse(
             session.Id.Value,
@@ -51,7 +52,8 @@ internal static class CashSessionMapper
                     movement.ReferenceId.HasValue && saleCodes != null
                         ? saleCodes.GetValueOrDefault(movement.ReferenceId.Value)
                         : null,
-                    usernames?.GetValueOrDefault(movement.CreatedByUserId.Value)))
+                    usernames?.GetValueOrDefault(movement.CreatedByUserId.Value),
+                    movement.OriginalCashSessionId))
                 .ToList(),
             breakdown);
     }
@@ -59,10 +61,15 @@ internal static class CashSessionMapper
     public static CashSessionSummaryResponse MapSummary(
         CashSession session,
         IReadOnlyList<SalePayment>? payments = null,
-        IReadOnlyDictionary<int, string>? bankNames = null)
+        IReadOnlyDictionary<int, string>? bankNames = null,
+        IReadOnlyList<SaleCcPayment>? ccPayments = null)
     {
         var salesIncome = session.Movements
-            .Where(movement => movement.Type == CashMovementType.SaleIncome)
+            .Where(movement =>
+                movement.Type == CashMovementType.SaleIncome ||
+                movement.Type == CashMovementType.CardIncome ||
+                movement.Type == CashMovementType.TransferIncome ||
+                movement.Type == CashMovementType.CuentaCorrienteIncome)
             .Sum(movement => movement.Amount);
 
         var withdrawals = session.Movements
@@ -102,21 +109,24 @@ internal static class CashSessionMapper
             .ToList();
     }
 
-    private static IReadOnlyList<PaymentMethodBreakdownItem> BuildBreakdown(IReadOnlyList<SalePayment> payments)
+    private static IReadOnlyList<PaymentMethodBreakdownItem> BuildBreakdown(
+        IReadOnlyList<SalePayment> payments,
+        IReadOnlyList<SaleCcPayment>? ccPayments = null)
     {
-        return payments
-            .GroupBy(payment => payment.Method)
-            .Select(group =>
-            {
-                var isCard = group.Key == SalePaymentMethod.Card;
-                var surcharge = isCard ? group.Sum(p => p.CardSurchargeAmt ?? 0m) : 0m;
-                var baseAmount = group.Sum(p => p.Amount) - surcharge;
-                return new PaymentMethodBreakdownItem(
-                    (int)group.Key,
-                    MethodNames.GetValueOrDefault(group.Key, group.Key.ToString()),
-                    baseAmount,
-                    surcharge);
-            })
+        var allEntries = payments
+            .Where(p => p.Method != SalePaymentMethod.CustomerCredit)
+            .Select(p => (p.Method, p.Amount, Surcharge: p.Method == SalePaymentMethod.Card ? (p.CardSurchargeAmt ?? 0m) : 0m))
+            .Concat((ccPayments ?? [])
+                .Where(p => p.Method != SalePaymentMethod.CustomerCredit)
+                .Select(p => (p.Method, p.Amount, Surcharge: p.Method == SalePaymentMethod.Card ? (p.CardSurchargeAmt ?? 0m) : 0m)));
+
+        return allEntries
+            .GroupBy(e => e.Method)
+            .Select(g => new PaymentMethodBreakdownItem(
+                (int)g.Key,
+                MethodNames.GetValueOrDefault(g.Key, g.Key.ToString()),
+                g.Sum(e => e.Amount - e.Surcharge),
+                g.Sum(e => e.Surcharge)))
             .Where(item => item.Amount > 0)
             .OrderBy(item => item.Method)
             .ToList();

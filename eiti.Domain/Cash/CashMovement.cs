@@ -14,7 +14,9 @@ public sealed class CashMovement : Entity<CashMovementId>
     public Guid? ReferenceId { get; private set; }
     public string Description { get; private set; }
     public UserId CreatedByUserId { get; private set; }
+    public Guid? CcPaymentGroupId { get; private set; }
     public Guid? TransferCounterpartSessionId { get; private set; }
+    public Guid? OriginalCashSessionId { get; private set; }
 
     private CashMovement()
     {
@@ -30,7 +32,9 @@ public sealed class CashMovement : Entity<CashMovementId>
         Guid? referenceId,
         string description,
         UserId createdByUserId,
-        Guid? transferCounterpartSessionId = null)
+        Guid? ccPaymentGroupId = null,
+        Guid? transferCounterpartSessionId = null,
+        Guid? originalCashSessionId = null)
         : base(id)
     {
         if (amount <= 0)
@@ -47,7 +51,9 @@ public sealed class CashMovement : Entity<CashMovementId>
         ReferenceId = referenceId;
         Description = NormalizeRequired(description, 255, "Description");
         CreatedByUserId = createdByUserId;
+        CcPaymentGroupId = ccPaymentGroupId;
         TransferCounterpartSessionId = transferCounterpartSessionId;
+        OriginalCashSessionId = originalCashSessionId;
     }
 
     public static CashMovement Create(
@@ -59,7 +65,9 @@ public sealed class CashMovement : Entity<CashMovementId>
         Guid? referenceId,
         string description,
         UserId createdByUserId,
-        Guid? transferCounterpartSessionId = null)
+        Guid? ccPaymentGroupId = null,
+        Guid? transferCounterpartSessionId = null,
+        Guid? originalCashSessionId = null)
     {
         return new CashMovement(
             CashMovementId.New(),
@@ -71,7 +79,9 @@ public sealed class CashMovement : Entity<CashMovementId>
             referenceId,
             description,
             createdByUserId,
-            transferCounterpartSessionId);
+            ccPaymentGroupId,
+            transferCounterpartSessionId,
+            originalCashSessionId);
     }
 
     private static string NormalizeRequired(string value, int maxLength, string field)

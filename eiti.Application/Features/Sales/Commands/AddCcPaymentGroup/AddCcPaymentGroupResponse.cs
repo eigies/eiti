@@ -2,6 +2,8 @@ namespace eiti.Application.Features.Sales.Commands.AddCcPaymentGroup;
 
 public sealed record AddCcPaymentGroupResponse(
     Guid GroupId,
+    decimal CreditAdded,
+    decimal NewCustomerCreditBalance,
     List<AddCcPaymentGroupItemResponse> Payments);
 
 public sealed record AddCcPaymentGroupItemResponse(

@@ -67,6 +67,7 @@ public sealed class GetCustomerByIdHandler : IRequestHandler<GetCustomerByIdQuer
                         address.CreatedAt,
                         address.UpdatedAt),
                 customer.CreatedAt,
-                customer.UpdatedAt));
+                customer.UpdatedAt,
+                customer.CreditBalance));
     }
 }

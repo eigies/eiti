@@ -23,6 +23,7 @@ public interface ISaleRepository
         DateTime? dateFrom,
         DateTime? dateTo,
         int? idSaleStatus,
+        bool includeCuentaCorriente = false,
         CancellationToken cancellationToken = default);
 
     Task<bool> HasOnHoldSalesByCashDrawerAsync(
@@ -71,5 +72,9 @@ public interface ISaleRepository
 
     Task<Dictionary<Guid, string?>> GetCodesBySaleIdsAsync(
         IEnumerable<Guid> saleIds,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<SaleCcPayment>> GetCcPaymentsByGroupIdsAsync(
+        IEnumerable<Guid> groupIds,
         CancellationToken cancellationToken = default);
 }

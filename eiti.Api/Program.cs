@@ -36,6 +36,8 @@ builder.Services.AddControllers()
     .AddJsonOptions(opts =>
     {
         opts.JsonSerializerOptions.PropertyNameCaseInsensitive = true;
+        opts.JsonSerializerOptions.Converters.Add(new eiti.Api.Extensions.DateTimeUtcJsonConverter());
+        opts.JsonSerializerOptions.Converters.Add(new eiti.Api.Extensions.NullableDateTimeUtcJsonConverter());
     });
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddEndpointsApiExplorer();
