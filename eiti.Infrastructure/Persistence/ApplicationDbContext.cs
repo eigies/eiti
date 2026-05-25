@@ -8,8 +8,10 @@ using eiti.Domain.Customers;
 using eiti.Domain.Employees;
 using eiti.Domain.Fleet;
 using eiti.Domain.Products;
+using eiti.Domain.Purchases;
 using eiti.Domain.Sales;
 using eiti.Domain.Stock;
+using eiti.Domain.Suppliers;
 using eiti.Domain.Transport;
 using eiti.Domain.Users;
 using eiti.Domain.Vehicles;
@@ -54,6 +56,10 @@ public sealed class ApplicationDbContext : DbContext
     public DbSet<User> Users { get; set; }
     public DbSet<UserRoleAudit> UserRoleAudits { get; set; }
     public DbSet<PasswordResetToken> PasswordResetTokens { get; set; }
+    public DbSet<Supplier> Suppliers => Set<Supplier>();
+    public DbSet<Purchase> Purchases => Set<Purchase>();
+    public DbSet<PurchaseDetail> PurchaseDetails => Set<PurchaseDetail>();
+    public DbSet<PurchasePayment> PurchasePayments => Set<PurchasePayment>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

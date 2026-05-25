@@ -15,6 +15,7 @@ public sealed class GetCurrentCashSessionHandler : IRequestHandler<GetCurrentCas
     private readonly ICashDrawerRepository _cashDrawerRepository;
     private readonly ICashSessionRepository _cashSessionRepository;
     private readonly ISaleRepository _saleRepository;
+    private readonly IPurchaseRepository _purchaseRepository;
     private readonly IUserRepository _userRepository;
 
     public GetCurrentCashSessionHandler(
@@ -22,12 +23,14 @@ public sealed class GetCurrentCashSessionHandler : IRequestHandler<GetCurrentCas
         ICashDrawerRepository cashDrawerRepository,
         ICashSessionRepository cashSessionRepository,
         ISaleRepository saleRepository,
+        IPurchaseRepository purchaseRepository,
         IUserRepository userRepository)
     {
         _currentUserService = currentUserService;
         _cashDrawerRepository = cashDrawerRepository;
         _cashSessionRepository = cashSessionRepository;
         _saleRepository = saleRepository;
+        _purchaseRepository = purchaseRepository;
         _userRepository = userRepository;
     }
 
@@ -70,9 +73,23 @@ public sealed class GetCurrentCashSessionHandler : IRequestHandler<GetCurrentCas
             .Distinct()
             .ToList();
 
-        Dictionary<Guid, string?> saleCodes = saleIds.Count > 0
-            ? await _saleRepository.GetCodesBySaleIdsAsync(saleIds, cancellationToken)
-            : [];
+        var saleCodes = new Dictionary<Guid, string?>();
+        if (saleIds.Count > 0)
+        {
+            var codes = await _saleRepository.GetCodesBySaleIdsAsync(saleIds, cancellationToken);
+            foreach (var kv in codes) saleCodes[kv.Key] = kv.Value;
+        }
+
+        var purchaseIds = session.Movements
+            .Where(m => m.ReferenceType == CashReferenceTypes.Purchase && m.ReferenceId.HasValue)
+            .Select(m => m.ReferenceId!.Value)
+            .Distinct()
+            .ToList();
+        if (purchaseIds.Count > 0)
+        {
+            var purchaseCodes = await _purchaseRepository.GetCodesByPurchaseIdsAsync(purchaseIds, cancellationToken);
+            foreach (var kv in purchaseCodes) saleCodes[kv.Key] = kv.Value;
+        }
 
         var userIds = session.Movements
             .Select(m => m.CreatedByUserId.Value)

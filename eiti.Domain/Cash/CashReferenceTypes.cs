@@ -7,4 +7,5 @@ public static class CashReferenceTypes
     public const string CuentaCorriente = "CuentaCorriente";
     public const string Withdrawal = "Withdrawal";
     public const string Transfer = "Transfer";
+    public const string Purchase = "Purchase";
 }

@@ -34,6 +34,10 @@ public interface ICashSessionRepository
         CompanyId companyId,
         CancellationToken cancellationToken = default);
 
+    Task<CashSession?> GetAnyOpenByCompanyAsync(
+        CompanyId companyId,
+        CancellationToken cancellationToken = default);
+
     Task<CashSession?> GetLastClosedByDrawerAsync(
         CashDrawerId cashDrawerId,
         CompanyId companyId,

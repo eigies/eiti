@@ -112,6 +112,18 @@ public sealed class CashSessionRepository : ICashSessionRepository
                 cancellationToken);
     }
 
+    public async Task<CashSession?> GetAnyOpenByCompanyAsync(
+        CompanyId companyId,
+        CancellationToken cancellationToken = default)
+    {
+        return await _context.CashSessions
+            .Include(session => session.Movements)
+            .FirstOrDefaultAsync(
+                session => session.CompanyId == companyId
+                    && session.Status == CashSessionStatus.Open,
+                cancellationToken);
+    }
+
     public async Task<CashSession?> GetLastClosedByDrawerAsync(
         CashDrawerId cashDrawerId,
         CompanyId companyId,

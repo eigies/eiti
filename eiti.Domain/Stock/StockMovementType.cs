@@ -8,5 +8,7 @@ public enum StockMovementType
     ReleaseReservation = 4,
     SaleOut = 5,
     TradeInIn = 6,
-    SaleReturn = 7
+    SaleReturn = 7,
+    PurchaseIn = 8,
+    PurchaseReturn = 9
 }

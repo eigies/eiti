@@ -27,7 +27,13 @@ public static class RoleCatalog
                 PermissionCodes.SalesPriceOverride,
                 PermissionCodes.BanksManage,
                 PermissionCodes.ChequesManage,
-                PermissionCodes.ProductsViewCost
+                PermissionCodes.ProductsViewCost,
+                PermissionCodes.SuppliersManage,
+                PermissionCodes.PurchasesAccess,
+                PermissionCodes.PurchasesCreate,
+                PermissionCodes.PurchasesUpdate,
+                PermissionCodes.PurchasesPay,
+                PermissionCodes.PurchasesCancel
             }),
         new RoleDefinition(
             SystemRoles.Admin,
@@ -52,7 +58,13 @@ public static class RoleCatalog
                 PermissionCodes.SalesPriceOverride,
                 PermissionCodes.BanksManage,
                 PermissionCodes.ChequesManage,
-                PermissionCodes.ProductsViewCost
+                PermissionCodes.ProductsViewCost,
+                PermissionCodes.SuppliersManage,
+                PermissionCodes.PurchasesAccess,
+                PermissionCodes.PurchasesCreate,
+                PermissionCodes.PurchasesUpdate,
+                PermissionCodes.PurchasesPay,
+                PermissionCodes.PurchasesCancel
             }),
         new RoleDefinition(
             SystemRoles.Seller,
@@ -63,7 +75,8 @@ public static class RoleCatalog
                 PermissionCodes.SalesAccess,
                 PermissionCodes.SalesCreate,
                 PermissionCodes.SalesUpdate,
-                PermissionCodes.SalesPay
+                PermissionCodes.SalesPay,
+                PermissionCodes.PurchasesAccess
             }),
         new RoleDefinition(
             SystemRoles.Cashier,

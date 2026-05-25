@@ -197,6 +197,35 @@ public sealed class CashSession : AggregateRoot<CashSessionId>
         }
     }
 
+    public void RegisterPurchaseExpense(
+        decimal amount,
+        Guid purchaseId,
+        UserId createdByUserId,
+        Domain.Purchases.PurchasePaymentMethod method = Domain.Purchases.PurchasePaymentMethod.Cash)
+    {
+        EnsureOpen();
+        var direction = method switch
+        {
+            Domain.Purchases.PurchasePaymentMethod.Cash => CashMovementDirection.Out,
+            _                                           => CashMovementDirection.None,
+        };
+        var methodName = method switch
+        {
+            Domain.Purchases.PurchasePaymentMethod.Cash         => "Efectivo",
+            Domain.Purchases.PurchasePaymentMethod.BankTransfer => "Transferencia",
+            Domain.Purchases.PurchasePaymentMethod.Check        => "Cheque",
+            _                                                    => "Otro",
+        };
+        AddMovement(
+            CashMovementType.PurchaseExpense,
+            direction,
+            amount,
+            CashReferenceTypes.Purchase,
+            purchaseId,
+            methodName,
+            createdByUserId);
+    }
+
     public void RegisterWithdrawal(
         decimal amount,
         string description,

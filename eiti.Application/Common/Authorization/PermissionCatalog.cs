@@ -22,7 +22,13 @@ public static class PermissionCatalog
         PermissionCodes.ChequesManage,
         PermissionCodes.CashDrawerAssign,
         PermissionCodes.ProductsViewCost,
-        PermissionCodes.SalesCancelHistorical
+        PermissionCodes.SalesCancelHistorical,
+        PermissionCodes.SuppliersManage,
+        PermissionCodes.PurchasesAccess,
+        PermissionCodes.PurchasesCreate,
+        PermissionCodes.PurchasesUpdate,
+        PermissionCodes.PurchasesPay,
+        PermissionCodes.PurchasesCancel,
     };
 
     public static bool IsValid(string permissionCode) =>

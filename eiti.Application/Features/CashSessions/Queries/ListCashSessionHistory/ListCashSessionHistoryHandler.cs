@@ -15,6 +15,7 @@ public sealed class ListCashSessionHistoryHandler : IRequestHandler<ListCashSess
     private readonly ICashDrawerRepository _cashDrawerRepository;
     private readonly ICashSessionRepository _cashSessionRepository;
     private readonly ISaleRepository _saleRepository;
+    private readonly IPurchaseRepository _purchaseRepository;
     private readonly IUserRepository _userRepository;
 
     public ListCashSessionHistoryHandler(
@@ -22,12 +23,14 @@ public sealed class ListCashSessionHistoryHandler : IRequestHandler<ListCashSess
         ICashDrawerRepository cashDrawerRepository,
         ICashSessionRepository cashSessionRepository,
         ISaleRepository saleRepository,
+        IPurchaseRepository purchaseRepository,
         IUserRepository userRepository)
     {
         _currentUserService = currentUserService;
         _cashDrawerRepository = cashDrawerRepository;
         _cashSessionRepository = cashSessionRepository;
         _saleRepository = saleRepository;
+        _purchaseRepository = purchaseRepository;
         _userRepository = userRepository;
     }
 
@@ -83,9 +86,24 @@ public sealed class ListCashSessionHistoryHandler : IRequestHandler<ListCashSess
             .Distinct()
             .ToList();
 
-        Dictionary<Guid, string?> allSaleCodes = allSaleIds.Count > 0
-            ? await _saleRepository.GetCodesBySaleIdsAsync(allSaleIds, cancellationToken)
-            : [];
+        var allSaleCodes = new Dictionary<Guid, string?>();
+        if (allSaleIds.Count > 0)
+        {
+            var codes = await _saleRepository.GetCodesBySaleIdsAsync(allSaleIds, cancellationToken);
+            foreach (var kv in codes) allSaleCodes[kv.Key] = kv.Value;
+        }
+
+        var allPurchaseIds = sessions
+            .SelectMany(s => s.Movements)
+            .Where(m => m.ReferenceType == CashReferenceTypes.Purchase && m.ReferenceId.HasValue)
+            .Select(m => m.ReferenceId!.Value)
+            .Distinct()
+            .ToList();
+        if (allPurchaseIds.Count > 0)
+        {
+            var purchaseCodes = await _purchaseRepository.GetCodesByPurchaseIdsAsync(allPurchaseIds, cancellationToken);
+            foreach (var kv in purchaseCodes) allSaleCodes[kv.Key] = kv.Value;
+        }
 
         var allUserIds = sessions
             .SelectMany(s => s.Movements)

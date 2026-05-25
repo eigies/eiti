@@ -27,4 +27,14 @@ public static class PermissionCodes
     public const string ProductsViewCost = "products.view_cost";
 
     public const string SalesCancelHistorical = "sales.cancel.historical";
+
+    // Suppliers
+    public const string SuppliersManage = "suppliers.manage";
+
+    // Purchases
+    public const string PurchasesAccess = "purchases.access";
+    public const string PurchasesCreate = "purchases.create";
+    public const string PurchasesUpdate = "purchases.update";
+    public const string PurchasesPay = "purchases.pay";
+    public const string PurchasesCancel = "purchases.cancel";
 }
