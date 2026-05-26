@@ -9,6 +9,8 @@ public sealed record CreatePurchaseCommand(
     Guid? SupplierId,
     string? InvoiceNumber,
     string? Notes,
+    decimal? IvaPct,
+    decimal? IngresosBrutosPct,
     IReadOnlyList<CreatePurchaseDetailRequest> Details,
     IReadOnlyList<CreatePurchasePaymentRequest> Payments
 ) : IRequest<Result<CreatePurchaseResponse>>, IRequirePermissions
@@ -26,6 +28,4 @@ public sealed record CreatePurchasePaymentRequest(
     decimal Amount,
     DateTime Date,
     string? Reference,
-    string? Notes,
-    decimal? IvaPct,
-    decimal? IngresosBrutosPct);
+    string? Notes);

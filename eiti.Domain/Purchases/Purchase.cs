@@ -14,6 +14,8 @@ public sealed class Purchase
     public Guid CreatedByUserId { get; private set; }
     public DateTime? PaidAt { get; private set; }
     public DateTime? CancelledAt { get; private set; }
+    public decimal? IvaPct { get; private set; }
+    public decimal? IngresosBrutosPct { get; private set; }
 
     private readonly List<PurchaseDetail> _details = [];
     public IReadOnlyCollection<PurchaseDetail> Details => _details.AsReadOnly();
@@ -37,7 +39,9 @@ public sealed class Purchase
         string? invoiceNumber,
         string? notes,
         Guid createdByUserId,
-        string code)
+        string code,
+        decimal? ivaPct = null,
+        decimal? ingresosBrutosPct = null)
     {
         if (details.Count == 0)
             throw new ArgumentException("A purchase must contain at least one detail.", nameof(details));
@@ -53,7 +57,9 @@ public sealed class Purchase
             InvoiceNumber = NormalizeOptional(invoiceNumber, 100),
             Notes = NormalizeOptional(notes, 500),
             CreatedAt = DateTime.UtcNow,
-            CreatedByUserId = createdByUserId
+            CreatedByUserId = createdByUserId,
+            IvaPct = ivaPct,
+            IngresosBrutosPct = ingresosBrutosPct
         };
 
         foreach (var detail in details)

@@ -82,7 +82,7 @@ public sealed class AddPurchasePaymentHandler : IRequestHandler<AddPurchasePayme
         if (IsFromPreviousBusinessDay(session.OpenedAt))
             return Result<AddPurchasePaymentResponse>.Failure(AddPurchasePaymentErrors.CashSessionFromPreviousDay);
 
-        var payment = PurchasePayment.Create(method, command.Amount, command.Date, command.Reference, command.Notes, command.IvaPct, command.IngresosBrutosPct);
+        var payment = PurchasePayment.Create(method, command.Amount, command.Date, command.Reference, command.Notes);
         purchase.AddPayment(payment);
         session!.RegisterPurchaseExpense(command.Amount, purchase.Id, userId, method);
 

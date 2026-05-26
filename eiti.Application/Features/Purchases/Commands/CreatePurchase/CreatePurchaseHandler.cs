@@ -103,7 +103,9 @@ public sealed class CreatePurchaseHandler : IRequestHandler<CreatePurchaseComman
             command.InvoiceNumber,
             command.Notes,
             userId.Value,
-            purchaseCode);
+            purchaseCode,
+            command.IvaPct,
+            command.IngresosBrutosPct);
 
         // Update stock for each detail and create stock movements
         foreach (var detail in purchase.Details)
@@ -173,9 +175,7 @@ public sealed class CreatePurchaseHandler : IRequestHandler<CreatePurchaseComman
                 paymentRequest.Amount,
                 paymentRequest.Date,
                 paymentRequest.Reference,
-                paymentRequest.Notes,
-                paymentRequest.IvaPct,
-                paymentRequest.IngresosBrutosPct);
+                paymentRequest.Notes);
 
             purchase.AddPayment(purchasePayment);
             openSession!.RegisterPurchaseExpense(paymentRequest.Amount, purchase.Id, userId, method);
@@ -190,6 +190,8 @@ public sealed class CreatePurchaseHandler : IRequestHandler<CreatePurchaseComman
             supplierName,
             purchase.InvoiceNumber,
             purchase.Notes,
+            purchase.IvaPct,
+            purchase.IngresosBrutosPct,
             (int)purchase.Status,
             purchase.Status.ToString(),
             purchase.TotalAmount,
@@ -209,8 +211,6 @@ public sealed class CreatePurchaseHandler : IRequestHandler<CreatePurchaseComman
                 p.Amount,
                 p.Reference,
                 p.Notes,
-                p.Date,
-                p.IvaPct,
-                p.IngresosBrutosPct)).ToList()));
+                p.Date)).ToList()));
     }
 }

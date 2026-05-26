@@ -11,8 +11,6 @@ public sealed class PurchasePayment
     public string? Notes { get; private set; }
     public DateTime Date { get; private set; }
     public DateTime CreatedAt { get; private set; }
-    public decimal? IvaPct { get; private set; }
-    public decimal? IngresosBrutosPct { get; private set; }
 
     private PurchasePayment()
     {
@@ -24,9 +22,7 @@ public sealed class PurchasePayment
         decimal amount,
         DateTime date,
         string? reference,
-        string? notes,
-        decimal? ivaPct,
-        decimal? ingresosBrutosPct)
+        string? notes)
     {
         if (amount <= 0)
             throw new ArgumentException("Payment amount must be greater than zero.", nameof(amount));
@@ -39,8 +35,6 @@ public sealed class PurchasePayment
         Reference = NormalizeOptional(reference, 120);
         Notes = NormalizeOptional(notes, 500);
         CreatedAt = DateTime.UtcNow;
-        IvaPct = ivaPct;
-        IngresosBrutosPct = ingresosBrutosPct;
     }
 
     public static PurchasePayment Create(
@@ -48,11 +42,9 @@ public sealed class PurchasePayment
         decimal amount,
         DateTime date,
         string? reference,
-        string? notes,
-        decimal? ivaPct = null,
-        decimal? ingresosBrutosPct = null)
+        string? notes)
     {
-        return new PurchasePayment(Guid.NewGuid(), method, amount, date, reference, notes, ivaPct, ingresosBrutosPct);
+        return new PurchasePayment(Guid.NewGuid(), method, amount, date, reference, notes);
     }
 
     public void Cancel()

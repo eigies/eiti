@@ -27,6 +27,13 @@ public sealed class CreatePurchaseValidator : AbstractValidator<CreatePurchaseCo
             payment.RuleFor(p => p.Amount).GreaterThan(0).WithMessage("Payment amount must be greater than zero.");
         });
 
+        RuleFor(x => x.IvaPct)
+            .Must(v => v == null || v == 10.5m || v == 21.0m)
+            .WithMessage("IvaPct must be null (Exento), 10.5, or 21.");
+        RuleFor(x => x.IngresosBrutosPct)
+            .GreaterThanOrEqualTo(0).When(x => x.IngresosBrutosPct.HasValue)
+            .WithMessage("IngresosBrutosPct must be >= 0.");
+
         RuleFor(x => x.InvoiceNumber)
             .MaximumLength(100).WithMessage("Invoice number cannot exceed 100 characters.")
             .When(x => x.InvoiceNumber != null);

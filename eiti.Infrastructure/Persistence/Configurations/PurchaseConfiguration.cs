@@ -25,6 +25,8 @@ public sealed class PurchaseConfiguration : IEntityTypeConfiguration<Purchase>
         builder.Property(p => p.CreatedByUserId).IsRequired();
         builder.Property(p => p.PaidAt).IsRequired(false);
         builder.Property(p => p.CancelledAt).IsRequired(false);
+        builder.Property(p => p.IvaPct).HasColumnType("decimal(5,2)").IsRequired(false);
+        builder.Property(p => p.IngresosBrutosPct).HasColumnType("decimal(5,2)").IsRequired(false);
 
         builder.Ignore(p => p.TotalAmount);
         builder.Ignore(p => p.TotalPaid);

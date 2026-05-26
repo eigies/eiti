@@ -6,6 +6,8 @@ public sealed record CreatePurchaseResponse(
     string? SupplierName,
     string? InvoiceNumber,
     string? Notes,
+    decimal? IvaPct,
+    decimal? IngresosBrutosPct,
     int Status,
     string StatusName,
     decimal TotalAmount,
@@ -29,6 +31,4 @@ public sealed record CreatePurchasePaymentResponse(
     decimal Amount,
     string? Reference,
     string? Notes,
-    DateTime Date,
-    decimal? IvaPct,
-    decimal? IngresosBrutosPct);
+    DateTime Date);

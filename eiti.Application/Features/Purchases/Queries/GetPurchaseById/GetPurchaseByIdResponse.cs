@@ -12,6 +12,8 @@ public sealed record GetPurchaseByIdResponse(
     string? SupplierEmail,
     string? InvoiceNumber,
     string? Notes,
+    decimal? IvaPct,
+    decimal? IngresosBrutosPct,
     int Status,
     string StatusName,
     decimal TotalAmount,
@@ -42,8 +44,4 @@ public sealed record GetPurchasePaymentResponse(
     string? Reference,
     string? Notes,
     DateTime Date,
-    DateTime CreatedAt,
-    decimal? IvaPct,
-    decimal? IngresosBrutosPct,
-    decimal? IvaAmount,
-    decimal? IngresosBrutosAmount);
+    DateTime CreatedAt);
