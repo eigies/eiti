@@ -37,4 +37,6 @@ public static class PermissionCodes
     public const string PurchasesUpdate = "purchases.update";
     public const string PurchasesPay = "purchases.pay";
     public const string PurchasesCancel = "purchases.cancel";
+
+    public const string ProductsCostPriceAlert = "products.cost_price_alert";
 }

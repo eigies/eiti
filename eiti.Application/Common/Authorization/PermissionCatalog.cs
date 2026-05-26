@@ -29,6 +29,7 @@ public static class PermissionCatalog
         PermissionCodes.PurchasesUpdate,
         PermissionCodes.PurchasesPay,
         PermissionCodes.PurchasesCancel,
+        PermissionCodes.ProductsCostPriceAlert,
     };
 
     public static bool IsValid(string permissionCode) =>
