@@ -72,6 +72,20 @@ public sealed class PurchaseRepository : IPurchaseRepository
             .ToDictionaryAsync(x => x.Id, x => (string?)x.Code, ct);
     }
 
+    public async Task<bool> ExistsWithInvoiceNumberAsync(
+        Guid companyId,
+        Guid? supplierId,
+        string invoiceNumber,
+        CancellationToken ct = default)
+    {
+        return await _context.Purchases
+            .AnyAsync(p =>
+                p.CompanyId == companyId &&
+                p.SupplierId == supplierId &&
+                p.InvoiceNumber == invoiceNumber &&
+                p.Status != PurchaseStatus.Cancelled, ct);
+    }
+
     private IQueryable<Purchase> BuildQuery(
         Guid companyId,
         Guid? supplierId,

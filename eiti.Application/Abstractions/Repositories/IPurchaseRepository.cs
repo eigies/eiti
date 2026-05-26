@@ -29,4 +29,10 @@ public interface IPurchaseRepository
     Task<Dictionary<Guid, string?>> GetCodesByPurchaseIdsAsync(
         IEnumerable<Guid> purchaseIds,
         CancellationToken ct = default);
+
+    Task<bool> ExistsWithInvoiceNumberAsync(
+        Guid companyId,
+        Guid? supplierId,
+        string invoiceNumber,
+        CancellationToken ct = default);
 }

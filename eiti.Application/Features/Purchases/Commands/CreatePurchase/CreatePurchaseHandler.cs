@@ -65,6 +65,15 @@ public sealed class CreatePurchaseHandler : IRequestHandler<CreatePurchaseComman
             supplierName = supplier.Name;
         }
 
+        // Validate duplicate invoice number (per company + supplier, ignoring cancelled)
+        if (!string.IsNullOrWhiteSpace(command.InvoiceNumber))
+        {
+            var duplicate = await _purchaseRepository.ExistsWithInvoiceNumberAsync(
+                companyId.Value, command.SupplierId, command.InvoiceNumber.Trim(), cancellationToken);
+            if (duplicate)
+                return Result<CreatePurchaseResponse>.Failure(CreatePurchaseErrors.DuplicateInvoiceNumber);
+        }
+
         // Validate payment methods
         foreach (var payment in command.Payments)
         {

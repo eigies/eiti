@@ -27,4 +27,8 @@ public static class CreatePurchaseErrors
     public static readonly Error InvalidPaymentMethod = Error.Validation(
         "Purchases.Create.InvalidPaymentMethod",
         "The specified payment method is invalid.");
+
+    public static readonly Error DuplicateInvoiceNumber = Error.Conflict(
+        "Purchases.Create.DuplicateInvoiceNumber",
+        "Ya existe una compra con ese número de factura para el mismo proveedor.");
 }
