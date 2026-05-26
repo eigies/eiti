@@ -11,6 +11,8 @@ public sealed record CreatePurchaseResponse(
     int Status,
     string StatusName,
     decimal TotalAmount,
+    decimal TaxAmount,
+    decimal GrandTotal,
     decimal TotalPaid,
     decimal PendingAmount,
     DateTime CreatedAt,

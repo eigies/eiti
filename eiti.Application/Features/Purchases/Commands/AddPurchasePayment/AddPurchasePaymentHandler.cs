@@ -93,6 +93,8 @@ public sealed class AddPurchasePaymentHandler : IRequestHandler<AddPurchasePayme
             (int)purchase.Status,
             purchase.Status.ToString(),
             purchase.TotalAmount,
+            purchase.TaxAmount,
+            purchase.GrandTotal,
             purchase.TotalPaid,
             purchase.PendingAmount,
             payment.Id));

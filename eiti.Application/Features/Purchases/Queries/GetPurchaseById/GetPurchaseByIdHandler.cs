@@ -87,6 +87,8 @@ public sealed class GetPurchaseByIdHandler : IRequestHandler<GetPurchaseByIdQuer
             (int)purchase.Status,
             purchase.Status.ToString(),
             purchase.TotalAmount,
+            purchase.TaxAmount,
+            purchase.GrandTotal,
             purchase.TotalPaid,
             purchase.PendingAmount,
             purchase.CreatedAt,

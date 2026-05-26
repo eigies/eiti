@@ -44,7 +44,8 @@
       "Bash(dotnet ef *)",
       "Bash(sqlcmd *)",
       "Bash(Select-String -Pattern \"Error|error TS|Built|chunk|0 errors\")",
-      "PowerShell(ng build *)"
+      "PowerShell(ng build *)",
+      "PowerShell(powershell -ExecutionPolicy Bypass -File \"C:\\\\Eiti\\\\eiti\\\\.claude\\\\skills\\\\git-commit-dual\\\\scripts\\\\commit-dual.ps1\" -Message \"feat\\(purchases\\): IVA/IIBB se suman al saldo pendiente + grandTotal en responses\" -Push)"
     ]
   },
   "statusLine": {

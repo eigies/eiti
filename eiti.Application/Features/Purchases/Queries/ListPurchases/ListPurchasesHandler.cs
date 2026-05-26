@@ -67,6 +67,8 @@ public sealed class ListPurchasesHandler : IRequestHandler<ListPurchasesQuery, R
             (int)p.Status,
             p.Status.ToString(),
             p.TotalAmount,
+            p.TaxAmount,
+            p.GrandTotal,
             p.TotalPaid,
             p.PendingAmount,
             p.CreatedAt,

@@ -5,6 +5,8 @@ public sealed record AddPurchasePaymentResponse(
     int Status,
     string StatusName,
     decimal TotalAmount,
+    decimal TaxAmount,
+    decimal GrandTotal,
     decimal TotalPaid,
     decimal PendingAmount,
     Guid PaymentId);

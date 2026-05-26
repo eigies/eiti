@@ -24,8 +24,10 @@ public sealed class Purchase
     public IReadOnlyCollection<PurchasePayment> Payments => _payments.AsReadOnly();
 
     public decimal TotalAmount => _details.Sum(d => d.TotalAmount);
+    public decimal TaxAmount => NormalizeAmount(TotalAmount * ((IvaPct ?? 0m) + (IngresosBrutosPct ?? 0m)) / 100m);
+    public decimal GrandTotal => TotalAmount + TaxAmount;
     public decimal TotalPaid => _payments.Where(p => p.Status == PurchasePaymentStatus.Active).Sum(p => p.Amount);
-    public decimal PendingAmount => NormalizeAmount(TotalAmount - TotalPaid);
+    public decimal PendingAmount => NormalizeAmount(GrandTotal - TotalPaid);
 
     private Purchase()
     {
