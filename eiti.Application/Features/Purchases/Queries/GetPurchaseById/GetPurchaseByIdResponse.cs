@@ -4,6 +4,7 @@ namespace eiti.Application.Features.Purchases.Queries.GetPurchaseById;
 
 public sealed record GetPurchaseByIdResponse(
     Guid Id,
+    string Code,
     Guid BranchId,
     Guid? SupplierId,
     string? SupplierName,
@@ -41,4 +42,8 @@ public sealed record GetPurchasePaymentResponse(
     string? Reference,
     string? Notes,
     DateTime Date,
-    DateTime CreatedAt);
+    DateTime CreatedAt,
+    decimal? IvaPct,
+    decimal? IngresosBrutosPct,
+    decimal? IvaAmount,
+    decimal? IngresosBrutosAmount);

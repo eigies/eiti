@@ -2,6 +2,8 @@ using eiti.Application.Abstractions.Data;
 using eiti.Application.Abstractions.Repositories;
 using eiti.Application.Abstractions.Services;
 using eiti.Application.Common;
+using eiti.Application.Common.Authorization;
+using eiti.Domain.Cash;
 using eiti.Domain.Purchases;
 using MediatR;
 
@@ -11,17 +13,20 @@ public sealed class AddPurchasePaymentHandler : IRequestHandler<AddPurchasePayme
 {
     private readonly ICurrentUserService _currentUserService;
     private readonly IPurchaseRepository _purchaseRepository;
+    private readonly ICashDrawerRepository _cashDrawerRepository;
     private readonly ICashSessionRepository _cashSessionRepository;
     private readonly IUnitOfWork _unitOfWork;
 
     public AddPurchasePaymentHandler(
         ICurrentUserService currentUserService,
         IPurchaseRepository purchaseRepository,
+        ICashDrawerRepository cashDrawerRepository,
         ICashSessionRepository cashSessionRepository,
         IUnitOfWork unitOfWork)
     {
         _currentUserService = currentUserService;
         _purchaseRepository = purchaseRepository;
+        _cashDrawerRepository = cashDrawerRepository;
         _cashSessionRepository = cashSessionRepository;
         _unitOfWork = unitOfWork;
     }
@@ -53,16 +58,30 @@ public sealed class AddPurchasePaymentHandler : IRequestHandler<AddPurchasePayme
 
         var method = (PurchasePaymentMethod)command.Method;
 
-        var session = await _cashSessionRepository.GetAnyOpenByCompanyAsync(
-            companyId,
-            cancellationToken);
+        // Always prefer the user's assigned drawer; fall back to any open session only for users with CashDrawerViewAll and no assigned drawer.
+        var assignedDrawer = await _cashDrawerRepository.GetByAssignedUserAsync(userId, companyId, cancellationToken);
 
-        if (session is null)
-            return Result<AddPurchasePaymentResponse>.Failure(AddPurchasePaymentErrors.NoCashSessionOpen);
+        CashSession? session;
+        if (assignedDrawer is not null)
+        {
+            session = await _cashSessionRepository.GetOpenByDrawerAsync(assignedDrawer.Id, companyId, cancellationToken);
+            if (session is null)
+                return Result<AddPurchasePaymentResponse>.Failure(AddPurchasePaymentErrors.NoCashSessionOpen);
+        }
+        else if (_currentUserService.HasPermission(PermissionCodes.CashDrawerViewAll))
+        {
+            session = await _cashSessionRepository.GetAnyOpenByCompanyAsync(companyId, cancellationToken);
+            if (session is null)
+                return Result<AddPurchasePaymentResponse>.Failure(AddPurchasePaymentErrors.NoCashSessionOpen);
+        }
+        else
+        {
+            return Result<AddPurchasePaymentResponse>.Failure(AddPurchasePaymentErrors.NoAssignedCashDrawer);
+        }
 
-        var payment = PurchasePayment.Create(method, command.Amount, command.Date, command.Reference, command.Notes);
+        var payment = PurchasePayment.Create(method, command.Amount, command.Date, command.Reference, command.Notes, command.IvaPct, command.IngresosBrutosPct);
         purchase.AddPayment(payment);
-        session.RegisterPurchaseExpense(command.Amount, purchase.Id, userId, method);
+        session!.RegisterPurchaseExpense(command.Amount, purchase.Id, userId, method);
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 

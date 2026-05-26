@@ -10,7 +10,9 @@ public sealed record AddPurchasePaymentCommand(
     decimal Amount,
     DateTime Date,
     string? Reference,
-    string? Notes
+    string? Notes,
+    decimal? IvaPct,
+    decimal? IngresosBrutosPct
 ) : IRequest<Result<AddPurchasePaymentResponse>>, IRequirePermissions
 {
     public IReadOnlyCollection<string> RequiredPermissions => [PermissionCodes.PurchasesPay];

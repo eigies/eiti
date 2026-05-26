@@ -18,5 +18,11 @@ public sealed class AddPurchasePaymentValidator : AbstractValidator<AddPurchaseP
         RuleFor(x => x.Notes)
             .MaximumLength(500).WithMessage("Notes cannot exceed 500 characters.")
             .When(x => x.Notes != null);
+        RuleFor(x => x.IvaPct)
+            .Must(v => v == null || v == 10.5m || v == 21.0m)
+            .WithMessage("IvaPct must be null (Exento), 10.5, or 21.");
+        RuleFor(x => x.IngresosBrutosPct)
+            .GreaterThanOrEqualTo(0).When(x => x.IngresosBrutosPct.HasValue)
+            .WithMessage("IngresosBrutosPct must be >= 0.");
     }
 }

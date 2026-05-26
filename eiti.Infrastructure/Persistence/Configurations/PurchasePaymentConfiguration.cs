@@ -21,6 +21,8 @@ public sealed class PurchasePaymentConfiguration : IEntityTypeConfiguration<Purc
         builder.Property(p => p.Notes).HasMaxLength(500).IsRequired(false);
         builder.Property(p => p.Date).IsRequired();
         builder.Property(p => p.CreatedAt).IsRequired();
+        builder.Property(p => p.IvaPct).HasColumnType("decimal(5,2)").IsRequired(false);
+        builder.Property(p => p.IngresosBrutosPct).HasColumnType("decimal(5,2)").IsRequired(false);
 
         builder.HasIndex(p => p.PurchaseId);
     }

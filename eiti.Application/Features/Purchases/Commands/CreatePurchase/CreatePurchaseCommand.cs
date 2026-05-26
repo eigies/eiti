@@ -26,4 +26,6 @@ public sealed record CreatePurchasePaymentRequest(
     decimal Amount,
     DateTime Date,
     string? Reference,
-    string? Notes);
+    string? Notes,
+    decimal? IvaPct,
+    decimal? IngresosBrutosPct);

@@ -14,7 +14,11 @@ public static class CreatePurchaseErrors
 
     public static readonly Error NoCashSessionOpen = Error.Conflict(
         "Purchases.Create.NoCashSessionOpen",
-        "A cash payment requires an open cash session.");
+        "No hay una sesión de caja abierta para tu caja asignada.");
+
+    public static readonly Error NoAssignedCashDrawer = Error.Conflict(
+        "Purchases.Create.NoAssignedCashDrawer",
+        "No tenés una caja asignada. Pedile a un administrador que te asigne una caja para poder registrar pagos.");
 
     public static Error ProductNotFound(Guid productId) => Error.NotFound(
         "Purchases.Create.ProductNotFound",

@@ -61,7 +61,11 @@ public sealed class GetPurchaseByIdHandler : IRequestHandler<GetPurchaseByIdQuer
                 p.Reference,
                 p.Notes,
                 p.Date,
-                p.CreatedAt))
+                p.CreatedAt,
+                p.IvaPct,
+                p.IngresosBrutosPct,
+                p.IvaPct.HasValue ? decimal.Round(p.Amount * p.IvaPct.Value / 100m, 2, MidpointRounding.AwayFromZero) : null,
+                p.IngresosBrutosPct.HasValue ? decimal.Round(p.Amount * p.IngresosBrutosPct.Value / 100m, 2, MidpointRounding.AwayFromZero) : null))
             .ToList();
 
         var details = purchase.Details.Select(d => new GetPurchaseDetailResponse(
@@ -74,6 +78,7 @@ public sealed class GetPurchaseByIdHandler : IRequestHandler<GetPurchaseByIdQuer
 
         return Result<GetPurchaseByIdResponse>.Success(new GetPurchaseByIdResponse(
             purchase.Id,
+            purchase.Code,
             purchase.BranchId,
             purchase.SupplierId,
             supplierName,

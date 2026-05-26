@@ -2,6 +2,7 @@ using eiti.Application.Abstractions.Data;
 using eiti.Application.Abstractions.Repositories;
 using eiti.Application.Abstractions.Services;
 using eiti.Application.Common;
+using eiti.Application.Common.Authorization;
 using eiti.Domain.Branches;
 using eiti.Domain.Cash;
 using eiti.Domain.Products;
@@ -19,6 +20,7 @@ public sealed class CreatePurchaseHandler : IRequestHandler<CreatePurchaseComman
     private readonly IPurchaseRepository _purchaseRepository;
     private readonly IBranchProductStockRepository _branchProductStockRepository;
     private readonly IStockMovementRepository _stockMovementRepository;
+    private readonly ICashDrawerRepository _cashDrawerRepository;
     private readonly ICashSessionRepository _cashSessionRepository;
     private readonly IUnitOfWork _unitOfWork;
 
@@ -29,6 +31,7 @@ public sealed class CreatePurchaseHandler : IRequestHandler<CreatePurchaseComman
         IPurchaseRepository purchaseRepository,
         IBranchProductStockRepository branchProductStockRepository,
         IStockMovementRepository stockMovementRepository,
+        ICashDrawerRepository cashDrawerRepository,
         ICashSessionRepository cashSessionRepository,
         IUnitOfWork unitOfWork)
     {
@@ -38,6 +41,7 @@ public sealed class CreatePurchaseHandler : IRequestHandler<CreatePurchaseComman
         _purchaseRepository = purchaseRepository;
         _branchProductStockRepository = branchProductStockRepository;
         _stockMovementRepository = stockMovementRepository;
+        _cashDrawerRepository = cashDrawerRepository;
         _cashSessionRepository = cashSessionRepository;
         _unitOfWork = unitOfWork;
     }
@@ -135,17 +139,29 @@ public sealed class CreatePurchaseHandler : IRequestHandler<CreatePurchaseComman
                 cancellationToken);
         }
 
-        // Process payments — all methods require an open session and register an egress movement
+        // Always prefer the user's assigned drawer; fall back to any open session only for users with CashDrawerViewAll and no assigned drawer.
         CashSession? openSession = null;
 
         if (command.Payments.Count > 0)
         {
-            openSession = await _cashSessionRepository.GetAnyOpenByCompanyAsync(
-                companyId,
-                cancellationToken);
+            var assignedDrawer = await _cashDrawerRepository.GetByAssignedUserAsync(userId, companyId, cancellationToken);
 
-            if (openSession is null)
-                return Result<CreatePurchaseResponse>.Failure(CreatePurchaseErrors.NoCashSessionOpen);
+            if (assignedDrawer is not null)
+            {
+                openSession = await _cashSessionRepository.GetOpenByDrawerAsync(assignedDrawer.Id, companyId, cancellationToken);
+                if (openSession is null)
+                    return Result<CreatePurchaseResponse>.Failure(CreatePurchaseErrors.NoCashSessionOpen);
+            }
+            else if (_currentUserService.HasPermission(PermissionCodes.CashDrawerViewAll))
+            {
+                openSession = await _cashSessionRepository.GetAnyOpenByCompanyAsync(companyId, cancellationToken);
+                if (openSession is null)
+                    return Result<CreatePurchaseResponse>.Failure(CreatePurchaseErrors.NoCashSessionOpen);
+            }
+            else
+            {
+                return Result<CreatePurchaseResponse>.Failure(CreatePurchaseErrors.NoAssignedCashDrawer);
+            }
         }
 
         foreach (var paymentRequest in command.Payments)
@@ -157,7 +173,9 @@ public sealed class CreatePurchaseHandler : IRequestHandler<CreatePurchaseComman
                 paymentRequest.Amount,
                 paymentRequest.Date,
                 paymentRequest.Reference,
-                paymentRequest.Notes);
+                paymentRequest.Notes,
+                paymentRequest.IvaPct,
+                paymentRequest.IngresosBrutosPct);
 
             purchase.AddPayment(purchasePayment);
             openSession!.RegisterPurchaseExpense(paymentRequest.Amount, purchase.Id, userId, method);
@@ -191,6 +209,8 @@ public sealed class CreatePurchaseHandler : IRequestHandler<CreatePurchaseComman
                 p.Amount,
                 p.Reference,
                 p.Notes,
-                p.Date)).ToList()));
+                p.Date,
+                p.IvaPct,
+                p.IngresosBrutosPct)).ToList()));
     }
 }

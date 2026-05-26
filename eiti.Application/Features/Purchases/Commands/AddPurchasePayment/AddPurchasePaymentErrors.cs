@@ -26,5 +26,9 @@ public static class AddPurchasePaymentErrors
 
     public static readonly Error NoCashSessionOpen = Error.Conflict(
         "Purchases.AddPayment.NoCashSessionOpen",
-        "A cash payment requires an open cash session.");
+        "No hay una sesión de caja abierta para tu caja asignada.");
+
+    public static readonly Error NoAssignedCashDrawer = Error.Conflict(
+        "Purchases.AddPayment.NoAssignedCashDrawer",
+        "No tenés una caja asignada. Pedile a un administrador que te asigne una caja para poder registrar pagos.");
 }

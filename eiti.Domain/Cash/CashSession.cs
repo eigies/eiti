@@ -314,8 +314,8 @@ public sealed class CashSession : AggregateRoot<CashSessionId>
 
     public decimal ExpectedClosingAmount =>
         _movements.Sum(movement =>
-            movement.Type == CashMovementType.TransferIncome
-                ? 0m  // transfers don't go into the physical drawer
+            movement.Type is CashMovementType.TransferIncome or CashMovementType.CardIncome
+                ? 0m  // non-cash payments don't go into the physical drawer
                 : movement.Direction == CashMovementDirection.In
                     ? movement.Amount
                     : movement.Direction == CashMovementDirection.Out
