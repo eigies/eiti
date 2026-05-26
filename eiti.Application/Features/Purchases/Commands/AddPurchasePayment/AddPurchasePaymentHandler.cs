@@ -79,6 +79,9 @@ public sealed class AddPurchasePaymentHandler : IRequestHandler<AddPurchasePayme
             return Result<AddPurchasePaymentResponse>.Failure(AddPurchasePaymentErrors.NoAssignedCashDrawer);
         }
 
+        if (IsFromPreviousBusinessDay(session.OpenedAt))
+            return Result<AddPurchasePaymentResponse>.Failure(AddPurchasePaymentErrors.CashSessionFromPreviousDay);
+
         var payment = PurchasePayment.Create(method, command.Amount, command.Date, command.Reference, command.Notes, command.IvaPct, command.IngresosBrutosPct);
         purchase.AddPayment(payment);
         session!.RegisterPurchaseExpense(command.Amount, purchase.Id, userId, method);
@@ -93,5 +96,14 @@ public sealed class AddPurchasePaymentHandler : IRequestHandler<AddPurchasePayme
             purchase.TotalPaid,
             purchase.PendingAmount,
             payment.Id));
+    }
+
+    private static readonly TimeSpan ArgentinaOffset = TimeSpan.FromHours(-3);
+
+    private static bool IsFromPreviousBusinessDay(DateTime openedAtUtc)
+    {
+        var openedLocal = openedAtUtc + ArgentinaOffset;
+        var nowLocal = DateTime.UtcNow + ArgentinaOffset;
+        return openedLocal.Date < nowLocal.Date;
     }
 }

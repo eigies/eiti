@@ -73,7 +73,7 @@ public sealed class PurchasesController : ControllerBase
         CancellationToken cancellationToken)
     {
         var result = await _sender.Send(
-            new AddPurchasePaymentCommand(id, request.Method, request.Amount, request.Date, request.Reference, request.Notes),
+            new AddPurchasePaymentCommand(id, request.Method, request.Amount, request.Date, request.Reference, request.Notes, request.IvaPct, request.IngresosBrutosPct),
             cancellationToken);
         return result.ToActionResult();
     }
@@ -94,4 +94,6 @@ public sealed record AddPurchasePaymentRequest(
     decimal Amount,
     DateTime Date,
     string? Reference,
-    string? Notes);
+    string? Notes,
+    decimal? IvaPct,
+    decimal? IngresosBrutosPct);

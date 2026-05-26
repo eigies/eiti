@@ -31,4 +31,8 @@ public static class AddPurchasePaymentErrors
     public static readonly Error NoAssignedCashDrawer = Error.Conflict(
         "Purchases.AddPayment.NoAssignedCashDrawer",
         "No tenés una caja asignada. Pedile a un administrador que te asigne una caja para poder registrar pagos.");
+
+    public static readonly Error CashSessionFromPreviousDay = Error.Conflict(
+        "Purchases.AddPayment.CashSessionFromPreviousDay",
+        "La sesión de caja está abierta desde un día anterior. Cerrá la sesión antes de registrar pagos.");
 }
