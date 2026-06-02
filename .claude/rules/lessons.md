@@ -1,5 +1,18 @@
 # Lessons Learned
 
+## Adding a new permission — THREE backend places, not two - 2026-06-02
+
+**Bug:** Added `stock.manage` + `products.delete`. Updated `PermissionCodes.cs` (constants) and `RoleCatalog.cs` (role→permission assignment), but assigning the new permission to an access profile failed with `detail: "One or more selected permissions are invalid."`
+
+**Root cause:** There is a THIRD list — `eiti.Application/Common/Authorization/PermissionCatalog.cs` (`PermissionCatalog.All`). This is the allowlist that `AccessProfileFeature` validates selected permissions against via `PermissionCatalog.IsValid()`. A permission code can exist in `PermissionCodes` and even be assigned in `RoleCatalog`, but if it's missing from `PermissionCatalog.All` it's rejected as "invalid" when a user tries to put it on an access profile.
+
+**Checklist when adding a permission:**
+1. `PermissionCodes.cs` — the constant.
+2. `RoleCatalog.cs` — assign to the relevant system roles (Owner/Admin/etc.).
+3. **`PermissionCatalog.cs` — add to `All`** (the allowlist for access-profile validation). ← easy to forget.
+4. Frontend `permission.models.ts` — `PermissionCodes` map + `PermissionCatalog` array entry.
+5. **Restart the API** — `PermissionCatalog.All` is a static set read into memory; a running process keeps the old list.
+
 ## Transport Assignment Bugs - 2026-03-22
 
 ### Bug 1 — 500 on reassignment after QUITAR
