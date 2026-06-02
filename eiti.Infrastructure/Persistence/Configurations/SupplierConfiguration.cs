@@ -21,6 +21,7 @@ public sealed class SupplierConfiguration : IEntityTypeConfiguration<Supplier>
         builder.Property(s => s.Notes).HasMaxLength(500).IsRequired(false);
         builder.Property(s => s.IsActive).IsRequired();
         builder.Property(s => s.CreatedAt).IsRequired();
+        builder.Property(s => s.CreditBalance).HasColumnType("decimal(18,2)").IsRequired();
 
         builder.HasIndex(s => s.CompanyId);
         builder.HasIndex(s => new { s.CompanyId, s.Name });

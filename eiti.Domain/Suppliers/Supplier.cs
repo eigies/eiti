@@ -11,6 +11,7 @@ public sealed class Supplier
     public string? Notes { get; private set; }
     public bool IsActive { get; private set; }
     public DateTime CreatedAt { get; private set; }
+    public decimal CreditBalance { get; private set; }
 
     private Supplier()
     {
@@ -50,6 +51,16 @@ public sealed class Supplier
     public void Deactivate()
     {
         IsActive = false;
+    }
+
+    public void AddCredit(decimal amount)
+    {
+        CreditBalance += amount;
+    }
+
+    public void ConsumeCredit(decimal amount)
+    {
+        CreditBalance -= amount;
     }
 
     private static string NormalizeRequired(string value, int maxLength, string paramName)

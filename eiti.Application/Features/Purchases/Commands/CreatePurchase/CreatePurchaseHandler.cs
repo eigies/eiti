@@ -8,6 +8,7 @@ using eiti.Domain.Cash;
 using eiti.Domain.Products;
 using eiti.Domain.Purchases;
 using eiti.Domain.Stock;
+using eiti.Domain.Suppliers;
 using MediatR;
 
 namespace eiti.Application.Features.Purchases.Commands.CreatePurchase;
@@ -57,9 +58,10 @@ public sealed class CreatePurchaseHandler : IRequestHandler<CreatePurchaseComman
 
         // Validate supplier if provided
         string? supplierName = null;
+        Supplier? supplier = null;
         if (command.SupplierId.HasValue)
         {
-            var supplier = await _supplierRepository.GetByIdAsync(command.SupplierId.Value, companyId.Value, cancellationToken);
+            supplier = await _supplierRepository.GetByIdAsync(command.SupplierId.Value, companyId.Value, cancellationToken);
             if (supplier is null)
                 return Result<CreatePurchaseResponse>.Failure(CreatePurchaseErrors.SupplierNotFound);
             supplierName = supplier.Name;
@@ -150,6 +152,23 @@ public sealed class CreatePurchaseHandler : IRequestHandler<CreatePurchaseComman
                 cancellationToken);
         }
 
+        // Auto-aplicar saldo a favor del proveedor (igual que cuenta corriente).
+        decimal creditApplied = 0m;
+        if (supplier is not null && supplier.CreditBalance > 0)
+        {
+            creditApplied = Math.Min(supplier.CreditBalance, purchase.GrandTotal);
+            if (creditApplied > 0)
+            {
+                supplier.ConsumeCredit(creditApplied);
+                purchase.AddPayment(PurchasePayment.Create(
+                    PurchasePaymentMethod.SupplierCredit,
+                    creditApplied,
+                    DateTime.UtcNow,
+                    null,
+                    "Saldo a favor aplicado automáticamente"));
+            }
+        }
+
         // Always prefer the user's assigned drawer; fall back to any open session only for users with CashDrawerViewAll and no assigned drawer.
         CashSession? openSession = null;
 
@@ -187,7 +206,20 @@ public sealed class CreatePurchaseHandler : IRequestHandler<CreatePurchaseComman
                 paymentRequest.Notes);
 
             purchase.AddPayment(purchasePayment);
-            openSession!.RegisterPurchaseExpense(paymentRequest.Amount, purchase.Id, userId, method);
+            if (method != PurchasePaymentMethod.SupplierCredit)
+                openSession!.RegisterPurchaseExpense(paymentRequest.Amount, purchase.Id, userId, method);
+        }
+
+        // Sobrepago: el excedente queda como saldo a favor del proveedor.
+        decimal excess = 0m;
+        if (supplier is not null)
+        {
+            excess = Math.Max(0m, purchase.TotalPaid - purchase.GrandTotal);
+            if (excess > 0)
+                supplier.AddCredit(excess);
+
+            if (creditApplied > 0 || excess > 0)
+                _supplierRepository.Update(supplier);
         }
 
         await _purchaseRepository.AddAsync(purchase, cancellationToken);
@@ -207,7 +239,7 @@ public sealed class CreatePurchaseHandler : IRequestHandler<CreatePurchaseComman
             purchase.TaxAmount,
             purchase.GrandTotal,
             purchase.TotalPaid,
-            purchase.PendingAmount,
+            Math.Max(0m, purchase.PendingAmount),
             purchase.CreatedAt,
             purchase.Details.Select(d => new CreatePurchaseDetailResponse(
                 d.ProductId,
@@ -222,6 +254,9 @@ public sealed class CreatePurchaseHandler : IRequestHandler<CreatePurchaseComman
                 p.Amount,
                 p.Reference,
                 p.Notes,
-                p.Date)).ToList()));
+                p.Date)).ToList(),
+            creditApplied,
+            excess,
+            supplier?.CreditBalance ?? 0m));
     }
 }

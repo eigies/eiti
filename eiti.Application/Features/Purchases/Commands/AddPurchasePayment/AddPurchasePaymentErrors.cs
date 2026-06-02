@@ -35,4 +35,8 @@ public static class AddPurchasePaymentErrors
     public static readonly Error CashSessionFromPreviousDay = Error.Conflict(
         "Purchases.AddPayment.CashSessionFromPreviousDay",
         "La sesión de caja está abierta desde un día anterior. Cerrá la sesión antes de registrar pagos.");
+
+    public static readonly Error OverpaymentRequiresSupplier = Error.Validation(
+        "Purchases.AddPayment.OverpaymentRequiresSupplier",
+        "No se puede pagar de más una compra sin proveedor: no hay dónde acreditar el saldo a favor.");
 }

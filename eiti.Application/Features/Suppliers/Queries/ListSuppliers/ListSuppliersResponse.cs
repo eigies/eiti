@@ -6,4 +6,6 @@ public sealed record ListSuppliersResponse(
     string? Phone,
     string? Email,
     string? TaxId,
-    bool IsActive);
+    bool IsActive,
+    decimal CreditBalance,
+    decimal OwedAmount);

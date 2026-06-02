@@ -37,6 +37,7 @@ public sealed class GetPurchaseByIdHandler : IRequestHandler<GetPurchaseByIdQuer
         string? supplierName = null;
         string? supplierPhone = null;
         string? supplierEmail = null;
+        decimal supplierCreditBalance = 0m;
 
         if (purchase.SupplierId.HasValue)
         {
@@ -46,6 +47,7 @@ public sealed class GetPurchaseByIdHandler : IRequestHandler<GetPurchaseByIdQuer
                 supplierName = supplier.Name;
                 supplierPhone = supplier.Phone;
                 supplierEmail = supplier.Email;
+                supplierCreditBalance = supplier.CreditBalance;
             }
         }
 
@@ -96,6 +98,7 @@ public sealed class GetPurchaseByIdHandler : IRequestHandler<GetPurchaseByIdQuer
             purchase.PaidAt,
             purchase.CancelledAt,
             details,
-            activePayments));
+            activePayments,
+            supplierCreditBalance));
     }
 }

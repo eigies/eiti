@@ -5,5 +5,6 @@ public enum PurchasePaymentMethod
     Cash = 1,
     BankTransfer = 2,
     Check = 3,
-    Other = 4
+    Other = 4,
+    SupplierCredit = 5
 }

@@ -51,4 +51,9 @@ public sealed class SupplierRepository : ISupplierRepository
     {
         await _context.Suppliers.AddAsync(supplier, ct);
     }
+
+    public void Update(Supplier supplier)
+    {
+        _context.Suppliers.Update(supplier);
+    }
 }

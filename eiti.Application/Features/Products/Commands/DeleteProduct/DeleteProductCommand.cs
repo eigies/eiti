@@ -1,6 +1,10 @@
 using eiti.Application.Common;
+using eiti.Application.Common.Authorization;
 using MediatR;
 
 namespace eiti.Application.Features.Products.Commands.DeleteProduct;
 
-public sealed record DeleteProductCommand(Guid Id) : IRequest<Result>;
+public sealed record DeleteProductCommand(Guid Id) : IRequest<Result>, IRequirePermissions
+{
+    public IReadOnlyCollection<string> RequiredPermissions => [PermissionCodes.ProductsDelete];
+}

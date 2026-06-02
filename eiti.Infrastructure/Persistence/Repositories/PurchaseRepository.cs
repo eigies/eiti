@@ -86,6 +86,23 @@ public sealed class PurchaseRepository : IPurchaseRepository
                 p.Status != PurchaseStatus.Cancelled, ct);
     }
 
+    public async Task<Dictionary<Guid, decimal>> GetPendingTotalsBySupplierAsync(
+        Guid companyId,
+        CancellationToken ct = default)
+    {
+        var purchases = await _context.Purchases
+            .Include(p => p.Details)
+            .Include(p => p.Payments)
+            .Where(p => p.CompanyId == companyId
+                && p.SupplierId != null
+                && p.Status == PurchaseStatus.Active)
+            .ToListAsync(ct);
+
+        return purchases
+            .GroupBy(p => p.SupplierId!.Value)
+            .ToDictionary(g => g.Key, g => g.Sum(p => p.PendingAmount));
+    }
+
     private IQueryable<Purchase> BuildQuery(
         Guid companyId,
         Guid? supplierId,

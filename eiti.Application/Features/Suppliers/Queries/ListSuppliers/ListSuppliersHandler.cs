@@ -9,13 +9,16 @@ public sealed class ListSuppliersHandler : IRequestHandler<ListSuppliersQuery, R
 {
     private readonly ICurrentUserService _currentUserService;
     private readonly ISupplierRepository _supplierRepository;
+    private readonly IPurchaseRepository _purchaseRepository;
 
     public ListSuppliersHandler(
         ICurrentUserService currentUserService,
-        ISupplierRepository supplierRepository)
+        ISupplierRepository supplierRepository,
+        IPurchaseRepository purchaseRepository)
     {
         _currentUserService = currentUserService;
         _supplierRepository = supplierRepository;
+        _purchaseRepository = purchaseRepository;
     }
 
     public async Task<Result<List<ListSuppliersResponse>>> Handle(ListSuppliersQuery query, CancellationToken cancellationToken)
@@ -32,13 +35,19 @@ public sealed class ListSuppliersHandler : IRequestHandler<ListSuppliersQuery, R
             query.Search,
             cancellationToken);
 
+        var pendingBySupplier = await _purchaseRepository.GetPendingTotalsBySupplierAsync(
+            companyId.Value,
+            cancellationToken);
+
         var response = suppliers.Select(s => new ListSuppliersResponse(
             s.Id,
             s.Name,
             s.Phone,
             s.Email,
             s.TaxId,
-            s.IsActive)).ToList();
+            s.IsActive,
+            s.CreditBalance,
+            pendingBySupplier.TryGetValue(s.Id, out var owed) ? owed : 0m)).ToList();
 
         return Result<List<ListSuppliersResponse>>.Success(response);
     }

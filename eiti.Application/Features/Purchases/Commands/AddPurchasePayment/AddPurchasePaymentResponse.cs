@@ -9,4 +9,6 @@ public sealed record AddPurchasePaymentResponse(
     decimal GrandTotal,
     decimal TotalPaid,
     decimal PendingAmount,
-    Guid PaymentId);
+    Guid PaymentId,
+    decimal Excess,
+    decimal SupplierCreditBalance);

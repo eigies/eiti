@@ -11,4 +11,6 @@ public interface ISupplierRepository
     Task<bool> NameExistsAsync(Guid companyId, string name, CancellationToken ct = default);
 
     Task AddAsync(Supplier supplier, CancellationToken ct = default);
+
+    void Update(Supplier supplier);
 }

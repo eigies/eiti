@@ -25,6 +25,13 @@ public static class PermissionCodes
     public const string ChequesManage = "cheques.manage";
 
     public const string ProductsViewCost = "products.view_cost";
+    public const string ProductsDelete = "products.delete";
+
+    public const string StockManage = "stock.manage";
+
+    public const string DashboardViewFinancials = "dashboard.view_financials";
+
+    public const string ReportsAudit = "reports.audit";
 
     public const string SalesCancelHistorical = "sales.cancel.historical";
 

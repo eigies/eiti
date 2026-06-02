@@ -5,6 +5,7 @@ using eiti.Application.Common;
 using eiti.Application.Common.Authorization;
 using eiti.Domain.Cash;
 using eiti.Domain.Purchases;
+using eiti.Domain.Suppliers;
 using MediatR;
 
 namespace eiti.Application.Features.Purchases.Commands.AddPurchasePayment;
@@ -13,6 +14,7 @@ public sealed class AddPurchasePaymentHandler : IRequestHandler<AddPurchasePayme
 {
     private readonly ICurrentUserService _currentUserService;
     private readonly IPurchaseRepository _purchaseRepository;
+    private readonly ISupplierRepository _supplierRepository;
     private readonly ICashDrawerRepository _cashDrawerRepository;
     private readonly ICashSessionRepository _cashSessionRepository;
     private readonly IUnitOfWork _unitOfWork;
@@ -20,12 +22,14 @@ public sealed class AddPurchasePaymentHandler : IRequestHandler<AddPurchasePayme
     public AddPurchasePaymentHandler(
         ICurrentUserService currentUserService,
         IPurchaseRepository purchaseRepository,
+        ISupplierRepository supplierRepository,
         ICashDrawerRepository cashDrawerRepository,
         ICashSessionRepository cashSessionRepository,
         IUnitOfWork unitOfWork)
     {
         _currentUserService = currentUserService;
         _purchaseRepository = purchaseRepository;
+        _supplierRepository = supplierRepository;
         _cashDrawerRepository = cashDrawerRepository;
         _cashSessionRepository = cashSessionRepository;
         _unitOfWork = unitOfWork;
@@ -82,9 +86,26 @@ public sealed class AddPurchasePaymentHandler : IRequestHandler<AddPurchasePayme
         if (IsFromPreviousBusinessDay(session.OpenedAt))
             return Result<AddPurchasePaymentResponse>.Failure(AddPurchasePaymentErrors.CashSessionFromPreviousDay);
 
+        // Sobrepago: el excedente queda como saldo a favor del proveedor.
+        var remaining = purchase.PendingAmount;
+        var excess = Math.Max(0m, command.Amount - remaining);
+        if (excess > 0 && purchase.SupplierId is null)
+            return Result<AddPurchasePaymentResponse>.Failure(AddPurchasePaymentErrors.OverpaymentRequiresSupplier);
+
         var payment = PurchasePayment.Create(method, command.Amount, command.Date, command.Reference, command.Notes);
         purchase.AddPayment(payment);
         session!.RegisterPurchaseExpense(command.Amount, purchase.Id, userId, method);
+
+        Supplier? supplier = null;
+        if (excess > 0 && purchase.SupplierId.HasValue)
+        {
+            supplier = await _supplierRepository.GetByIdAsync(purchase.SupplierId.Value, companyId.Value, cancellationToken);
+            if (supplier is not null)
+            {
+                supplier.AddCredit(excess);
+                _supplierRepository.Update(supplier);
+            }
+        }
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
@@ -96,8 +117,10 @@ public sealed class AddPurchasePaymentHandler : IRequestHandler<AddPurchasePayme
             purchase.TaxAmount,
             purchase.GrandTotal,
             purchase.TotalPaid,
-            purchase.PendingAmount,
-            payment.Id));
+            Math.Max(0m, purchase.PendingAmount),
+            payment.Id,
+            excess,
+            supplier?.CreditBalance ?? 0m));
     }
 
     private static readonly TimeSpan ArgentinaOffset = TimeSpan.FromHours(-3);

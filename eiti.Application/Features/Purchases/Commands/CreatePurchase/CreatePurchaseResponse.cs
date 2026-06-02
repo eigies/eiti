@@ -17,7 +17,10 @@ public sealed record CreatePurchaseResponse(
     decimal PendingAmount,
     DateTime CreatedAt,
     List<CreatePurchaseDetailResponse> Details,
-    List<CreatePurchasePaymentResponse> Payments);
+    List<CreatePurchasePaymentResponse> Payments,
+    decimal CreditApplied,
+    decimal Excess,
+    decimal SupplierCreditBalance);
 
 public sealed record CreatePurchaseDetailResponse(
     Guid ProductId,

@@ -26,7 +26,8 @@ public sealed record GetPurchaseByIdResponse(
     DateTime? PaidAt,
     DateTime? CancelledAt,
     List<GetPurchaseDetailResponse> Details,
-    List<GetPurchasePaymentResponse> Payments);
+    List<GetPurchasePaymentResponse> Payments,
+    decimal SupplierCreditBalance);
 
 public sealed record GetPurchaseDetailResponse(
     Guid Id,
