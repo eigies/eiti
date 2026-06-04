@@ -1,3 +1,4 @@
+using eiti.Domain.Branches;
 using eiti.Domain.Companies;
 using eiti.Domain.Customers;
 using eiti.Domain.Employees;
@@ -19,6 +20,10 @@ public sealed class User : AggregateRoot<UserId>
     public DateTime? LastLoginAt { get; private set; }
     public string? RefreshToken { get; private set; }
     public DateTime? RefreshTokenExpiresAt { get; private set; }
+
+    private readonly List<UserBranchAccess> _branchAccesses = [];
+    public IReadOnlyCollection<UserBranchAccess> BranchAccesses => _branchAccesses.AsReadOnly();
+    public IReadOnlyCollection<Guid> BranchAccessIds => _branchAccesses.Select(b => b.BranchId.Value).ToList().AsReadOnly();
 
     private User()
     {
@@ -81,6 +86,15 @@ public sealed class User : AggregateRoot<UserId>
     public void LinkEmployee(EmployeeId? employeeId)
     {
         EmployeeId = employeeId;
+    }
+
+    public void SetBranchAccess(IEnumerable<BranchId> branchIds)
+    {
+        _branchAccesses.Clear();
+        foreach (var branchId in branchIds.Distinct())
+        {
+            _branchAccesses.Add(UserBranchAccess.Create(Id, branchId));
+        }
     }
 
     public void Activate()

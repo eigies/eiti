@@ -33,6 +33,10 @@ public sealed class GetBranchProductStockHandler : IRequestHandler<GetBranchProd
         if (authCheck.IsFailure)
             return Result<BranchProductStockResponse>.Failure(authCheck.Error);
 
+        var branchAccess = _currentUserService.EnsureBranchAccess(request.BranchId);
+        if (branchAccess.IsFailure)
+            return Result<BranchProductStockResponse>.Failure(branchAccess.Error);
+
         var branch = await _branchRepository.GetByIdAsync(new BranchId(request.BranchId), _currentUserService.CompanyId, cancellationToken);
         if (branch is null)
         {

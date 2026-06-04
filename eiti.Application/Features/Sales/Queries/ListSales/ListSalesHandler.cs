@@ -58,6 +58,12 @@ public sealed class ListSalesHandler : IRequestHandler<ListSalesQuery, Result<IR
             request.IncludeCuentaCorriente,
             cancellationToken);
 
+        if (!_currentUserService.CanViewAllBranches)
+        {
+            var allowed = _currentUserService.AllowedBranchIds;
+            sales = sales.Where(sale => allowed.Contains(sale.BranchId.Value)).ToList();
+        }
+
         var productIds = sales
             .SelectMany(sale => sale.Details.Select(detail => detail.ProductId.Value)
                 .Concat(sale.TradeIns.Select(tradeIn => tradeIn.ProductId.Value)))

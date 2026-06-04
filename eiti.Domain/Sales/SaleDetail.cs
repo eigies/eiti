@@ -10,6 +10,7 @@ public sealed class SaleDetail
     public decimal UnitPrice { get; private set; }
     public decimal DiscountPercent { get; private set; }
     public decimal TotalAmount { get; private set; }
+    public decimal? UnitCost { get; private set; }
 
     private SaleDetail()
     {
@@ -19,7 +20,8 @@ public sealed class SaleDetail
         ProductId productId,
         int quantity,
         decimal unitPrice,
-        decimal discountPercent)
+        decimal discountPercent,
+        decimal? unitCost)
     {
         if (quantity <= 0)
         {
@@ -41,15 +43,17 @@ public sealed class SaleDetail
         UnitPrice = unitPrice;
         DiscountPercent = decimal.Round(discountPercent, 2, MidpointRounding.AwayFromZero);
         TotalAmount = ComputeTotal(quantity, unitPrice, DiscountPercent);
+        UnitCost = unitCost.HasValue ? decimal.Round(unitCost.Value, 2, MidpointRounding.AwayFromZero) : null;
     }
 
     public static SaleDetail Create(
         ProductId productId,
         int quantity,
         decimal unitPrice,
-        decimal discountPercent = 0)
+        decimal discountPercent = 0,
+        decimal? unitCost = null)
     {
-        return new SaleDetail(productId, quantity, unitPrice, discountPercent);
+        return new SaleDetail(productId, quantity, unitPrice, discountPercent, unitCost);
     }
 
     internal void AttachToSale(SaleId saleId)

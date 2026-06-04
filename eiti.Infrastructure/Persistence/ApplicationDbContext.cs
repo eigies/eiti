@@ -55,6 +55,7 @@ public sealed class ApplicationDbContext : DbContext
     public DbSet<AccessProfile> AccessProfiles { get; set; }
     public DbSet<AccessProfilePermission> AccessProfilePermissions { get; set; }
     public DbSet<User> Users { get; set; }
+    public DbSet<UserBranchAccess> UserBranchAccesses => Set<UserBranchAccess>();
     public DbSet<UserRoleAudit> UserRoleAudits { get; set; }
     public DbSet<PasswordResetToken> PasswordResetTokens { get; set; }
     public DbSet<Supplier> Suppliers => Set<Supplier>();

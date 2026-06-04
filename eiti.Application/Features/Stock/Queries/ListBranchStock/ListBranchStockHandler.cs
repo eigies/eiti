@@ -32,6 +32,10 @@ public sealed class ListBranchStockHandler : IRequestHandler<ListBranchStockQuer
         if (authCheck.IsFailure)
             return Result<IReadOnlyList<BranchProductStockResponse>>.Failure(authCheck.Error);
 
+        var branchAccess = _currentUserService.EnsureBranchAccess(request.BranchId);
+        if (branchAccess.IsFailure)
+            return Result<IReadOnlyList<BranchProductStockResponse>>.Failure(branchAccess.Error);
+
         var branch = await _branchRepository.GetByIdAsync(new BranchId(request.BranchId), _currentUserService.CompanyId, cancellationToken);
         if (branch is null)
         {

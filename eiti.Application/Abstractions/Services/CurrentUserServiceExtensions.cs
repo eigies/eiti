@@ -45,6 +45,36 @@ public static class CurrentUserServiceExtensions
     }
 
     /// <summary>
+    /// Verifica que el usuario tenga acceso a la sucursal indicada (o vea todas).
+    /// </summary>
+    public static Result EnsureBranchAccess(this ICurrentUserService service, Guid branchId)
+    {
+        if (service.CanViewAllBranches || service.AllowedBranchIds.Contains(branchId))
+        {
+            return Result.Success();
+        }
+
+        return Result.Failure(
+            Error.Forbidden(
+                "Auth.BranchForbidden",
+                "No tenés acceso a la sucursal seleccionada."));
+    }
+
+    /// <summary>
+    /// Filtra una lista de sucursales dejando solo las permitidas (o todas si ve todas).
+    /// </summary>
+    public static IEnumerable<Guid> FilterAllowedBranchIds(this ICurrentUserService service, IEnumerable<Guid> branchIds)
+    {
+        if (service.CanViewAllBranches)
+        {
+            return branchIds;
+        }
+
+        var allowed = service.AllowedBranchIds;
+        return branchIds.Where(allowed.Contains);
+    }
+
+    /// <summary>
     /// Verifica que el usuario tenga un permiso específico.
     /// </summary>
     public static Result EnsureHasPermission(

@@ -157,4 +157,33 @@ public sealed class CashSessionRepository : ICashSessionRepository
     {
         await _context.CashSessions.AddAsync(cashSession, cancellationToken);
     }
+
+    public async Task<IReadOnlyList<CashMovement>> ListMovementsByCompanyAsync(
+        CompanyId companyId,
+        DateTime from,
+        DateTime to,
+        IReadOnlyCollection<CashMovementType> types,
+        IReadOnlyCollection<Guid>? branchIds = null,
+        CancellationToken cancellationToken = default)
+    {
+        var typeList = types.ToList();
+
+        var sessions = _context.CashSessions
+            .AsNoTracking()
+            .Where(session => session.CompanyId == companyId);
+
+        if (branchIds is not null)
+        {
+            var branchList = branchIds.ToList();
+            sessions = sessions.Where(session => branchList.Contains(session.BranchId.Value));
+        }
+
+        return await sessions
+            .SelectMany(session => session.Movements)
+            .Where(movement => movement.OccurredAt >= from
+                && movement.OccurredAt <= to
+                && typeList.Contains(movement.Type))
+            .OrderBy(movement => movement.OccurredAt)
+            .ToListAsync(cancellationToken);
+    }
 }

@@ -96,6 +96,10 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
             return Result<CreateSaleResponse>.Failure(CreateSaleErrors.CancelNotAllowed);
         }
 
+        var branchAccess = _currentUserService.EnsureBranchAccess(request.BranchId);
+        if (branchAccess.IsFailure)
+            return Result<CreateSaleResponse>.Failure(branchAccess.Error);
+
         var branch = await _branchRepository.GetByIdAsync(new BranchId(request.BranchId), companyId, cancellationToken);
         if (branch is null)
         {
@@ -173,7 +177,7 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
             {
                 unitPrice = product.Price;
             }
-            saleDetails.Add(SaleDetail.Create(product.Id, detail.Quantity, unitPrice, detail.DiscountPercent));
+            saleDetails.Add(SaleDetail.Create(product.Id, detail.Quantity, unitPrice, detail.DiscountPercent, product.CostPrice));
         }
 
         foreach (var detail in groupedDetails)

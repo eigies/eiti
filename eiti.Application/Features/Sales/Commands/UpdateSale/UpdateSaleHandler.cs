@@ -80,6 +80,10 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
             return Result<UpdateSaleResponse>.Failure(UpdateSaleErrors.NotFound);
         }
 
+        var branchAccess = _currentUserService.EnsureBranchAccess(sale.BranchId.Value);
+        if (branchAccess.IsFailure)
+            return Result<UpdateSaleResponse>.Failure(branchAccess.Error);
+
         if (sale.SaleStatus == SaleStatus.Paid)
         {
             sale.SetSourceChannel(request.SourceChannel);
@@ -228,7 +232,7 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
             {
                 unitPrice = product.Price;
             }
-            saleDetails.Add(SaleDetail.Create(product.Id, detail.Quantity, unitPrice, detail.DiscountPercent));
+            saleDetails.Add(SaleDetail.Create(product.Id, detail.Quantity, unitPrice, detail.DiscountPercent, product.CostPrice));
         }
 
         foreach (var currentDetail in currentGroupedDetails)

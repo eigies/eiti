@@ -1,5 +1,6 @@
 using eiti.Api.Extensions;
 using eiti.Application.Features.Stock.Commands.AdjustStock;
+using eiti.Application.Features.Stock.Commands.TransferStock;
 using eiti.Application.Features.Stock.Queries.GetBranchProductStock;
 using eiti.Application.Features.Stock.Queries.ListBranchStock;
 using eiti.Application.Features.Stock.Queries.ListStockMovements;
@@ -24,6 +25,15 @@ public sealed class StockController : ControllerBase
     [HttpPost("adjust")]
     public async Task<IActionResult> Adjust(
         [FromBody] AdjustStockCommand command,
+        CancellationToken cancellationToken)
+    {
+        var result = await _sender.Send(command, cancellationToken);
+        return result.ToActionResult();
+    }
+
+    [HttpPost("transfer")]
+    public async Task<IActionResult> Transfer(
+        [FromBody] TransferStockCommand command,
         CancellationToken cancellationToken)
     {
         var result = await _sender.Send(command, cancellationToken);

@@ -56,6 +56,10 @@ public sealed class CreateCcSaleHandler : IRequestHandler<CreateCcSaleCommand, R
             return Result<CreateCcSaleResponse>.Failure(CreateCcSaleErrors.Unauthorized);
         }
 
+        var branchAccess = _currentUserService.EnsureBranchAccess(request.BranchId);
+        if (branchAccess.IsFailure)
+            return Result<CreateCcSaleResponse>.Failure(branchAccess.Error);
+
         var branch = await _branchRepository.GetByIdAsync(new BranchId(request.BranchId), companyId, cancellationToken);
         if (branch is null)
         {
@@ -115,7 +119,7 @@ public sealed class CreateCcSaleHandler : IRequestHandler<CreateCcSaleCommand, R
             {
                 unitPrice = product.Price;
             }
-            saleDetails.Add(SaleDetail.Create(product.Id, detail.Quantity, unitPrice, detail.DiscountPercent));
+            saleDetails.Add(SaleDetail.Create(product.Id, detail.Quantity, unitPrice, detail.DiscountPercent, product.CostPrice));
         }
 
         foreach (var detail in groupedDetails)

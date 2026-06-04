@@ -248,6 +248,23 @@ public sealed class CashSession : AggregateRoot<CashSessionId>
             createdByUserId);
     }
 
+    public void RegisterDeposit(
+        decimal amount,
+        string description,
+        UserId createdByUserId)
+    {
+        EnsureOpen();
+
+        AddMovement(
+            CashMovementType.CashDeposit,
+            CashMovementDirection.In,
+            amount,
+            CashReferenceTypes.Deposit,
+            null,
+            description,
+            createdByUserId);
+    }
+
     public void RegisterTransferOut(
         decimal amount,
         Guid targetSessionId,

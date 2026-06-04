@@ -55,4 +55,12 @@ public interface ICashSessionRepository
     Task AddAsync(
         CashSession cashSession,
         CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<CashMovement>> ListMovementsByCompanyAsync(
+        CompanyId companyId,
+        DateTime from,
+        DateTime to,
+        IReadOnlyCollection<CashMovementType> types,
+        IReadOnlyCollection<Guid>? branchIds = null,
+        CancellationToken cancellationToken = default);
 }

@@ -1,6 +1,7 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using eiti.Application.Abstractions.Services;
+using eiti.Application.Common.Authorization;
 using eiti.Domain.Companies;
 using eiti.Domain.Users;
 
@@ -11,6 +12,7 @@ public sealed class CurrentUserService : ICurrentUserService
     private readonly IHttpContextAccessor _httpContextAccessor;
     private IReadOnlyCollection<string>? _roles;
     private IReadOnlyCollection<string>? _permissions;
+    private IReadOnlyCollection<Guid>? _allowedBranchIds;
 
     public CurrentUserService(IHttpContextAccessor httpContextAccessor)
     {
@@ -30,6 +32,20 @@ public sealed class CurrentUserService : ICurrentUserService
 
     public bool HasPermission(string permission) =>
         Permissions.Contains(permission, StringComparer.OrdinalIgnoreCase);
+
+    public IReadOnlyCollection<Guid> AllowedBranchIds => _allowedBranchIds ??= ReadBranchIds();
+
+    public bool CanViewAllBranches =>
+        HasPermission(PermissionCodes.BranchesViewAll) || AllowedBranchIds.Count == 0;
+
+    private IReadOnlyCollection<Guid> ReadBranchIds()
+    {
+        return ReadClaimValues("branch")
+            .Select(value => Guid.TryParse(value, out var id) ? id : (Guid?)null)
+            .Where(id => id.HasValue)
+            .Select(id => id!.Value)
+            .ToArray();
+    }
 
     private UserId? TryParseUserId()
     {

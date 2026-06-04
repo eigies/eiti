@@ -8,4 +8,5 @@ public sealed record RegisterResponse(
     string RefreshToken,
     Guid? ProfileId,
     string? ProfileName,
-    IReadOnlyList<string> Permissions);
+    IReadOnlyList<string> Permissions,
+    bool CanViewAllBranches);

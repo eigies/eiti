@@ -10,5 +10,7 @@ public enum StockMovementType
     TradeInIn = 6,
     SaleReturn = 7,
     PurchaseIn = 8,
-    PurchaseReturn = 9
+    PurchaseReturn = 9,
+    TransferOut = 10,
+    TransferIn = 11
 }

@@ -75,6 +75,33 @@ public sealed class BranchProductStock : AggregateRoot<BranchProductStockId>
         Touch();
     }
 
+    public void ApplyTransferOut(int quantity)
+    {
+        if (quantity <= 0)
+        {
+            throw new ArgumentException("Transfer quantity must be greater than zero.", nameof(quantity));
+        }
+
+        if (AvailableQuantity < quantity)
+        {
+            throw new InvalidOperationException("The requested quantity exceeds the available stock.");
+        }
+
+        OnHandQuantity -= quantity;
+        Touch();
+    }
+
+    public void ApplyTransferIn(int quantity)
+    {
+        if (quantity <= 0)
+        {
+            throw new ArgumentException("Transfer quantity must be greater than zero.", nameof(quantity));
+        }
+
+        OnHandQuantity += quantity;
+        Touch();
+    }
+
     public void Reserve(int quantity)
     {
         if (quantity <= 0)

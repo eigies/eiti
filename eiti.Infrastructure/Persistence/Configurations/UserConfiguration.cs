@@ -79,5 +79,13 @@ public sealed class UserConfiguration : IEntityTypeConfiguration<User>
             .WithMany()
             .HasForeignKey(u => u.AccessProfileId)
             .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasMany(u => u.BranchAccesses)
+            .WithOne()
+            .HasForeignKey(b => b.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.Navigation(u => u.BranchAccesses)
+            .UsePropertyAccessMode(PropertyAccessMode.Field);
     }
 }

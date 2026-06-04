@@ -38,6 +38,10 @@ public sealed class CreateCashDrawerHandler : IRequestHandler<CreateCashDrawerCo
         if (authCheck.IsFailure)
             return Result<CashDrawerResponse>.Failure(authCheck.Error);
 
+        var branchAccess = _currentUserService.EnsureBranchAccess(request.BranchId);
+        if (branchAccess.IsFailure)
+            return Result<CashDrawerResponse>.Failure(branchAccess.Error);
+
         var branch = await _branchRepository.GetByIdAsync(new BranchId(request.BranchId), _currentUserService.CompanyId, cancellationToken);
 
         if (branch is null)

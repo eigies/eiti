@@ -10,4 +10,7 @@ public static class AuthenticationMapper
             .Select(p => p.PermissionCode)
             .OrderBy(p => p)
             .ToArray();
+
+    public static bool CanViewAllBranches(User user, IReadOnlyList<string> permissions) =>
+        permissions.Contains(PermissionCodes.BranchesViewAll) || user.BranchAccessIds.Count == 0;
 }

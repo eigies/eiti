@@ -3,6 +3,7 @@ using eiti.Application.Abstractions.Repositories;
 using eiti.Application.Abstractions.Services;
 using eiti.Application.Common;
 using eiti.Application.Common.Authorization;
+using eiti.Domain.Branches;
 using eiti.Domain.Customers;
 using eiti.Domain.Employees;
 using eiti.Domain.Users;
@@ -20,6 +21,7 @@ public sealed record UserResponse(
     Guid? ProfileId,
     string? ProfileName,
     IReadOnlyList<string> Permissions,
+    IReadOnlyList<Guid> BranchIds,
     DateTime CreatedAt,
     DateTime? LastLoginAt);
 
@@ -42,7 +44,8 @@ public sealed record CreateUserCommand(
     string Email,
     string Password,
     Guid ProfileId,
-    Guid? EmployeeId) : IRequest<Result<UserResponse>>, IRequirePermissions
+    Guid? EmployeeId,
+    IReadOnlyList<Guid>? BranchIds = null) : IRequest<Result<UserResponse>>, IRequirePermissions
 {
     public IReadOnlyCollection<string> RequiredPermissions => [PermissionCodes.UsersManage];
 }
@@ -62,7 +65,8 @@ public sealed record ListUsersQuery() : IRequest<Result<IReadOnlyList<UserRespon
 public sealed record UpdateUserProfileCommand(
     Guid Id,
     Guid ProfileId,
-    Guid? EmployeeId) : IRequest<Result<UserResponse>>, IRequirePermissions
+    Guid? EmployeeId,
+    IReadOnlyList<Guid>? BranchIds = null) : IRequest<Result<UserResponse>>, IRequirePermissions
 {
     public IReadOnlyCollection<string> RequiredPermissions => [PermissionCodes.UsersManage];
 }
@@ -85,6 +89,7 @@ public sealed class CreateUserHandler : IRequestHandler<CreateUserCommand, Resul
     private readonly IUserRoleAuditRepository _userRoleAuditRepository;
     private readonly IEmployeeRepository _employeeRepository;
     private readonly IAccessProfileRepository _accessProfileRepository;
+    private readonly IBranchRepository _branchRepository;
     private readonly IPasswordHasher _passwordHasher;
     private readonly IUnitOfWork _unitOfWork;
 
@@ -94,6 +99,7 @@ public sealed class CreateUserHandler : IRequestHandler<CreateUserCommand, Resul
         IUserRoleAuditRepository userRoleAuditRepository,
         IEmployeeRepository employeeRepository,
         IAccessProfileRepository accessProfileRepository,
+        IBranchRepository branchRepository,
         IPasswordHasher passwordHasher,
         IUnitOfWork unitOfWork)
     {
@@ -102,6 +108,7 @@ public sealed class CreateUserHandler : IRequestHandler<CreateUserCommand, Resul
         _userRoleAuditRepository = userRoleAuditRepository;
         _employeeRepository = employeeRepository;
         _accessProfileRepository = accessProfileRepository;
+        _branchRepository = branchRepository;
         _passwordHasher = passwordHasher;
         _unitOfWork = unitOfWork;
     }
@@ -147,8 +154,13 @@ public sealed class CreateUserHandler : IRequestHandler<CreateUserCommand, Resul
             return Result<UserResponse>.Failure(Error.NotFound("Users.Create.EmployeeNotFound", "The selected employee was not found."));
         }
 
+        var branchResult = await ResolveBranchAccessAsync(request.BranchIds, cancellationToken);
+        if (branchResult.IsFailure)
+            return Result<UserResponse>.Failure(branchResult.Error);
+
         var passwordHash = PasswordHash.Create(_passwordHasher.HashPassword(request.Password));
         var user = User.Create(username, email, passwordHash, _currentUserService.CompanyId, accessProfile, employee?.Id);
+        user.SetBranchAccess(branchResult.Value);
 
         await _userRepository.AddAsync(user, cancellationToken);
         await _userRoleAuditRepository.AddAsync(
@@ -172,6 +184,27 @@ public sealed class CreateUserHandler : IRequestHandler<CreateUserCommand, Resul
         }
 
         return await _employeeRepository.GetByIdAsync(new EmployeeId(employeeId.Value), _currentUserService.CompanyId, cancellationToken);
+    }
+
+    private async Task<Result<List<BranchId>>> ResolveBranchAccessAsync(IReadOnlyList<Guid>? branchIds, CancellationToken cancellationToken)
+    {
+        var result = new List<BranchId>();
+        if (branchIds is null || branchIds.Count == 0)
+            return Result<List<BranchId>>.Success(result);
+
+        var companyBranchIds = (await _branchRepository.ListByCompanyAsync(_currentUserService.CompanyId, cancellationToken))
+            .Select(b => b.Id.Value)
+            .ToHashSet();
+
+        foreach (var id in branchIds.Distinct())
+        {
+            if (!companyBranchIds.Contains(id))
+                return Result<List<BranchId>>.Failure(
+                    Error.Validation("Users.InvalidBranch", "Una de las sucursales seleccionadas es inválida."));
+            result.Add(new BranchId(id));
+        }
+
+        return Result<List<BranchId>>.Success(result);
     }
 }
 
@@ -292,6 +325,7 @@ public sealed class UpdateUserProfileHandler : IRequestHandler<UpdateUserProfile
     private readonly IUserRoleAuditRepository _userRoleAuditRepository;
     private readonly IEmployeeRepository _employeeRepository;
     private readonly IAccessProfileRepository _accessProfileRepository;
+    private readonly IBranchRepository _branchRepository;
     private readonly IUnitOfWork _unitOfWork;
 
     public UpdateUserProfileHandler(
@@ -300,6 +334,7 @@ public sealed class UpdateUserProfileHandler : IRequestHandler<UpdateUserProfile
         IUserRoleAuditRepository userRoleAuditRepository,
         IEmployeeRepository employeeRepository,
         IAccessProfileRepository accessProfileRepository,
+        IBranchRepository branchRepository,
         IUnitOfWork unitOfWork)
     {
         _currentUserService = currentUserService;
@@ -307,6 +342,7 @@ public sealed class UpdateUserProfileHandler : IRequestHandler<UpdateUserProfile
         _userRoleAuditRepository = userRoleAuditRepository;
         _employeeRepository = employeeRepository;
         _accessProfileRepository = accessProfileRepository;
+        _branchRepository = branchRepository;
         _unitOfWork = unitOfWork;
     }
 
@@ -340,6 +376,15 @@ public sealed class UpdateUserProfileHandler : IRequestHandler<UpdateUserProfile
         user.AssignProfile(accessProfile);
         user.LinkEmployee(employee?.Id);
 
+        // BranchIds null = no se toca; no-null (incl. vacío) = reemplaza el set.
+        if (request.BranchIds is not null)
+        {
+            var branchResult = await ResolveBranchAccessAsync(request.BranchIds, cancellationToken);
+            if (branchResult.IsFailure)
+                return Result<UserResponse>.Failure(branchResult.Error);
+            user.SetBranchAccess(branchResult.Value);
+        }
+
         if (hasProfileChanged)
         {
             await _userRoleAuditRepository.AddAsync(
@@ -365,6 +410,27 @@ public sealed class UpdateUserProfileHandler : IRequestHandler<UpdateUserProfile
         }
 
         return _employeeRepository.GetByIdAsync(new EmployeeId(employeeId.Value), _currentUserService.CompanyId, cancellationToken);
+    }
+
+    private async Task<Result<List<BranchId>>> ResolveBranchAccessAsync(IReadOnlyList<Guid> branchIds, CancellationToken cancellationToken)
+    {
+        var result = new List<BranchId>();
+        if (branchIds.Count == 0)
+            return Result<List<BranchId>>.Success(result);
+
+        var companyBranchIds = (await _branchRepository.ListByCompanyAsync(_currentUserService.CompanyId, cancellationToken))
+            .Select(b => b.Id.Value)
+            .ToHashSet();
+
+        foreach (var id in branchIds.Distinct())
+        {
+            if (!companyBranchIds.Contains(id))
+                return Result<List<BranchId>>.Failure(
+                    Error.Validation("Users.InvalidBranch", "Una de las sucursales seleccionadas es inválida."));
+            result.Add(new BranchId(id));
+        }
+
+        return Result<List<BranchId>>.Success(result);
     }
 }
 
@@ -496,6 +562,7 @@ internal static class UserMappings
             profile.Id.Value,
             profile.Name,
             permissions,
+            user.BranchAccessIds.ToList(),
             user.CreatedAt,
             user.LastLoginAt);
     }

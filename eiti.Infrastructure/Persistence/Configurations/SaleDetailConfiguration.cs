@@ -40,6 +40,10 @@ public sealed class SaleDetailConfiguration : IEntityTypeConfiguration<SaleDetai
             .HasColumnType("decimal(18,2)")
             .IsRequired();
 
+        builder.Property(detail => detail.UnitCost)
+            .HasColumnType("decimal(18,2)")
+            .IsRequired(false);
+
         builder.HasOne<Product>()
             .WithMany()
             .HasForeignKey(detail => detail.ProductId)

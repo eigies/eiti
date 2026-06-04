@@ -13,5 +13,6 @@ public enum CashMovementType
     CuentaCorrienteCancellation = 9,
     TransferIncome = 10,
     CardIncome = 11,
-    PurchaseExpense = 12
+    PurchaseExpense = 12,
+    CashDeposit = 13
 }

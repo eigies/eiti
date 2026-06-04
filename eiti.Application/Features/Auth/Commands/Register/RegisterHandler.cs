@@ -105,6 +105,7 @@ public sealed class RegisterHandler
                 refreshToken,
                 user.AccessProfileId.Value,
                 ownerProfile.Name,
-                permissions));
+                permissions,
+                AuthenticationMapper.CanViewAllBranches(user, permissions)));
     }
 }

@@ -93,6 +93,7 @@ public sealed class LoginHandler
                 user.AccessProfileId.Value,
                 user.AccessProfile.Name,
                 permissions,
-                assignedDrawer?.Id.Value));
+                assignedDrawer?.Id.Value,
+                AuthenticationMapper.CanViewAllBranches(user, permissions)));
     }
 }

@@ -33,6 +33,10 @@ public sealed class ListStockMovementsHandler : IRequestHandler<ListStockMovemen
         if (authCheck.IsFailure)
             return Result<IReadOnlyList<StockMovementResponse>>.Failure(authCheck.Error);
 
+        var branchAccess = _currentUserService.EnsureBranchAccess(request.BranchId);
+        if (branchAccess.IsFailure)
+            return Result<IReadOnlyList<StockMovementResponse>>.Failure(branchAccess.Error);
+
         var branch = await _branchRepository.GetByIdAsync(new BranchId(request.BranchId), _currentUserService.CompanyId, cancellationToken);
         if (branch is null)
         {

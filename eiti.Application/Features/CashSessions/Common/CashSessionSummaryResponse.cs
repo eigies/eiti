@@ -4,6 +4,7 @@ public sealed record CashSessionSummaryResponse(
     Guid Id,
     decimal OpeningAmount,
     decimal SalesIncome,
+    decimal ManualDeposits,
     decimal Withdrawals,
     decimal SalesCancellations,
     decimal ExpectedClosingAmount,

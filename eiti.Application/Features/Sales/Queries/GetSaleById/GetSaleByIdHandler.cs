@@ -47,6 +47,10 @@ public sealed class GetSaleByIdHandler : IRequestHandler<GetSaleByIdQuery, Resul
                 Error.NotFound("Sales.GetById.NotFound", "The sale was not found."));
         }
 
+        var branchAccess = _currentUserService.EnsureBranchAccess(sale.BranchId.Value);
+        if (branchAccess.IsFailure)
+            return Result<GetSaleByIdResponse>.Failure(branchAccess.Error);
+
         Customer? customer = null;
         if (sale.CustomerId is not null)
         {

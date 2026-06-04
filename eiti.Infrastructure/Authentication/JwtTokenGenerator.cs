@@ -41,6 +41,7 @@ public sealed class JwtTokenGenerator : IJwtTokenGenerator
         };
 
         claims.AddRange(permissionCodes.Select(permissionCode => new Claim("permission", permissionCode)));
+        claims.AddRange(user.BranchAccessIds.Select(branchId => new Claim("branch", branchId.ToString())));
 
         var securityToken = new JwtSecurityToken(
             issuer: _jwtSettings.Issuer,

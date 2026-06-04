@@ -9,4 +9,5 @@ public sealed record LoginResponse(
     Guid? ProfileId,
     string? ProfileName,
     IReadOnlyList<string> Permissions,
-    Guid? AssignedCashDrawerId);
+    Guid? AssignedCashDrawerId,
+    bool CanViewAllBranches);

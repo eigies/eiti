@@ -22,6 +22,7 @@ public sealed class UserRepository : IUserRepository
         return await _context.Users
             .Include(u => u.AccessProfile)
             .ThenInclude(profile => profile.Permissions)
+            .Include(u => u.BranchAccesses)
             .FirstOrDefaultAsync(u => u.Id == id, cancellationToken);
     }
 
@@ -32,6 +33,7 @@ public sealed class UserRepository : IUserRepository
         var users = await _context.Users
             .Include(u => u.AccessProfile)
             .ThenInclude(profile => profile.Permissions)
+            .Include(u => u.BranchAccesses)
             .ToListAsync(cancellationToken);
 
         return users.FirstOrDefault(u => u.Username.Value == username.Value);
@@ -44,6 +46,7 @@ public sealed class UserRepository : IUserRepository
         var users = await _context.Users
             .Include(u => u.AccessProfile)
             .ThenInclude(profile => profile.Permissions)
+            .Include(u => u.BranchAccesses)
             .ToListAsync(cancellationToken);
 
         return users.FirstOrDefault(u => u.Email.Value == email.Value);
@@ -56,6 +59,7 @@ public sealed class UserRepository : IUserRepository
         return await _context.Users
             .Include(u => u.AccessProfile)
             .ThenInclude(profile => profile.Permissions)
+            .Include(u => u.BranchAccesses)
             .Where(u => u.CompanyId == companyId)
             .OrderBy(u => u.Username)
             .ToListAsync(cancellationToken);
@@ -116,6 +120,7 @@ public sealed class UserRepository : IUserRepository
         return await _context.Users
             .Include(u => u.AccessProfile)
             .ThenInclude(profile => profile.Permissions)
+            .Include(u => u.BranchAccesses)
             .FirstOrDefaultAsync(u => u.RefreshToken == refreshToken, cancellationToken);
     }
 

@@ -1135,6 +1135,9 @@ namespace eiti.Infrastructure.Migrations
                     b.Property<decimal>("TotalAmount")
                         .HasColumnType("decimal(18,2)");
 
+                    b.Property<decimal?>("UnitCost")
+                        .HasColumnType("decimal(18,2)");
+
                     b.Property<decimal>("UnitPrice")
                         .HasColumnType("decimal(18,2)");
 
@@ -1540,6 +1543,27 @@ namespace eiti.Infrastructure.Migrations
                     b.ToTable("Users", (string)null);
                 });
 
+            modelBuilder.Entity("eiti.Domain.Users.UserBranchAccess", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("BranchId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BranchId");
+
+                    b.HasIndex("UserId", "BranchId")
+                        .IsUnique();
+
+                    b.ToTable("UserBranchAccesses", (string)null);
+                });
+
             modelBuilder.Entity("eiti.Domain.Users.UserRoleAudit", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1937,6 +1961,21 @@ namespace eiti.Infrastructure.Migrations
                     b.Navigation("AccessProfile");
                 });
 
+            modelBuilder.Entity("eiti.Domain.Users.UserBranchAccess", b =>
+                {
+                    b.HasOne("eiti.Domain.Branches.Branch", null)
+                        .WithMany()
+                        .HasForeignKey("BranchId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("eiti.Domain.Users.User", null)
+                        .WithMany("BranchAccesses")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("eiti.Domain.Banks.Bank", b =>
                 {
                     b.Navigation("InstallmentPlans");
@@ -1968,6 +2007,11 @@ namespace eiti.Infrastructure.Migrations
             modelBuilder.Entity("eiti.Domain.Users.AccessProfile", b =>
                 {
                     b.Navigation("Permissions");
+                });
+
+            modelBuilder.Entity("eiti.Domain.Users.User", b =>
+                {
+                    b.Navigation("BranchAccesses");
                 });
 #pragma warning restore 612, 618
         }

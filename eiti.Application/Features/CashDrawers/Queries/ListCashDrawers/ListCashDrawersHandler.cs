@@ -34,6 +34,10 @@ public sealed class ListCashDrawersHandler : IRequestHandler<ListCashDrawersQuer
         if (authCheck.IsFailure)
             return Result<IReadOnlyList<CashDrawerResponse>>.Failure(authCheck.Error);
 
+        var branchAccess = _currentUserService.EnsureBranchAccess(request.BranchId);
+        if (branchAccess.IsFailure)
+            return Result<IReadOnlyList<CashDrawerResponse>>.Failure(branchAccess.Error);
+
         var branch = await _branchRepository.GetByIdAsync(new BranchId(request.BranchId), _currentUserService.CompanyId, cancellationToken);
 
         if (branch is null)
