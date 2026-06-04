@@ -40,12 +40,18 @@ public sealed class TransferStockHandler : IRequestHandler<TransferStockCommand,
         if (authCheck.IsFailure)
             return Result<TransferStockResponse>.Failure(authCheck.Error);
 
-        // La sucursal como paraguas: solo quien ve todas las sucursales puede transferir.
-        if (!_currentUserService.CanViewAllBranches)
-            return Result<TransferStockResponse>.Failure(TransferStockErrors.BranchRestricted);
-
         if (request.SourceBranchId == request.DestinationBranchId)
             return Result<TransferStockResponse>.Failure(TransferStockErrors.SameBranch);
+
+        // La sucursal como paraguas: el usuario debe tener acceso TANTO al origen como al destino
+        // (ambos entre sus sucursales asignadas, o tener "ver todas"). No necesita ver todas.
+        var sourceAccess = _currentUserService.EnsureBranchAccess(request.SourceBranchId);
+        if (sourceAccess.IsFailure)
+            return Result<TransferStockResponse>.Failure(sourceAccess.Error);
+
+        var destinationAccess = _currentUserService.EnsureBranchAccess(request.DestinationBranchId);
+        if (destinationAccess.IsFailure)
+            return Result<TransferStockResponse>.Failure(destinationAccess.Error);
 
         if (request.Items is null || request.Items.Count == 0)
             return Result<TransferStockResponse>.Failure(TransferStockErrors.NoItems);

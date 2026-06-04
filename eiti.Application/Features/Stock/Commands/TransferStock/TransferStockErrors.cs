@@ -4,10 +4,6 @@ namespace eiti.Application.Features.Stock.Commands.TransferStock;
 
 public static class TransferStockErrors
 {
-    public static readonly Error BranchRestricted = Error.Forbidden(
-        "Stock.Transfer.BranchRestricted",
-        "No tenés permiso para transferir stock entre sucursales.");
-
     public static readonly Error SameBranch = Error.Validation(
         "Stock.Transfer.SameBranch",
         "La sucursal de origen y la de destino deben ser distintas.");

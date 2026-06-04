@@ -123,9 +123,14 @@ public sealed class AddCcPaymentGroupHandler : IRequestHandler<AddCcPaymentGroup
                 return Result<AddCcPaymentGroupResponse>.Failure(AddCcPaymentGroupErrors.CashSessionRequired);
             }
 
-            var totalAmount = payments.Sum(p => p.Amount);
-            var ccGroupId = payments.First().GroupId!.Value;
-            session.RegisterCcPaymentIncome(totalAmount, sale.Id.Value, _currentUserService.UserId!, ccGroupId);
+            // Solo la porción en EFECTIVO de un pago de cuenta corriente entra al cajón físico.
+            // Transferencia/tarjeta/cheque no afectan el efectivo esperado (igual que en las ventas directas).
+            var cashAmount = payments.Where(p => p.Method == SalePaymentMethod.Cash).Sum(p => p.Amount);
+            if (cashAmount > 0)
+            {
+                var ccGroupId = payments.First().GroupId!.Value;
+                session.RegisterCcPaymentIncome(cashAmount, sale.Id.Value, _currentUserService.UserId!, ccGroupId);
+            }
         }
 
         // Stock confirmation if sale transitioned to Paid

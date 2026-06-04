@@ -2,6 +2,8 @@ using System.Net;
 using System.Text.Json;
 using FluentValidation;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Data.SqlClient;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 namespace eiti.Api.Middleware;
@@ -50,6 +52,15 @@ public sealed class GlobalExceptionHandlingMiddleware
                         e.ErrorMessage
                     })
                 }),
+            DbUpdateException dbUpdateException when IsUniqueConstraintViolation(dbUpdateException) => (
+                (int)HttpStatusCode.Conflict,
+                (object)new
+                {
+                    Status = (int)HttpStatusCode.Conflict,
+                    Title = "Conflict",
+                    Detail = "La operación ya fue procesada o hubo un envío duplicado. Refrescá y verificá antes de reintentar.",
+                    ErrorCode = "Common.DuplicateSubmission"
+                }),
             _ => (
                 (int)HttpStatusCode.InternalServerError,
                 (object)new
@@ -63,4 +74,9 @@ public sealed class GlobalExceptionHandlingMiddleware
         context.Response.StatusCode = statusCode;
         await context.Response.WriteAsync(JsonSerializer.Serialize(response));
     }
+
+    // SQL Server: 2627 = unique constraint, 2601 = duplicate key in unique index.
+    private static bool IsUniqueConstraintViolation(DbUpdateException exception) =>
+        exception.InnerException is SqlException sqlException &&
+        (sqlException.Number == 2627 || sqlException.Number == 2601);
 }

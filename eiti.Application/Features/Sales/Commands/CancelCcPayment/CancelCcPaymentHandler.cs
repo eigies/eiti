@@ -65,16 +65,17 @@ public sealed class CancelCcPaymentHandler : IRequestHandler<CancelCcPaymentComm
                 Error.NotFound("Sales.CancelCcPayment.PaymentNotFound", "The payment was not found."));
         }
 
+        // Solo se revierte del cajón la porción que entró en EFECTIVO (simétrico con el alta).
         decimal cancelledAmount;
         if (targetPayment.GroupId.HasValue)
         {
             cancelledAmount = sale.CcPayments
-                .Where(p => p.GroupId == targetPayment.GroupId && p.Status == SaleCcPaymentStatus.Active)
+                .Where(p => p.GroupId == targetPayment.GroupId && p.Status == SaleCcPaymentStatus.Active && p.Method == SalePaymentMethod.Cash)
                 .Sum(p => p.Amount);
         }
         else
         {
-            cancelledAmount = targetPayment.Amount;
+            cancelledAmount = targetPayment.Method == SalePaymentMethod.Cash ? targetPayment.Amount : 0m;
         }
 
         var wasPaid = sale.SaleStatus == SaleStatus.Paid;
@@ -95,7 +96,7 @@ public sealed class CancelCcPaymentHandler : IRequestHandler<CancelCcPaymentComm
             companyId,
             cancellationToken);
 
-        if (session is not null && _currentUserService.UserId is not null)
+        if (session is not null && _currentUserService.UserId is not null && cancelledAmount > 0)
         {
             session.RegisterCcPaymentCancel(cancelledAmount, sale.Id.Value, _currentUserService.UserId);
         }

@@ -56,5 +56,14 @@ public sealed class CashMovementConfiguration : IEntityTypeConfiguration<CashMov
         builder.Property(movement => movement.OriginalCashSessionId).IsRequired(false);
 
         builder.HasIndex(movement => new { movement.CashSessionId, movement.OccurredAt });
+
+        // Anti-duplicado: una venta directa produce a lo sumo UN movimiento de ingreso por tipo
+        // (efectivo=2, transferencia=10, tarjeta=11). Un doble submit concurrente que intente
+        // insertar un segundo movimiento de la misma venta+tipo viola este índice y la transacción
+        // se aborta (en vez de duplicar el ingreso en la caja). Los pagos de cuenta corriente (tipo 8)
+        // quedan fuera del filtro porque una venta puede tener varios a lo largo del tiempo.
+        builder.HasIndex(movement => new { movement.ReferenceId, movement.Type })
+            .IsUnique()
+            .HasFilter("[ReferenceType] = 'Sale' AND [Type] IN (2, 10, 11)");
     }
 }

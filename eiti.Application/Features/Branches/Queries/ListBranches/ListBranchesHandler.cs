@@ -1,6 +1,7 @@
 using eiti.Application.Abstractions.Repositories;
 using eiti.Application.Abstractions.Services;
 using eiti.Application.Common;
+using eiti.Application.Common.Authorization;
 using eiti.Application.Features.Branches.Common;
 using eiti.Domain.Cash;
 using MediatR;
@@ -42,24 +43,36 @@ public sealed class ListBranchesHandler : IRequestHandler<ListBranchesQuery, Res
             branches = branches.Where(branch => allowed.Contains(branch.Id.Value)).ToList();
         }
 
-        var sales = await _saleRepository.ListByCompanyAsync(_currentUserService.CompanyId, null, null, null, cancellationToken: cancellationToken);
-        var salesCountByBranch = sales
-            .GroupBy(sale => sale.BranchId.Value)
-            .ToDictionary(group => group.Key, group => group.Count());
+        // Cifras de dinero/negocio (ventas y valor de caja) solo para quien puede ver montos.
+        // Sin el permiso no se calculan ni se devuelven (no se filtra por la API).
+        var canViewFinancials = _currentUserService.HasPermission(PermissionCodes.DashboardViewFinancials);
+
+        var salesCountByBranch = new Dictionary<Guid, int>();
+        if (canViewFinancials)
+        {
+            var sales = await _saleRepository.ListByCompanyAsync(_currentUserService.CompanyId, null, null, null, cancellationToken: cancellationToken);
+            salesCountByBranch = sales
+                .GroupBy(sale => sale.BranchId.Value)
+                .ToDictionary(group => group.Key, group => group.Count());
+        }
 
         var responses = new List<BranchResponse>(branches.Count);
 
         foreach (var branch in branches)
         {
-            var drawers = await _cashDrawerRepository.ListByBranchAsync(branch.Id, _currentUserService.CompanyId, cancellationToken);
             decimal cashValue = 0m;
 
-            foreach (var drawer in drawers)
+            if (canViewFinancials)
             {
-                var openSession = await _cashSessionRepository.GetOpenByDrawerAsync(drawer.Id, _currentUserService.CompanyId, cancellationToken);
-                if (openSession is not null && openSession.Status == CashSessionStatus.Open)
+                var drawers = await _cashDrawerRepository.ListByBranchAsync(branch.Id, _currentUserService.CompanyId, cancellationToken);
+
+                foreach (var drawer in drawers)
                 {
-                    cashValue += openSession.ExpectedClosingAmount;
+                    var openSession = await _cashSessionRepository.GetOpenByDrawerAsync(drawer.Id, _currentUserService.CompanyId, cancellationToken);
+                    if (openSession is not null && openSession.Status == CashSessionStatus.Open)
+                    {
+                        cashValue += openSession.ExpectedClosingAmount;
+                    }
                 }
             }
 

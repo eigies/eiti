@@ -111,7 +111,7 @@ public sealed class CancelSaleHandler : IRequestHandler<CancelSaleCommand, Resul
             }
 
             var ccPaidOnHold = sale.CcPayments
-                .Where(p => p.Status == SaleCcPaymentStatus.Active)
+                .Where(p => p.Status == SaleCcPaymentStatus.Active && p.Method == SalePaymentMethod.Cash)
                 .Sum(p => p.Amount);
             sale.Cancel();
             CancelActiveCcPayments(sale);
@@ -218,7 +218,7 @@ public sealed class CancelSaleHandler : IRequestHandler<CancelSaleCommand, Resul
             }
 
             var ccPaidOnPaid = sale.CcPayments
-                .Where(p => p.Status == SaleCcPaymentStatus.Active)
+                .Where(p => p.Status == SaleCcPaymentStatus.Active && p.Method == SalePaymentMethod.Cash)
                 .Sum(p => p.Amount);
             sale.Cancel();
             CancelActiveCcPayments(sale);
