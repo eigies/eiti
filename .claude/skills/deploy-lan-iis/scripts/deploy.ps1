@@ -242,10 +242,16 @@ Copy-CleanContent -Source $dist -Destination $FrontPublishPath
 Write-FrontWebConfig -Path $FrontPublishPath
 
 Write-Step 'Publish API'
-Ensure-Directory $ApiPublishPath
-dotnet publish $ApiProjectPath -c Release -o $ApiPublishPath
+$apiPool = "$SiteName-ApiPool"
+
+# Publicar a una carpeta de staging: nunca escribir sobre el directorio vivo mientras IIS mantiene
+# lockeadas las DLL (eso hacia que el publish "terminara OK" sin reemplazar binarios). El swap real
+# se hace mas abajo (paso 'Swap API binaries'), despues de migraciones y parando el app pool.
+$ApiStagePath = "${ApiPublishPath}_stage"
+if (Test-Path $ApiStagePath) { Remove-Item $ApiStagePath -Recurse -Force }
+Ensure-Directory $ApiStagePath
+dotnet publish $ApiProjectPath -c Release -o $ApiStagePath
 Assert-LastExitCode -Action 'dotnet publish'
-Set-ApiAppSettings -ApiPath $ApiPublishPath -ConnString $ConnectionString
 
 if (-not $SkipMigrations) {
     Write-Step 'Run EF migrations'
@@ -260,6 +266,43 @@ if (-not $SkipMigrations) {
     Assert-LastExitCode -Action 'dotnet ef database update'
     Remove-Item Env:\ConnectionStrings__DefaultConnection -ErrorAction SilentlyContinue
 }
+
+Write-Step 'Swap API binaries'
+# Parar el app pool del API para que el worker libere los handles de las DLL antes del swap.
+# (Las migraciones ya corrieron con la app vieja sirviendo; recien ahora bajamos el API.)
+Import-Module WebAdministration -ErrorAction SilentlyContinue
+if (Test-Path "IIS:\AppPools\$apiPool") {
+    Write-Host "Stopping app pool '$apiPool' to release DLL locks..."
+    Stop-WebAppPool -Name $apiPool -ErrorAction SilentlyContinue
+    $deadline = (Get-Date).AddSeconds(30)
+    do {
+        Start-Sleep -Milliseconds 500
+        $poolState = (Get-WebAppPoolState -Name $apiPool -ErrorAction SilentlyContinue).Value
+    } while ($poolState -ne 'Stopped' -and (Get-Date) -lt $deadline)
+}
+
+# Respaldo: app_offline.htm hace que el ASP.NET Core Module apague la app in-process y suelte los
+# handles aunque el worker siguiera vivo (por si el stop del pool tuviera una carrera).
+Ensure-Directory $ApiPublishPath
+Set-Content -Path (Join-Path $ApiPublishPath 'app_offline.htm') -Value '<html><body>Actualizando...</body></html>' -Encoding utf8
+Start-Sleep -Seconds 1
+
+# Reemplazar binarios (con reintentos por si algun handle tarda en soltarse). Copy-CleanContent limpia
+# el destino, asi que el app_offline.htm se elimina aca y la app vuelve online al iniciar el pool.
+$swapAttempts = 0
+while ($true) {
+    try {
+        Copy-CleanContent -Source $ApiStagePath -Destination $ApiPublishPath
+        break
+    } catch {
+        $swapAttempts++
+        if ($swapAttempts -ge 5) { throw "No se pudieron reemplazar los binarios del API (locked): $($_.Exception.Message)" }
+        Write-Host "Swap retry $swapAttempts (archivos lockeados)..."
+        Start-Sleep -Seconds 2
+    }
+}
+Remove-Item $ApiStagePath -Recurse -Force -ErrorAction SilentlyContinue
+Set-ApiAppSettings -ApiPath $ApiPublishPath -ConnString $ConnectionString
 
 Write-Step 'Configure IIS'
 Configure-IIS -Name $SiteName -BindingHostHeader $HostHeader -SitePort $Port -FrontPath $FrontPublishPath -ApiPath $ApiPublishPath
