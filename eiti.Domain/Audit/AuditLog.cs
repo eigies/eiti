@@ -12,6 +12,8 @@ public sealed class AuditLog : Entity<AuditLogId>
     public bool Succeeded { get; private set; }
     public string? ErrorCode { get; private set; }
     public string? PayloadJson { get; private set; }
+    public string? BeforeJson { get; private set; }
+    public string? AfterJson { get; private set; }
     public DateTime Timestamp { get; private set; }
 
     private AuditLog()
@@ -26,6 +28,8 @@ public sealed class AuditLog : Entity<AuditLogId>
         bool succeeded,
         string? errorCode,
         string? payloadJson,
+        string? beforeJson,
+        string? afterJson,
         DateTime timestamp)
         : base(id)
     {
@@ -35,6 +39,8 @@ public sealed class AuditLog : Entity<AuditLogId>
         Succeeded = succeeded;
         ErrorCode = errorCode;
         PayloadJson = payloadJson;
+        BeforeJson = beforeJson;
+        AfterJson = afterJson;
         Timestamp = timestamp;
     }
 
@@ -45,6 +51,8 @@ public sealed class AuditLog : Entity<AuditLogId>
         bool succeeded,
         string? errorCode,
         string? payloadJson,
+        string? beforeJson,
+        string? afterJson,
         DateTime timestamp)
     {
         return new AuditLog(
@@ -55,6 +63,8 @@ public sealed class AuditLog : Entity<AuditLogId>
             succeeded,
             errorCode,
             payloadJson,
+            beforeJson,
+            afterJson,
             timestamp);
     }
 }

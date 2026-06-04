@@ -15,4 +15,6 @@ public sealed record AuditLogItemResponse(
     bool Succeeded,
     string? ErrorCode,
     string? PayloadJson,
+    string? BeforeJson,
+    string? AfterJson,
     DateTime Timestamp);

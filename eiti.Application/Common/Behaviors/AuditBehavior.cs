@@ -14,11 +14,16 @@ public sealed class AuditBehavior<TRequest, TResponse> : IPipelineBehavior<TRequ
 {
     private readonly ICurrentUserService _currentUserService;
     private readonly IAuditLogWriter _auditLogWriter;
+    private readonly IAuditSnapshotService _auditSnapshotService;
 
-    public AuditBehavior(ICurrentUserService currentUserService, IAuditLogWriter auditLogWriter)
+    public AuditBehavior(
+        ICurrentUserService currentUserService,
+        IAuditLogWriter auditLogWriter,
+        IAuditSnapshotService auditSnapshotService)
     {
         _currentUserService = currentUserService;
         _auditLogWriter = auditLogWriter;
+        _auditSnapshotService = auditSnapshotService;
     }
 
     public async Task<TResponse> Handle(
@@ -31,16 +36,31 @@ public sealed class AuditBehavior<TRequest, TResponse> : IPipelineBehavior<TRequ
             return await next();
         }
 
+        var companyId = _currentUserService.CompanyId;
+        var beforeJson = companyId is not null
+            ? await TryCaptureBeforeAsync(request, companyId.Value, cancellationToken)
+            : null;
+
         try
         {
             var response = await next();
             var (succeeded, errorCode) = InspectResult(response);
-            await TryWriteAsync(request, succeeded, errorCode, cancellationToken);
+            var afterJson = succeeded && companyId is not null
+                ? await TryCaptureAfterAsync(request, response, companyId.Value, cancellationToken)
+                : null;
+
+            await TryWriteAsync(request, succeeded, errorCode, beforeJson, afterJson, cancellationToken);
             return response;
         }
         catch (Exception ex)
         {
-            await TryWriteAsync(request, succeeded: false, errorCode: $"Exception.{ex.GetType().Name}", cancellationToken);
+            await TryWriteAsync(
+                request,
+                succeeded: false,
+                errorCode: $"Exception.{ex.GetType().Name}",
+                beforeJson,
+                afterJson: null,
+                cancellationToken);
             throw;
         }
     }
@@ -57,7 +77,41 @@ public sealed class AuditBehavior<TRequest, TResponse> : IPipelineBehavior<TRequ
         return (true, null);
     }
 
-    private async Task TryWriteAsync(TRequest request, bool succeeded, string? errorCode, CancellationToken cancellationToken)
+    private async Task<string?> TryCaptureBeforeAsync(TRequest request, Guid companyId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await _auditSnapshotService.CaptureBeforeAsync(request, companyId, cancellationToken);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private async Task<string?> TryCaptureAfterAsync(
+        TRequest request,
+        TResponse response,
+        Guid companyId,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await _auditSnapshotService.CaptureAfterAsync(request, response, succeeded: true, companyId, cancellationToken);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private async Task TryWriteAsync(
+        TRequest request,
+        bool succeeded,
+        string? errorCode,
+        string? beforeJson,
+        string? afterJson,
+        CancellationToken cancellationToken)
     {
         try
         {
@@ -75,6 +129,8 @@ public sealed class AuditBehavior<TRequest, TResponse> : IPipelineBehavior<TRequ
                 succeeded,
                 errorCode,
                 AuditPayloadSerializer.Serialize(request),
+                beforeJson,
+                afterJson,
                 DateTime.UtcNow);
 
             await _auditLogWriter.WriteAsync(entry, cancellationToken);

@@ -47,6 +47,14 @@ public sealed class AuditLogConfiguration : IEntityTypeConfiguration<AuditLog>
             .HasColumnType("nvarchar(max)")
             .IsRequired(false);
 
+        builder.Property(audit => audit.BeforeJson)
+            .HasColumnType("nvarchar(max)")
+            .IsRequired(false);
+
+        builder.Property(audit => audit.AfterJson)
+            .HasColumnType("nvarchar(max)")
+            .IsRequired(false);
+
         builder.Property(audit => audit.Timestamp).IsRequired();
 
         builder.HasIndex(audit => new { audit.CompanyId, audit.Timestamp });

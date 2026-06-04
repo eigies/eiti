@@ -16,4 +16,6 @@ public sealed record AuditLogEntry(
     bool Succeeded,
     string? ErrorCode,
     string? PayloadJson,
+    string? BeforeJson,
+    string? AfterJson,
     DateTime TimestampUtc);

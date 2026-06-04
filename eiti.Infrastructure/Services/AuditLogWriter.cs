@@ -33,6 +33,8 @@ public sealed class AuditLogWriter : IAuditLogWriter
             entry.Succeeded,
             entry.ErrorCode,
             entry.PayloadJson,
+            entry.BeforeJson,
+            entry.AfterJson,
             entry.TimestampUtc);
 
         await context.AuditLogs.AddAsync(auditLog, cancellationToken);

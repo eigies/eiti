@@ -59,6 +59,7 @@ public static class DependencyInjection
         services.AddScoped<IPurchaseRepository, PurchaseRepository>();
         services.AddScoped<IAuditLogRepository, AuditLogRepository>();
         services.AddScoped<IAuditLogWriter, AuditLogWriter>();
+        services.AddScoped<IAuditSnapshotService, AuditSnapshotService>();
         services.AddScoped<IPasswordHasher, PasswordHasher>();
         services.AddScoped<IJwtTokenGenerator, JwtTokenGenerator>();
         services.AddScoped<IEmailService, EmailService>();
