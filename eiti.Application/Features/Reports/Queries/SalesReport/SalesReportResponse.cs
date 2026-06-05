@@ -1,5 +1,6 @@
 namespace eiti.Application.Features.Reports.Queries.SalesReport;
 
+// SalesCount = cantidad de ventas (tickets) distintas; ver nota en el reporte del front.
 public sealed record SalesReportResponse(
     string GroupBy,
     IReadOnlyList<SalesReportRow> Rows,
