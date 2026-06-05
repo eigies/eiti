@@ -47,15 +47,29 @@ public sealed class ListPagedProductsHandler
             _currentUserService.CompanyId,
             cancellationToken);
 
+        // El total "global" se acota a las sucursales visibles del usuario; el total de empresa
+        // (todas las sucursales) se expone aparte para el chip informativo.
+        var canViewAll = _currentUserService.CanViewAllBranches;
+        var allowed = _currentUserService.AllowedBranchIds;
+
         var stockTotals = stocks
             .GroupBy(stock => stock.ProductId.Value)
             .ToDictionary(
                 group => group.Key,
-                group => new
+                group =>
                 {
-                    OnHand = group.Sum(item => item.OnHandQuantity),
-                    Reserved = group.Sum(item => item.ReservedQuantity),
-                    Available = group.Sum(item => item.AvailableQuantity)
+                    var visible = (canViewAll
+                        ? group
+                        : group.Where(item => allowed.Contains(item.BranchId.Value))).ToList();
+                    return new
+                    {
+                        OnHand = visible.Sum(item => item.OnHandQuantity),
+                        Reserved = visible.Sum(item => item.ReservedQuantity),
+                        Available = visible.Sum(item => item.AvailableQuantity),
+                        CompanyOnHand = group.Sum(item => item.OnHandQuantity),
+                        CompanyReserved = group.Sum(item => item.ReservedQuantity),
+                        CompanyAvailable = group.Sum(item => item.AvailableQuantity)
+                    };
                 });
 
         var items = products
@@ -79,7 +93,10 @@ public sealed class ListPagedProductsHandler
                     product.UpdatedAt,
                     totals?.OnHand ?? 0,
                     totals?.Reserved ?? 0,
-                    totals?.Available ?? 0);
+                    totals?.Available ?? 0,
+                    totals?.CompanyOnHand ?? 0,
+                    totals?.CompanyReserved ?? 0,
+                    totals?.CompanyAvailable ?? 0);
             })
             .ToList();
 

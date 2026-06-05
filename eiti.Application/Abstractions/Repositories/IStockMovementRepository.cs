@@ -16,4 +16,10 @@ public interface IStockMovementRepository
         ProductId productId,
         CompanyId companyId,
         CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<StockMovement>> ListByReferenceAsync(
+        Guid referenceId,
+        string referenceType,
+        CompanyId companyId,
+        CancellationToken cancellationToken = default);
 }

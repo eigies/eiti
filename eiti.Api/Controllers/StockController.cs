@@ -2,6 +2,7 @@ using eiti.Api.Extensions;
 using eiti.Application.Features.Stock.Commands.AdjustStock;
 using eiti.Application.Features.Stock.Commands.TransferStock;
 using eiti.Application.Features.Stock.Queries.GetBranchProductStock;
+using eiti.Application.Features.Stock.Queries.GetTransferDetail;
 using eiti.Application.Features.Stock.Queries.ListBranchStock;
 using eiti.Application.Features.Stock.Queries.ListStockMovements;
 using MediatR;
@@ -56,6 +57,15 @@ public sealed class StockController : ControllerBase
         CancellationToken cancellationToken)
     {
         var result = await _sender.Send(new GetBranchProductStockQuery(productId, branchId), cancellationToken);
+        return result.ToActionResult();
+    }
+
+    [HttpGet("transfer/{referenceId:guid}")]
+    public async Task<IActionResult> GetTransferDetail(
+        Guid referenceId,
+        CancellationToken cancellationToken)
+    {
+        var result = await _sender.Send(new GetTransferDetailQuery(referenceId), cancellationToken);
         return result.ToActionResult();
     }
 

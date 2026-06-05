@@ -140,20 +140,6 @@ public sealed class CreateCcSaleHandler : IRequestHandler<CreateCcSaleCommand, R
                 return Result<CreateCcSaleResponse>.Failure(
                     Error.Conflict("Sales.CreateCc.StockUnavailable", ex.Message));
             }
-
-            await _stockMovementRepository.AddAsync(
-                StockMovement.Create(
-                    companyId,
-                    branch.Id,
-                    stock.ProductId,
-                    stock.Id,
-                    StockMovementType.Reserve,
-                    detail.Quantity,
-                    "Sale",
-                    null,
-                    "Stock reserved for CC sale.",
-                    _currentUserService.UserId),
-                cancellationToken);
         }
 
         var branchSaleCount = await _saleRepository.CountByBranchAsync(branch.Id, cancellationToken);
@@ -183,6 +169,25 @@ public sealed class CreateCcSaleHandler : IRequestHandler<CreateCcSaleCommand, R
         if (request.ManualOverridePrice.HasValue)
         {
             sale.SetManualOverride(request.ManualOverridePrice.Value, _currentUserService.UserId?.Value);
+        }
+
+        // Movimientos de reserva: se registran ahora que la venta existe, para quedar atados a su código.
+        foreach (var detail in groupedDetails)
+        {
+            var stock = stockMap[detail.ProductId];
+            await _stockMovementRepository.AddAsync(
+                StockMovement.Create(
+                    companyId,
+                    branch.Id,
+                    stock.ProductId,
+                    stock.Id,
+                    StockMovementType.Reserve,
+                    detail.Quantity,
+                    "Sale",
+                    sale.Id.Value,
+                    "Stock reserved for CC sale.",
+                    _currentUserService.UserId),
+                cancellationToken);
         }
 
         await _saleRepository.AddAsync(sale, cancellationToken);

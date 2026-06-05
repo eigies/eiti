@@ -3,6 +3,7 @@ using eiti.Application.Features.Reports.Queries.CashMovementsReport;
 using eiti.Application.Features.Reports.Queries.CustomerDebtors;
 using eiti.Application.Features.Reports.Queries.ListAuditLog;
 using eiti.Application.Features.Reports.Queries.SalesReport;
+using eiti.Application.Features.Reports.Queries.StockMatrix;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -58,6 +59,13 @@ public sealed class ReportsController : ControllerBase
     public async Task<IActionResult> CustomerDebtors(CancellationToken cancellationToken)
     {
         var result = await _sender.Send(new CustomerDebtorsQuery(), cancellationToken);
+        return result.ToActionResult();
+    }
+
+    [HttpGet("stock-matrix")]
+    public async Task<IActionResult> StockMatrix(CancellationToken cancellationToken)
+    {
+        var result = await _sender.Send(new StockMatrixQuery(), cancellationToken);
         return result.ToActionResult();
     }
 

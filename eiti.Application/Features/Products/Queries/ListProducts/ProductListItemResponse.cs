@@ -17,4 +17,7 @@ public sealed record ProductListItemResponse(
     DateTime? UpdatedAt,
     int TotalOnHandQuantity,
     int TotalReservedQuantity,
-    int TotalAvailableQuantity);
+    int TotalAvailableQuantity,
+    int CompanyOnHandQuantity,
+    int CompanyReservedQuantity,
+    int CompanyAvailableQuantity);

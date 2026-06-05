@@ -8,4 +8,6 @@ public sealed record StockMovementResponse(
     string? ReferenceType,
     Guid? ReferenceId,
     string? Description,
-    DateTime CreatedAt);
+    DateTime CreatedAt,
+    // Código legible del documento que originó el movimiento (venta/compra). Null si no aplica.
+    string? ReferenceCode);

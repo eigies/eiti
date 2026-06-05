@@ -198,20 +198,6 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
                 return Result<CreateSaleResponse>.Failure(
                     Error.Conflict("Sales.Create.StockUnavailable", ex.Message));
             }
-
-            await _stockMovementRepository.AddAsync(
-                StockMovement.Create(
-                    companyId,
-                    branch.Id,
-                    stock.ProductId,
-                    stock.Id,
-                    StockMovementType.Reserve,
-                    detail.Quantity,
-                    "Sale",
-                    null,
-                    "Stock reserved for sale.",
-                    _currentUserService.UserId),
-                cancellationToken);
         }
 
         List<SalePayment> salePayments;
@@ -292,6 +278,26 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
         }
 
         sale.SetCashDrawer(effectiveCashDrawerId.HasValue ? new CashDrawerId(effectiveCashDrawerId.Value) : null);
+
+        // Movimientos de reserva: se registran ahora que la venta existe, para quedar atados a su código
+        // (antes se creaban con ReferenceId null y el movimiento no se podía mapear a la venta).
+        foreach (var detail in groupedDetails)
+        {
+            var stock = stockMap[detail.ProductId];
+            await _stockMovementRepository.AddAsync(
+                StockMovement.Create(
+                    companyId,
+                    branch.Id,
+                    stock.ProductId,
+                    stock.Id,
+                    StockMovementType.Reserve,
+                    detail.Quantity,
+                    "Sale",
+                    sale.Id.Value,
+                    "Stock reserved for sale.",
+                    _currentUserService.UserId),
+                cancellationToken);
+        }
 
         if (requestedStatus == SaleStatus.Paid)
         {

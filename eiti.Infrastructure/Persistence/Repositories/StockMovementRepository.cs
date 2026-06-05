@@ -35,4 +35,19 @@ public sealed class StockMovementRepository : IStockMovementRepository
             .OrderByDescending(movement => movement.CreatedAt)
             .ToListAsync(cancellationToken);
     }
+
+    public async Task<IReadOnlyList<StockMovement>> ListByReferenceAsync(
+        Guid referenceId,
+        string referenceType,
+        CompanyId companyId,
+        CancellationToken cancellationToken = default)
+    {
+        return await _context.StockMovements
+            .Where(movement =>
+                movement.CompanyId == companyId &&
+                movement.ReferenceType == referenceType &&
+                movement.ReferenceId == referenceId)
+            .OrderBy(movement => movement.CreatedAt)
+            .ToListAsync(cancellationToken);
+    }
 }
