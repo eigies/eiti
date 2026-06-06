@@ -43,15 +43,13 @@ public sealed class TransferStockHandler : IRequestHandler<TransferStockCommand,
         if (request.SourceBranchId == request.DestinationBranchId)
             return Result<TransferStockResponse>.Failure(TransferStockErrors.SameBranch);
 
-        // La sucursal como paraguas: el usuario debe tener acceso TANTO al origen como al destino
-        // (ambos entre sus sucursales asignadas, o tener "ver todas"). No necesita ver todas.
+        // Modelo "push": el usuario solo debe ser dueño del ORIGEN (su sucursal asignada).
+        // El DESTINO puede ser cualquier sucursal de la empresa: enviar stock no otorga visibilidad
+        // de los datos de la sucursal destino (las pantallas de lectura siguen gateadas por sucursal).
+        // El destino igual se valida que exista dentro de la compañía más abajo (GetByIdAsync).
         var sourceAccess = _currentUserService.EnsureBranchAccess(request.SourceBranchId);
         if (sourceAccess.IsFailure)
             return Result<TransferStockResponse>.Failure(sourceAccess.Error);
-
-        var destinationAccess = _currentUserService.EnsureBranchAccess(request.DestinationBranchId);
-        if (destinationAccess.IsFailure)
-            return Result<TransferStockResponse>.Failure(destinationAccess.Error);
 
         if (request.Items is null || request.Items.Count == 0)
             return Result<TransferStockResponse>.Failure(TransferStockErrors.NoItems);

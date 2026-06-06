@@ -3,6 +3,7 @@ using eiti.Domain.Branches;
 using eiti.Domain.Cash;
 using eiti.Domain.Companies;
 using eiti.Domain.Customers;
+using eiti.Domain.Products;
 using eiti.Domain.Sales;
 using Microsoft.EntityFrameworkCore;
 
@@ -195,6 +196,30 @@ public sealed class SaleRepository : ISaleRepository
 
         return await query
             .OrderByDescending(sale => sale.CreatedAt)
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<Sale>> ListReservingByProductAsync(
+        CompanyId companyId,
+        ProductId productId,
+        BranchId? branchId,
+        CancellationToken cancellationToken = default)
+    {
+        // Las ventas en OnHold (pendientes) son las que sostienen la reserva de stock.
+        var query = _context.Sales
+            .Include(sale => sale.Details)
+            .Include(sale => sale.CcPayments)
+            .Where(sale => sale.CompanyId == companyId
+                        && sale.SaleStatus == SaleStatus.OnHold
+                        && sale.Details.Any(detail => detail.ProductId == productId));
+
+        if (branchId is not null)
+        {
+            query = query.Where(sale => sale.BranchId == branchId);
+        }
+
+        return await query
+            .OrderBy(sale => sale.CreatedAt)
             .ToListAsync(cancellationToken);
     }
 

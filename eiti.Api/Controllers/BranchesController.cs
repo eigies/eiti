@@ -2,6 +2,7 @@ using eiti.Api.Extensions;
 using eiti.Application.Features.Branches.Commands.CreateBranch;
 using eiti.Application.Features.Branches.Commands.UpdateBranch;
 using eiti.Application.Features.Branches.Queries.ListBranches;
+using eiti.Application.Features.Branches.Queries.ListTransferTargets;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -24,6 +25,13 @@ public sealed class BranchesController : ControllerBase
     public async Task<IActionResult> List(CancellationToken cancellationToken)
     {
         var result = await _sender.Send(new ListBranchesQuery(), cancellationToken);
+        return result.ToActionResult();
+    }
+
+    [HttpGet("transfer-targets")]
+    public async Task<IActionResult> ListTransferTargets(CancellationToken cancellationToken)
+    {
+        var result = await _sender.Send(new ListTransferTargetsQuery(), cancellationToken);
         return result.ToActionResult();
     }
 

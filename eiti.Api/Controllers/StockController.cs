@@ -2,6 +2,7 @@ using eiti.Api.Extensions;
 using eiti.Application.Features.Stock.Commands.AdjustStock;
 using eiti.Application.Features.Stock.Commands.TransferStock;
 using eiti.Application.Features.Stock.Queries.GetBranchProductStock;
+using eiti.Application.Features.Stock.Queries.GetProductReservations;
 using eiti.Application.Features.Stock.Queries.GetTransferDetail;
 using eiti.Application.Features.Stock.Queries.ListBranchStock;
 using eiti.Application.Features.Stock.Queries.ListStockMovements;
@@ -66,6 +67,16 @@ public sealed class StockController : ControllerBase
         CancellationToken cancellationToken)
     {
         var result = await _sender.Send(new GetTransferDetailQuery(referenceId), cancellationToken);
+        return result.ToActionResult();
+    }
+
+    [HttpGet("reservations")]
+    public async Task<IActionResult> ListReservations(
+        [FromQuery] Guid productId,
+        [FromQuery] Guid? branchId,
+        CancellationToken cancellationToken)
+    {
+        var result = await _sender.Send(new GetProductReservationsQuery(productId, branchId), cancellationToken);
         return result.ToActionResult();
     }
 

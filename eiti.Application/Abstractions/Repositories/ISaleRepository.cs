@@ -2,6 +2,7 @@ using eiti.Domain.Branches;
 using eiti.Domain.Cash;
 using eiti.Domain.Companies;
 using eiti.Domain.Customers;
+using eiti.Domain.Products;
 using eiti.Domain.Sales;
 
 namespace eiti.Application.Abstractions.Repositories;
@@ -60,6 +61,12 @@ public interface ISaleRepository
     Task<IReadOnlyList<Sale>> ListCcSalesByCompanyAsync(
         CompanyId companyId,
         CustomerId? customerId,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<Sale>> ListReservingByProductAsync(
+        CompanyId companyId,
+        ProductId productId,
+        BranchId? branchId,
         CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<Sale>> GetByIdsAsync(
