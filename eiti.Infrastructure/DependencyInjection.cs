@@ -48,6 +48,7 @@ public static class DependencyInjection
         services.AddScoped<IDriverProfileRepository, DriverProfileRepository>();
         services.AddScoped<IFleetLogRepository, FleetLogRepository>();
         services.AddScoped<IProductRepository, ProductRepository>();
+        services.AddScoped<IProductCategoryRepository, ProductCategoryRepository>();
         services.AddScoped<ISaleRepository, SaleRepository>();
         services.AddScoped<ISaleTransportAssignmentRepository, SaleTransportAssignmentRepository>();
         services.AddScoped<IStockMovementRepository, StockMovementRepository>();

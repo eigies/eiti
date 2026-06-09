@@ -39,4 +39,9 @@ public interface IPurchaseRepository
     Task<Dictionary<Guid, decimal>> GetPendingTotalsBySupplierAsync(
         Guid companyId,
         CancellationToken ct = default);
+
+    Task<List<Purchase>> ListPendingBySupplierAsync(
+        Guid companyId,
+        Guid supplierId,
+        CancellationToken ct = default);
 }

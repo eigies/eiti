@@ -12,7 +12,8 @@ public sealed record SalesReportQuery(
     Guid? InstallerId = null,
     Guid? VehicleId = null,
     int? Channel = null,
-    string? DeliveryMode = null
+    string? DeliveryMode = null,
+    Guid? CategoryId = null
 ) : IRequest<Result<SalesReportResponse>>, IRequirePermissions
 {
     public IReadOnlyCollection<string> RequiredPermissions =>

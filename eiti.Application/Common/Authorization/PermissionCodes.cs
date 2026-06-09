@@ -18,8 +18,11 @@ public static class PermissionCodes
     public const string CashHistoryExport = "cash.history.export";
 
     public const string BranchesViewAll = "branches.view_all";
+    public const string BranchesManage = "branches.manage";
 
     public const string UsersManage = "users.manage";
+
+    public const string CustomersDelete = "customers.delete";
 
     public const string SalesPriceOverride = "sales.override_price";
 
@@ -28,6 +31,7 @@ public static class PermissionCodes
 
     public const string ProductsViewCost = "products.view_cost";
     public const string ProductsDelete = "products.delete";
+    public const string CategoriesManage = "categories.manage";
 
     public const string StockManage = "stock.manage";
     public const string StockTransfer = "stock.transfer";
@@ -44,6 +48,7 @@ public static class PermissionCodes
     public const string ReportsSalesChannelBrand = "reports.sales.channel_brand";
     public const string ReportsSalesBrand = "reports.sales.brand";
     public const string ReportsSalesRanking = "reports.sales.ranking";
+    public const string ReportsSalesDailyControl = "reports.sales.daily_control";
     public const string ReportsDebtors = "reports.debtors";
     public const string ReportsCash = "reports.cash";
     public const string ReportsStock = "reports.stock";

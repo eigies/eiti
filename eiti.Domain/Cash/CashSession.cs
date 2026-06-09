@@ -226,6 +226,22 @@ public sealed class CashSession : AggregateRoot<CashSessionId>
             createdByUserId);
     }
 
+    public void RegisterPurchasePaymentCancel(
+        decimal amount,
+        Guid purchaseId,
+        UserId createdByUserId)
+    {
+        EnsureOpen();
+        AddMovement(
+            CashMovementType.PurchasePaymentCancellation,
+            CashMovementDirection.In,
+            amount,
+            CashReferenceTypes.Purchase,
+            purchaseId,
+            "Pago de compra anulado",
+            createdByUserId);
+    }
+
     public void RegisterWithdrawal(
         decimal amount,
         string description,

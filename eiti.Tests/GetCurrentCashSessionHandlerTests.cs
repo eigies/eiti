@@ -33,6 +33,7 @@ public sealed class GetCurrentCashSessionHandlerTests
         var cashDrawerRepository = new Mock<ICashDrawerRepository>();
         var cashSessionRepository = new Mock<ICashSessionRepository>();
         var saleRepository = new Mock<ISaleRepository>();
+        var purchaseRepository = new Mock<IPurchaseRepository>();
         var userRepository = new Mock<IUserRepository>();
 
         currentUserService.SetupGet(x => x.IsAuthenticated).Returns(true);
@@ -63,6 +64,7 @@ public sealed class GetCurrentCashSessionHandlerTests
             cashDrawerRepository.Object,
             cashSessionRepository.Object,
             saleRepository.Object,
+            purchaseRepository.Object,
             userRepository.Object);
 
         var result = await handler.Handle(new GetCurrentCashSessionQuery(drawerId.Value), CancellationToken.None);

@@ -13,6 +13,8 @@ public sealed record UpdateProductResponse(
     decimal? UnitPrice,
     bool AllowsManualValueInSale,
     decimal? NoDeliverySurcharge,
+    Guid? CategoryId,
+    string? CategoryName,
     int TotalOnHandQuantity,
     int TotalReservedQuantity,
     int TotalAvailableQuantity,

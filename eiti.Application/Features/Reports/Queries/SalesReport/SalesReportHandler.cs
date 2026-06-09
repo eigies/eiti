@@ -93,7 +93,7 @@ public sealed class SalesReportHandler : IRequestHandler<SalesReportQuery, Resul
 
         // Diccionarios de apoyo
         var products = (await _productRepository.GetByCompanyIdAsync(companyId, cancellationToken))
-            .ToDictionary(p => p.Id.Value, p => (p.Brand, p.Name, p.CostPrice));
+            .ToDictionary(p => p.Id.Value, p => (p.Brand, p.Name, p.CostPrice, p.CategoryId));
 
         var employees = new Dictionary<Guid, string>();
         var vehicles = new Dictionary<Guid, string>();
@@ -113,6 +113,11 @@ public sealed class SalesReportHandler : IRequestHandler<SalesReportQuery, Resul
             foreach (var line in sale.Details)
             {
                 products.TryGetValue(line.ProductId.Value, out var prod);
+
+                // Filtro por categoría: saltea las líneas cuyo producto no pertenece a la categoría pedida.
+                if (request.CategoryId.HasValue && prod.CategoryId != request.CategoryId.Value)
+                    continue;
+
                 var revenue = line.TotalAmount;
                 var unitCost = line.UnitCost ?? prod.CostPrice;
                 var cost = decimal.Round(line.Quantity * unitCost, 2, MidpointRounding.AwayFromZero);
@@ -144,7 +149,8 @@ public sealed class SalesReportHandler : IRequestHandler<SalesReportQuery, Resul
             ? rows.OrderByDescending(r => r.Units).ThenByDescending(r => r.Revenue).ToList()
             : rows.OrderByDescending(r => r.Revenue).ToList();
 
-        var totalSaleIds = sales.Select(s => s.Id.Value).Distinct().Count();
+        // Tickets distintos que realmente aportaron líneas (correcto también con el filtro de categoría activo).
+        var totalSaleIds = groups.Values.SelectMany(a => a.SaleIds).Distinct().Count();
         var totalUnits = rows.Sum(r => r.Units);
         var totalRevenue = rows.Sum(r => r.Revenue);
         var totalCost = rows.Sum(r => r.Cost);
@@ -159,7 +165,7 @@ public sealed class SalesReportHandler : IRequestHandler<SalesReportQuery, Resul
         string groupBy,
         Sale sale,
         SaleDetail line,
-        (string Brand, string Name, decimal CostPrice) prod,
+        (string Brand, string Name, decimal CostPrice, Guid? CategoryId) prod,
         SaleTransportAssignment? assignment,
         IReadOnlyDictionary<Guid, string> employees,
         IReadOnlyDictionary<Guid, string> vehicles)

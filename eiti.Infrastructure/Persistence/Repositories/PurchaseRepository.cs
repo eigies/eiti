@@ -103,6 +103,23 @@ public sealed class PurchaseRepository : IPurchaseRepository
             .ToDictionary(g => g.Key, g => g.Sum(p => p.PendingAmount));
     }
 
+    public async Task<List<Purchase>> ListPendingBySupplierAsync(
+        Guid companyId,
+        Guid supplierId,
+        CancellationToken ct = default)
+    {
+        // Compras con saldo pendiente del proveedor (Active = no pagada ni cancelada), más vieja primero (FIFO).
+        // Tracked (sin AsNoTracking): el saldo a favor aplicado en cascada se persiste en el SaveChanges del handler.
+        return await _context.Purchases
+            .Include(p => p.Details)
+            .Include(p => p.Payments)
+            .Where(p => p.CompanyId == companyId
+                && p.SupplierId == supplierId
+                && p.Status == PurchaseStatus.Active)
+            .OrderBy(p => p.CreatedAt)
+            .ToListAsync(ct);
+    }
+
     private IQueryable<Purchase> BuildQuery(
         Guid companyId,
         Guid? supplierId,

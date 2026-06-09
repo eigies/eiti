@@ -15,6 +15,7 @@ public sealed class ImportProductsHandler
 {
     private readonly ICurrentUserService _currentUserService;
     private readonly IProductRepository _productRepository;
+    private readonly IProductCategoryRepository _categoryRepository;
     private readonly IBranchRepository _branchRepository;
     private readonly IBranchProductStockRepository _branchProductStockRepository;
     private readonly IStockMovementRepository _stockMovementRepository;
@@ -24,6 +25,7 @@ public sealed class ImportProductsHandler
     public ImportProductsHandler(
         ICurrentUserService currentUserService,
         IProductRepository productRepository,
+        IProductCategoryRepository categoryRepository,
         IBranchRepository branchRepository,
         IBranchProductStockRepository branchProductStockRepository,
         IStockMovementRepository stockMovementRepository,
@@ -32,6 +34,7 @@ public sealed class ImportProductsHandler
     {
         _currentUserService = currentUserService;
         _productRepository = productRepository;
+        _categoryRepository = categoryRepository;
         _branchRepository = branchRepository;
         _branchProductStockRepository = branchProductStockRepository;
         _stockMovementRepository = stockMovementRepository;
@@ -58,6 +61,8 @@ public sealed class ImportProductsHandler
         var products = await _productRepository.GetByCompanyIdAsync(
             companyId,
             cancellationToken);
+        var categories = await _categoryRepository.ListByCompanyAsync(companyId.Value, cancellationToken) ?? [];
+        var categoriesByName = categories.ToDictionary(category => category.Name, StringComparer.OrdinalIgnoreCase);
 
         var branches = await _branchRepository.ListByCompanyAsync(companyId, cancellationToken) ?? [];
         var branchesByName = branches.ToDictionary(b => b.Name, StringComparer.OrdinalIgnoreCase);
@@ -88,6 +93,18 @@ public sealed class ImportProductsHandler
             var name = row.Name ?? string.Empty;
             var rawCode = code.Trim();
             var normalizedCode = NormalizeCodeKey(code);
+            Guid? importedCategoryId = null;
+
+            if (!string.IsNullOrWhiteSpace(row.CategoryName))
+            {
+                if (!categoriesByName.TryGetValue(row.CategoryName.Trim(), out var category))
+                {
+                    rowResults.Add(ErrorRow(rowNumber, rawCode, $"Category '{row.CategoryName}' not found."));
+                    continue;
+                }
+
+                importedCategoryId = category.Id;
+            }
 
             if (!string.IsNullOrWhiteSpace(normalizedCode)
                 && duplicateCodes.Contains(normalizedCode))
@@ -140,7 +157,8 @@ public sealed class ImportProductsHandler
                         row.CostPrice,
                         row.UnitPrice,
                         row.AllowsManualValueInSale,
-                        row.NoDeliverySurcharge);
+                        row.NoDeliverySurcharge,
+                        importedCategoryId ?? existingProduct.CategoryId);
                 }
                 catch (ArgumentException ex)
                 {
@@ -202,7 +220,8 @@ public sealed class ImportProductsHandler
                     row.CostPrice,
                     row.UnitPrice,
                     row.AllowsManualValueInSale,
-                    row.NoDeliverySurcharge);
+                    row.NoDeliverySurcharge,
+                    importedCategoryId);
             }
             catch (ArgumentException ex)
             {

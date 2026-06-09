@@ -1,4 +1,5 @@
 using eiti.Application.Common;
+using eiti.Application.Common.Authorization;
 using eiti.Application.Features.Branches.Common;
 using MediatR;
 
@@ -9,4 +10,7 @@ public sealed record UpdateBranchCommand(
     string Name,
     string? Code,
     string? Address
-) : IRequest<Result<BranchResponse>>;
+) : IRequest<Result<BranchResponse>>, IRequirePermissions
+{
+    public IReadOnlyCollection<string> RequiredPermissions => [PermissionCodes.BranchesManage];
+}

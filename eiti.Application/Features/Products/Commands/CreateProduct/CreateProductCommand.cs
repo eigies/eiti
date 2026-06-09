@@ -14,5 +14,6 @@ public sealed record CreateProductCommand(
     decimal CostPrice,
     decimal? UnitPrice,
     bool AllowsManualValueInSale = false,
-    decimal? NoDeliverySurcharge = null
+    decimal? NoDeliverySurcharge = null,
+    Guid? CategoryId = null
 ) : IRequest<Result<CreateProductResponse>>;

@@ -50,4 +50,44 @@ public sealed class BranchRepository : IBranchRepository
     {
         await _context.Branches.AddAsync(branch, cancellationToken);
     }
+
+    public async Task<bool> IsReferencedAsync(
+        BranchId branchId,
+        CompanyId companyId,
+        CancellationToken cancellationToken = default)
+    {
+        if (await _context.Sales.AnyAsync(sale => sale.BranchId == branchId, cancellationToken))
+            return true;
+
+        if (await _context.CashDrawers.AnyAsync(drawer => drawer.BranchId == branchId, cancellationToken))
+            return true;
+
+        if (await _context.StockMovements.AnyAsync(movement => movement.BranchId == branchId, cancellationToken))
+            return true;
+
+        if (await _context.UserBranchAccesses.AnyAsync(access => access.BranchId == branchId, cancellationToken))
+            return true;
+
+        if (await _context.BranchProductStocks.AnyAsync(
+                stock => stock.BranchId == branchId
+                    && (stock.OnHandQuantity > 0 || stock.ReservedQuantity > 0),
+                cancellationToken))
+            return true;
+
+        return false;
+    }
+
+    public async Task DeleteAsync(Branch branch, CancellationToken cancellationToken = default)
+    {
+        var emptyStocks = await _context.BranchProductStocks
+            .Where(stock => stock.BranchId == branch.Id
+                && stock.OnHandQuantity == 0
+                && stock.ReservedQuantity == 0)
+            .ToListAsync(cancellationToken);
+
+        if (emptyStocks.Count > 0)
+            _context.BranchProductStocks.RemoveRange(emptyStocks);
+
+        _context.Branches.Remove(branch);
+    }
 }

@@ -92,6 +92,13 @@ public sealed class CustomerRepository : ICustomerRepository
         return await _context.Customers.AnyAsync(customer => customer.CompanyId == companyId && customer.TaxId == taxId, cancellationToken);
     }
 
+    public async Task<bool> IsReferencedAsync(CustomerId customerId, CompanyId companyId, CancellationToken cancellationToken = default)
+    {
+        return await _context.Sales.AnyAsync(
+            sale => sale.CompanyId == companyId && sale.CustomerId == customerId,
+            cancellationToken);
+    }
+
     public void Update(Customer customer)
     {
         _context.Customers.Update(customer);

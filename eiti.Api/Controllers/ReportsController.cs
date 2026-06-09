@@ -1,6 +1,7 @@
 using eiti.Api.Extensions;
 using eiti.Application.Features.Reports.Queries.CashMovementsReport;
 using eiti.Application.Features.Reports.Queries.CustomerDebtors;
+using eiti.Application.Features.Reports.Queries.DailySalesControl;
 using eiti.Application.Features.Reports.Queries.ListAuditLog;
 using eiti.Application.Features.Reports.Queries.SalesReport;
 using eiti.Application.Features.Reports.Queries.StockMatrix;
@@ -47,10 +48,24 @@ public sealed class ReportsController : ControllerBase
         [FromQuery] Guid? vehicleId,
         [FromQuery] int? channel,
         [FromQuery] string? deliveryMode,
+        [FromQuery] Guid? categoryId,
         CancellationToken cancellationToken = default)
     {
         var result = await _sender.Send(
-            new SalesReportQuery(dateFrom, dateTo, groupBy ?? "product", customerId, installerId, vehicleId, channel, deliveryMode),
+            new SalesReportQuery(dateFrom, dateTo, groupBy ?? "product", customerId, installerId, vehicleId, channel, deliveryMode, categoryId),
+            cancellationToken);
+        return result.ToActionResult();
+    }
+
+    [HttpGet("sales/daily-control")]
+    public async Task<IActionResult> DailySalesControl(
+        [FromQuery] DateTime dateFrom,
+        [FromQuery] DateTime dateTo,
+        [FromQuery] int status = 0,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await _sender.Send(
+            new DailySalesControlQuery(dateFrom, dateTo, status),
             cancellationToken);
         return result.ToActionResult();
     }

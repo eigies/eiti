@@ -42,6 +42,11 @@ public interface ICustomerRepository
         string taxId,
         CancellationToken cancellationToken = default);
 
+    Task<bool> IsReferencedAsync(
+        CustomerId customerId,
+        CompanyId companyId,
+        CancellationToken cancellationToken = default);
+
     void Update(Customer customer);
 
     void Delete(Customer customer);

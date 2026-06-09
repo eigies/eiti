@@ -40,6 +40,7 @@ public sealed class ApplicationDbContext : DbContext
     public DbSet<Company> Companies { get; set; }
     public DbSet<CompanyOnboarding> CompanyOnboarding { get; set; }
     public DbSet<Product> Products { get; set; }
+    public DbSet<ProductCategory> ProductCategories => Set<ProductCategory>();
     public DbSet<BranchProductStock> BranchProductStocks { get; set; }
     public DbSet<StockMovement> StockMovements { get; set; }
     public DbSet<Employee> Employees { get; set; }

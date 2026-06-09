@@ -12,15 +12,18 @@ public sealed class UpdateProductHandler
 {
     private readonly ICurrentUserService _currentUserService;
     private readonly IProductRepository _productRepository;
+    private readonly IProductCategoryRepository _categoryRepository;
     private readonly IUnitOfWork _unitOfWork;
 
     public UpdateProductHandler(
         ICurrentUserService currentUserService,
         IProductRepository productRepository,
+        IProductCategoryRepository categoryRepository,
         IUnitOfWork unitOfWork)
     {
         _currentUserService = currentUserService;
         _productRepository = productRepository;
+        _categoryRepository = categoryRepository;
         _unitOfWork = unitOfWork;
     }
 
@@ -85,6 +88,18 @@ public sealed class UpdateProductHandler
                     "Another product with the same SKU already exists."));
         }
 
+        // Categoría opcional: si viene, debe existir en la empresa.
+        string? categoryName = null;
+        if (request.CategoryId.HasValue)
+        {
+            var category = await _categoryRepository.GetByIdAsync(
+                request.CategoryId.Value, _currentUserService.CompanyId!.Value, cancellationToken);
+            if (category is null)
+                return Result<UpdateProductResponse>.Failure(
+                    Error.Validation("Products.Update.CategoryNotFound", "La categoría seleccionada no existe."));
+            categoryName = category.Name;
+        }
+
         var resolvedPublicPriceResult = ResolvePublicPrice(
             request.Price,
             request.PublicPrice,
@@ -106,7 +121,8 @@ public sealed class UpdateProductHandler
                 request.CostPrice,
                 request.UnitPrice,
                 request.AllowsManualValueInSale,
-                request.NoDeliverySurcharge);
+                request.NoDeliverySurcharge,
+                request.CategoryId);
         }
         catch (ArgumentException ex)
         {
@@ -130,6 +146,8 @@ public sealed class UpdateProductHandler
                 product.UnitPrice,
                 product.AllowsManualValueInSale,
                 product.NoDeliverySurcharge,
+                product.CategoryId,
+                categoryName,
                 0,
                 0,
                 0,

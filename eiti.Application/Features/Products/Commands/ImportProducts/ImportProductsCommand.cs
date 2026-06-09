@@ -19,4 +19,5 @@ public sealed record ImportProductRowRequest(
     bool AllowsManualValueInSale,
     decimal? NoDeliverySurcharge,
     string? BranchName,
-    int? InitialStock);
+    int? InitialStock,
+    string? CategoryName = null);

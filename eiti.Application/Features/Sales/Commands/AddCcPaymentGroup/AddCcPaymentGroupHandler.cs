@@ -123,14 +123,23 @@ public sealed class AddCcPaymentGroupHandler : IRequestHandler<AddCcPaymentGroup
                 return Result<AddCcPaymentGroupResponse>.Failure(AddCcPaymentGroupErrors.CashSessionRequired);
             }
 
+            var ccGroupId = payments.First().GroupId!.Value;
+
             // Solo la porción en EFECTIVO de un pago de cuenta corriente entra al cajón físico.
-            // Transferencia/tarjeta/cheque no afectan el efectivo esperado (igual que en las ventas directas).
             var cashAmount = payments.Where(p => p.Method == SalePaymentMethod.Cash).Sum(p => p.Amount);
             if (cashAmount > 0)
-            {
-                var ccGroupId = payments.First().GroupId!.Value;
                 session.RegisterCcPaymentIncome(cashAmount, sale.Id.Value, _currentUserService.UserId!, ccGroupId);
-            }
+
+            // Transferencia y tarjeta de un cobro de cuenta corriente: se registran para que se VEAN en la
+            // caja (conciliación), con dirección In pero SIN sumar al esperado de efectivo — exactamente
+            // igual que en las ventas directas (ExpectedClosingAmount excluye TransferIncome/CardIncome).
+            var transferAmount = payments.Where(p => p.Method == SalePaymentMethod.Transfer).Sum(p => p.Amount);
+            if (transferAmount > 0)
+                session.RegisterTransferIncome(transferAmount, sale.Id.Value, _currentUserService.UserId!);
+
+            var cardAmount = payments.Where(p => p.Method == SalePaymentMethod.Card).Sum(p => p.Amount);
+            if (cardAmount > 0)
+                session.RegisterCardIncome(cardAmount, sale.Id.Value, _currentUserService.UserId!);
         }
 
         // Stock confirmation if sale transitioned to Paid

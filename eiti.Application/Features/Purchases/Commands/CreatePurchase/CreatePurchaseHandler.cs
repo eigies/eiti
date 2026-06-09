@@ -3,6 +3,7 @@ using eiti.Application.Abstractions.Repositories;
 using eiti.Application.Abstractions.Services;
 using eiti.Application.Common;
 using eiti.Application.Common.Authorization;
+using eiti.Application.Features.Purchases.Common;
 using eiti.Domain.Branches;
 using eiti.Domain.Cash;
 using eiti.Domain.Products;
@@ -216,7 +217,14 @@ public sealed class CreatePurchaseHandler : IRequestHandler<CreatePurchaseComman
         {
             excess = Math.Max(0m, purchase.TotalPaid - purchase.GrandTotal);
             if (excess > 0)
+            {
                 supplier.AddCredit(excess);
+                // Opción B: el excedente se aplica a las otras compras pendientes del proveedor (FIFO);
+                // lo que reste queda como saldo a favor. La compra nueva todavía no está en la DB, así que
+                // no entra en la lista de pendientes (se excluye igual por Id por las dudas).
+                await SupplierCreditApplicator.ApplyToPendingPurchasesAsync(
+                    supplier, companyId.Value, _purchaseRepository, purchase.Id, cancellationToken);
+            }
 
             if (creditApplied > 0 || excess > 0)
                 _supplierRepository.Update(supplier);

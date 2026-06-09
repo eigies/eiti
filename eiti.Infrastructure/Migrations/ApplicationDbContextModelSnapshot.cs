@@ -779,6 +779,9 @@ namespace eiti.Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
 
+                    b.Property<Guid?>("CategoryId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<string>("Code")
                         .IsRequired()
                         .HasMaxLength(50)
@@ -821,6 +824,8 @@ namespace eiti.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("CategoryId");
+
                     b.HasIndex("CompanyId", "Code")
                         .IsUnique();
 
@@ -831,6 +836,33 @@ namespace eiti.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("Products", (string)null);
+                });
+
+            modelBuilder.Entity("eiti.Domain.Products.ProductCategory", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("CompanyId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompanyId", "Name")
+                        .IsUnique();
+
+                    b.ToTable("ProductCategories", (string)null);
                 });
 
             modelBuilder.Entity("eiti.Domain.Purchases.Purchase", b =>
@@ -1766,6 +1798,11 @@ namespace eiti.Infrastructure.Migrations
 
             modelBuilder.Entity("eiti.Domain.Products.Product", b =>
                 {
+                    b.HasOne("eiti.Domain.Products.ProductCategory", null)
+                        .WithMany()
+                        .HasForeignKey("CategoryId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("eiti.Domain.Companies.Company", null)
                         .WithMany()
                         .HasForeignKey("CompanyId")

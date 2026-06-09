@@ -1,5 +1,6 @@
 using eiti.Api.Extensions;
 using eiti.Application.Features.Customers.Commands.CreateCustomer;
+using eiti.Application.Features.Customers.Commands.DeleteCustomer;
 using eiti.Application.Features.Customers.Commands.UpdateCustomer;
 using eiti.Application.Features.Customers.Queries.GetCustomerById;
 using eiti.Application.Features.Customers.Queries.SearchCustomers;
@@ -69,6 +70,15 @@ public sealed class CustomersController : ControllerBase
         CancellationToken cancellationToken)
     {
         var result = await _sender.Send(command with { Id = id }, cancellationToken);
+        return result.ToActionResult();
+    }
+
+    [HttpDelete("{id:guid}")]
+    public async Task<IActionResult> DeleteCustomer(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        var result = await _sender.Send(new DeleteCustomerCommand(id), cancellationToken);
         return result.ToActionResult();
     }
 }

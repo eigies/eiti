@@ -3,6 +3,7 @@ using eiti.Application.Abstractions.Repositories;
 using eiti.Application.Abstractions.Services;
 using eiti.Application.Common;
 using eiti.Application.Common.Authorization;
+using eiti.Application.Features.Purchases.Common;
 using eiti.Domain.Cash;
 using eiti.Domain.Purchases;
 using eiti.Domain.Suppliers;
@@ -103,6 +104,10 @@ public sealed class AddPurchasePaymentHandler : IRequestHandler<AddPurchasePayme
             if (supplier is not null)
             {
                 supplier.AddCredit(excess);
+                // Opción B: el excedente se aplica a las otras compras pendientes del proveedor (FIFO);
+                // lo que reste queda como saldo a favor disponible para la próxima compra.
+                await SupplierCreditApplicator.ApplyToPendingPurchasesAsync(
+                    supplier, companyId.Value, _purchaseRepository, purchase.Id, cancellationToken);
                 _supplierRepository.Update(supplier);
             }
         }

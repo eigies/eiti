@@ -64,6 +64,9 @@ public sealed class ProductConfiguration : IEntityTypeConfiguration<Product>
             .HasColumnType("decimal(18,2)")
             .IsRequired(false);
 
+        builder.Property(product => product.CategoryId)
+            .IsRequired(false);
+
         builder.Property(product => product.CreatedAt).IsRequired();
         builder.Property(product => product.UpdatedAt).IsRequired(false);
 
@@ -80,5 +83,11 @@ public sealed class ProductConfiguration : IEntityTypeConfiguration<Product>
             .WithMany()
             .HasForeignKey(product => product.CompanyId)
             .OnDelete(DeleteBehavior.Restrict);
+
+        // Categoría opcional: borrar la categoría des-etiqueta el producto (CategoryId → null).
+        builder.HasOne<ProductCategory>()
+            .WithMany()
+            .HasForeignKey(product => product.CategoryId)
+            .OnDelete(DeleteBehavior.SetNull);
     }
 }

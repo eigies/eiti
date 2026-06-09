@@ -16,6 +16,7 @@ public sealed class Product : AggregateRoot<ProductId>
     public decimal? UnitPrice { get; private set; }
     public bool AllowsManualValueInSale { get; private set; }
     public decimal? NoDeliverySurcharge { get; private set; }
+    public Guid? CategoryId { get; private set; }
     public DateTime CreatedAt { get; private set; }
     public DateTime? UpdatedAt { get; private set; }
 
@@ -36,6 +37,7 @@ public sealed class Product : AggregateRoot<ProductId>
         decimal? unitPrice,
         bool allowsManualValueInSale,
         decimal? noDeliverySurcharge,
+        Guid? categoryId,
         DateTime createdAt)
         : base(id)
     {
@@ -50,6 +52,7 @@ public sealed class Product : AggregateRoot<ProductId>
         UnitPrice = unitPrice;
         AllowsManualValueInSale = allowsManualValueInSale;
         NoDeliverySurcharge = noDeliverySurcharge;
+        CategoryId = categoryId;
         CreatedAt = createdAt;
     }
 
@@ -64,7 +67,8 @@ public sealed class Product : AggregateRoot<ProductId>
         decimal costPrice,
         decimal? unitPrice,
         bool allowsManualValueInSale = false,
-        decimal? noDeliverySurcharge = null)
+        decimal? noDeliverySurcharge = null,
+        Guid? categoryId = null)
     {
         var normalizedCode = NormalizeCode(code);
         var normalizedSku = NormalizeSku(sku);
@@ -87,6 +91,7 @@ public sealed class Product : AggregateRoot<ProductId>
             unitPrice,
             allowsManualValueInSale,
             noDeliverySurcharge,
+            categoryId,
             DateTime.UtcNow);
     }
 
@@ -100,7 +105,8 @@ public sealed class Product : AggregateRoot<ProductId>
         decimal costPrice,
         decimal? unitPrice,
         bool allowsManualValueInSale = false,
-        decimal? noDeliverySurcharge = null)
+        decimal? noDeliverySurcharge = null,
+        Guid? categoryId = null)
     {
         var normalizedCode = NormalizeCode(code);
         var normalizedSku = NormalizeSku(sku);
@@ -120,6 +126,7 @@ public sealed class Product : AggregateRoot<ProductId>
         UnitPrice = unitPrice;
         AllowsManualValueInSale = allowsManualValueInSale;
         NoDeliverySurcharge = noDeliverySurcharge;
+        CategoryId = categoryId;
         UpdatedAt = DateTime.UtcNow;
     }
 

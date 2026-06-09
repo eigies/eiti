@@ -15,15 +15,18 @@ public sealed class ListPagedProductsHandler
 
     private readonly ICurrentUserService _currentUserService;
     private readonly IProductRepository _productRepository;
+    private readonly IProductCategoryRepository _categoryRepository;
     private readonly IBranchProductStockRepository _branchProductStockRepository;
 
     public ListPagedProductsHandler(
         ICurrentUserService currentUserService,
         IProductRepository productRepository,
+        IProductCategoryRepository categoryRepository,
         IBranchProductStockRepository branchProductStockRepository)
     {
         _currentUserService = currentUserService;
         _productRepository = productRepository;
+        _categoryRepository = categoryRepository;
         _branchProductStockRepository = branchProductStockRepository;
     }
 
@@ -46,6 +49,10 @@ public sealed class ListPagedProductsHandler
         var stocks = await _branchProductStockRepository.ListByCompanyAsync(
             _currentUserService.CompanyId,
             cancellationToken);
+
+        var categories = (await _categoryRepository.ListByCompanyAsync(
+                _currentUserService.CompanyId!.Value, cancellationToken) ?? [])
+            .ToDictionary(category => category.Id, category => category.Name);
 
         // El total "global" se acota a las sucursales visibles del usuario; el total de empresa
         // (todas las sucursales) se expone aparte para el chip informativo.
@@ -76,6 +83,9 @@ public sealed class ListPagedProductsHandler
             .Select(product =>
             {
                 stockTotals.TryGetValue(product.Id.Value, out var totals);
+                var categoryName = product.CategoryId.HasValue && categories.TryGetValue(product.CategoryId.Value, out var name)
+                    ? name
+                    : null;
                 return new ProductListItemResponse(
                     product.Id.Value,
                     product.Code,
@@ -89,6 +99,8 @@ public sealed class ListPagedProductsHandler
                     product.UnitPrice,
                     product.AllowsManualValueInSale,
                     product.NoDeliverySurcharge,
+                    product.CategoryId,
+                    categoryName,
                     product.CreatedAt,
                     product.UpdatedAt,
                     totals?.OnHand ?? 0,

@@ -38,6 +38,7 @@ public sealed class ProductHandlersTests
         var handler = new CreateProductHandler(
             currentUserService.Object,
             productRepository.Object,
+            new Mock<IProductCategoryRepository>().Object,
             companyOnboardingRepository.Object,
             unitOfWork.Object);
 
@@ -97,6 +98,7 @@ public sealed class ProductHandlersTests
         var handler = new CreateProductHandler(
             currentUserService.Object,
             productRepository.Object,
+            new Mock<IProductCategoryRepository>().Object,
             companyOnboardingRepository.Object,
             unitOfWork.Object);
 
@@ -154,6 +156,7 @@ public sealed class ProductHandlersTests
         var handler = new CreateProductHandler(
             currentUserService.Object,
             productRepository.Object,
+            new Mock<IProductCategoryRepository>().Object,
             companyOnboardingRepository.Object,
             unitOfWork.Object);
 
@@ -169,10 +172,12 @@ public sealed class ProductHandlersTests
     public async Task ImportProducts_ShouldCreateNewProducts()
     {
         var companyId = CompanyId.New();
+        var category = ProductCategory.Create(companyId.Value, "Baterias");
         var products = new List<Product>();
 
         var currentUserService = new Mock<ICurrentUserService>();
         var productRepository = new Mock<IProductRepository>();
+        var categoryRepository = new Mock<IProductCategoryRepository>();
         var companyOnboardingRepository = new Mock<ICompanyOnboardingRepository>();
         var unitOfWork = new Mock<IUnitOfWork>();
 
@@ -192,6 +197,12 @@ public sealed class ProductHandlersTests
             .Callback<Product, CancellationToken>((product, _) => products.Add(product))
             .Returns(Task.CompletedTask);
 
+        categoryRepository
+            .Setup(repository => repository.ListByCompanyAsync(
+                companyId.Value,
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync([category]);
+
         companyOnboardingRepository
             .Setup(repository => repository.GetByCompanyIdAsync(
                 companyId,
@@ -201,6 +212,7 @@ public sealed class ProductHandlersTests
         var handler = new ImportProductsHandler(
             currentUserService.Object,
             productRepository.Object,
+            categoryRepository.Object,
             new Mock<IBranchRepository>().Object,
             new Mock<IBranchProductStockRepository>().Object,
             new Mock<IStockMovementRepository>().Object,
@@ -209,7 +221,7 @@ public sealed class ProductHandlersTests
 
         var result = await handler.Handle(
             new ImportProductsCommand([
-                new ImportProductRowRequest("BAT-001", "BAT-001", "Contoso", "Bateria", null, 100m, 70m, 10m, false, 5m, null, null)
+                new ImportProductRowRequest("BAT-001", "BAT-001", "Contoso", "Bateria", null, 100m, 70m, 10m, false, 5m, null, null, "Baterias")
             ]),
             CancellationToken.None);
 
@@ -218,7 +230,10 @@ public sealed class ProductHandlersTests
         result.Value.UpdatedCount.Should().Be(0);
         result.Value.ErrorCount.Should().Be(0);
         result.Value.Rows.Should().ContainSingle(row => row.Action == "created" && row.Code == "BAT-001");
-        products.Should().ContainSingle(product => product.Code == "BAT-001" && product.Price == 100m);
+        products.Should().ContainSingle(product =>
+            product.Code == "BAT-001"
+            && product.Price == 100m
+            && product.CategoryId == category.Id);
         unitOfWork.Verify(workflow => workflow.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -226,7 +241,8 @@ public sealed class ProductHandlersTests
     public async Task ImportProducts_ShouldUpdateExistingProduct_WhenCodeMatches()
     {
         var companyId = CompanyId.New();
-        var existingProduct = Product.Create(companyId, "BAT-001", "BAT-001", "Contoso", "Bateria", null, 100m, 70m, 10m);
+        var categoryId = Guid.NewGuid();
+        var existingProduct = Product.Create(companyId, "BAT-001", "BAT-001", "Contoso", "Bateria", null, 100m, 70m, 10m, false, null, categoryId);
         var products = new List<Product> { existingProduct };
 
         var currentUserService = new Mock<ICurrentUserService>();
@@ -246,6 +262,7 @@ public sealed class ProductHandlersTests
         var handler = new ImportProductsHandler(
             currentUserService.Object,
             productRepository.Object,
+            new Mock<IProductCategoryRepository>().Object,
             new Mock<IBranchRepository>().Object,
             new Mock<IBranchProductStockRepository>().Object,
             new Mock<IStockMovementRepository>().Object,
@@ -266,6 +283,7 @@ public sealed class ProductHandlersTests
         existingProduct.Brand.Should().Be("Acme");
         existingProduct.Name.Should().Be("Bateria Premium");
         existingProduct.Price.Should().Be(140m);
+        existingProduct.CategoryId.Should().Be(categoryId);
     }
 
     [Fact]
@@ -306,6 +324,7 @@ public sealed class ProductHandlersTests
         var handler = new ImportProductsHandler(
             currentUserService.Object,
             productRepository.Object,
+            new Mock<IProductCategoryRepository>().Object,
             new Mock<IBranchRepository>().Object,
             new Mock<IBranchProductStockRepository>().Object,
             new Mock<IStockMovementRepository>().Object,
@@ -367,6 +386,7 @@ public sealed class ProductHandlersTests
         var handler = new ListProductsHandler(
             currentUserService.Object,
             productRepository.Object,
+            new Mock<IProductCategoryRepository>().Object,
             branchProductStockRepository.Object);
 
         var result = await handler.Handle(new ListProductsQuery(), CancellationToken.None);
@@ -450,6 +470,7 @@ public sealed class ProductHandlersTests
         var handler = new ListPagedProductsHandler(
             currentUserService.Object,
             productRepository.Object,
+            new Mock<IProductCategoryRepository>().Object,
             branchProductStockRepository.Object);
 
         var result = await handler.Handle(new ListPagedProductsQuery(2, 2), CancellationToken.None);
