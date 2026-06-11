@@ -11,5 +11,5 @@ public sealed record CreateCashDepositCommand(
     string Description
 ) : IRequest<Result<CashSessionResponse>>, IRequirePermissions
 {
-    public IReadOnlyCollection<string> RequiredPermissions => [PermissionCodes.CashWithdraw];
+    public IReadOnlyCollection<string> RequiredPermissions => [PermissionCodes.CashIncome];
 }

@@ -6,13 +6,12 @@ namespace eiti.Application.Features.Purchases.Commands.CreatePurchase;
 
 public sealed record CreatePurchaseCommand(
     Guid BranchId,
-    Guid? SupplierId,
+    Guid SupplierId,
     string? InvoiceNumber,
     string? Notes,
     decimal? IvaPct,
     decimal? IngresosBrutosPct,
-    IReadOnlyList<CreatePurchaseDetailRequest> Details,
-    IReadOnlyList<CreatePurchasePaymentRequest> Payments
+    IReadOnlyList<CreatePurchaseDetailRequest> Details
 ) : IRequest<Result<CreatePurchaseResponse>>, IRequirePermissions
 {
     public IReadOnlyCollection<string> RequiredPermissions => [PermissionCodes.PurchasesCreate];
@@ -22,10 +21,3 @@ public sealed record CreatePurchaseDetailRequest(
     Guid ProductId,
     decimal Quantity,
     decimal UnitCost);
-
-public sealed record CreatePurchasePaymentRequest(
-    int Method,
-    decimal Amount,
-    DateTime Date,
-    string? Reference,
-    string? Notes);

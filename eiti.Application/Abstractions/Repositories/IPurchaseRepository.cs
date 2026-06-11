@@ -44,4 +44,14 @@ public interface IPurchaseRepository
         Guid companyId,
         Guid supplierId,
         CancellationToken ct = default);
+
+    Task<List<Purchase>> ListAllBySupplierAsync(
+        Guid companyId,
+        Guid supplierId,
+        CancellationToken ct = default);
+
+    Task<List<Purchase>> ListBySupplierPaymentIdAsync(
+        Guid companyId,
+        Guid supplierPaymentId,
+        CancellationToken ct = default);
 }

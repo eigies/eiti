@@ -88,6 +88,31 @@ public sealed class Cheque
         return new Cheque(companyId, null, null, ccPaymentId, bankId, numero, titular, cuitDni, monto, fechaEmision, fechaVencimiento, notas);
     }
 
+    // Endoso a proveedor: el cheque sale de cartera para pagar una compra.
+    // No se expone vía TransitionTo para que el cambio de estado manual no permita "Entregado".
+    public void EndorseToSupplier()
+    {
+        if (Estado != ChequeStatus.EnCartera)
+        {
+            throw new InvalidOperationException("Only cheques en cartera can be endorsed to a supplier.");
+        }
+
+        Estado = ChequeStatus.Entregado;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    // Reverso del endoso (al anular el pago de la compra): vuelve a cartera.
+    public void ReturnToCartera()
+    {
+        if (Estado != ChequeStatus.Entregado)
+        {
+            throw new InvalidOperationException("Only cheques entregados can return to cartera.");
+        }
+
+        Estado = ChequeStatus.EnCartera;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
     public void TransitionTo(ChequeStatus newStatus)
     {
         if (Estado == newStatus)

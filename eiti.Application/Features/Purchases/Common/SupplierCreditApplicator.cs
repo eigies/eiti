@@ -17,7 +17,8 @@ internal static class SupplierCreditApplicator
         Guid companyId,
         IPurchaseRepository purchaseRepository,
         Guid? excludePurchaseId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Guid? supplierPaymentId = null)
     {
         if (supplier.CreditBalance <= 0)
             return;
@@ -47,7 +48,8 @@ internal static class SupplierCreditApplicator
                 applied,
                 DateTime.UtcNow,
                 null,
-                "Saldo a favor aplicado automáticamente"));
+                "Saldo a favor aplicado automáticamente",
+                supplierPaymentId: supplierPaymentId));
         }
     }
 }

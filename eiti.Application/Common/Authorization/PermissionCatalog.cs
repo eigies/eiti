@@ -13,6 +13,7 @@ public static class PermissionCatalog
         PermissionCodes.CashOpen,
         PermissionCodes.CashClose,
         PermissionCodes.CashWithdraw,
+        PermissionCodes.CashIncome,
         PermissionCodes.CashDrawerManage,
         PermissionCodes.CashDrawerViewAll,
         PermissionCodes.CashHistoryExport,

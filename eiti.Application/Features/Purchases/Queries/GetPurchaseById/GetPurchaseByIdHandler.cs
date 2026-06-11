@@ -11,15 +11,18 @@ public sealed class GetPurchaseByIdHandler : IRequestHandler<GetPurchaseByIdQuer
     private readonly ICurrentUserService _currentUserService;
     private readonly IPurchaseRepository _purchaseRepository;
     private readonly ISupplierRepository _supplierRepository;
+    private readonly IChequeRepository _chequeRepository;
 
     public GetPurchaseByIdHandler(
         ICurrentUserService currentUserService,
         IPurchaseRepository purchaseRepository,
-        ISupplierRepository supplierRepository)
+        ISupplierRepository supplierRepository,
+        IChequeRepository chequeRepository)
     {
         _currentUserService = currentUserService;
         _purchaseRepository = purchaseRepository;
         _supplierRepository = supplierRepository;
+        _chequeRepository = chequeRepository;
     }
 
     public async Task<Result<GetPurchaseByIdResponse>> Handle(GetPurchaseByIdQuery query, CancellationToken cancellationToken)
@@ -39,20 +42,32 @@ public sealed class GetPurchaseByIdHandler : IRequestHandler<GetPurchaseByIdQuer
         string? supplierEmail = null;
         decimal supplierCreditBalance = 0m;
 
-        if (purchase.SupplierId.HasValue)
+        var supplier = await _supplierRepository.GetByIdAsync(purchase.SupplierId, companyId.Value, cancellationToken);
+        if (supplier is not null)
         {
-            var supplier = await _supplierRepository.GetByIdAsync(purchase.SupplierId.Value, companyId.Value, cancellationToken);
-            if (supplier is not null)
-            {
-                supplierName = supplier.Name;
-                supplierPhone = supplier.Phone;
-                supplierEmail = supplier.Email;
-                supplierCreditBalance = supplier.CreditBalance;
-            }
+            supplierName = supplier.Name;
+            supplierPhone = supplier.Phone;
+            supplierEmail = supplier.Email;
+            supplierCreditBalance = supplier.CreditBalance;
         }
 
-        var activePayments = purchase.Payments
+        var activePaymentsList = purchase.Payments
             .Where(p => p.Status == PurchasePaymentStatus.Active)
+            .ToList();
+
+        // Número de cheque para los pagos que endosaron un cheque.
+        var chequeNumeroById = new Dictionary<Guid, string>();
+        foreach (var chequeId in activePaymentsList
+            .Where(p => p.ChequeId.HasValue)
+            .Select(p => p.ChequeId!.Value)
+            .Distinct())
+        {
+            var cheque = await _chequeRepository.GetByIdAsync(chequeId, companyId, cancellationToken);
+            if (cheque is not null)
+                chequeNumeroById[chequeId] = cheque.Numero;
+        }
+
+        var activePayments = activePaymentsList
             .Select(p => new GetPurchasePaymentResponse(
                 p.Id,
                 (int)p.Method,
@@ -63,7 +78,9 @@ public sealed class GetPurchaseByIdHandler : IRequestHandler<GetPurchaseByIdQuer
                 p.Reference,
                 p.Notes,
                 p.Date,
-                p.CreatedAt))
+                p.CreatedAt,
+                p.ChequeId,
+                p.ChequeId.HasValue && chequeNumeroById.TryGetValue(p.ChequeId.Value, out var num) ? num : null))
             .ToList();
 
         var details = purchase.Details.Select(d => new GetPurchaseDetailResponse(

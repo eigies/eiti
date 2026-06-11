@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using eiti.Infrastructure.Persistence;
 
@@ -11,9 +12,11 @@ using eiti.Infrastructure.Persistence;
 namespace eiti.Infrastructure.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260610230226_AddPurchasePaymentChequeId")]
+    partial class AddPurchasePaymentChequeId
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -910,7 +913,7 @@ namespace eiti.Infrastructure.Migrations
                     b.Property<int>("Status")
                         .HasColumnType("int");
 
-                    b.Property<Guid>("SupplierId")
+                    b.Property<Guid?>("SupplierId")
                         .HasColumnType("uniqueidentifier");
 
                     b.HasKey("Id");
@@ -989,14 +992,9 @@ namespace eiti.Infrastructure.Migrations
                     b.Property<int>("Status")
                         .HasColumnType("int");
 
-                    b.Property<Guid?>("SupplierPaymentId")
-                        .HasColumnType("uniqueidentifier");
-
                     b.HasKey("Id");
 
                     b.HasIndex("PurchaseId");
-
-                    b.HasIndex("SupplierPaymentId");
 
                     b.ToTable("PurchasePayments", (string)null);
                 });
@@ -1388,60 +1386,6 @@ namespace eiti.Infrastructure.Migrations
                     b.HasIndex("CompanyId", "Name");
 
                     b.ToTable("Suppliers", (string)null);
-                });
-
-            modelBuilder.Entity("eiti.Domain.Suppliers.SupplierPayment", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<decimal>("Amount")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<Guid>("BranchId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<Guid?>("ChequeId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<Guid>("CompanyId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<Guid>("CreatedByUserId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<DateTime>("Date")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int>("Method")
-                        .HasColumnType("int");
-
-                    b.Property<string>("Notes")
-                        .HasMaxLength(500)
-                        .HasColumnType("nvarchar(500)");
-
-                    b.Property<string>("Reference")
-                        .HasMaxLength(120)
-                        .HasColumnType("nvarchar(120)");
-
-                    b.Property<int>("Status")
-                        .HasColumnType("int");
-
-                    b.Property<Guid>("SupplierId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("Status");
-
-                    b.HasIndex("SupplierId");
-
-                    b.HasIndex("CompanyId", "SupplierId");
-
-                    b.ToTable("SupplierPayments", (string)null);
                 });
 
             modelBuilder.Entity("eiti.Domain.Transport.SaleTransportAssignment", b =>
@@ -1877,8 +1821,7 @@ namespace eiti.Infrastructure.Migrations
                     b.HasOne("eiti.Domain.Suppliers.Supplier", null)
                         .WithMany()
                         .HasForeignKey("SupplierId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("eiti.Domain.Purchases.PurchaseDetail", b =>
@@ -2026,15 +1969,6 @@ namespace eiti.Infrastructure.Migrations
                     b.HasOne("eiti.Domain.Products.Product", null)
                         .WithMany()
                         .HasForeignKey("ProductId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("eiti.Domain.Suppliers.SupplierPayment", b =>
-                {
-                    b.HasOne("eiti.Domain.Suppliers.Supplier", null)
-                        .WithMany()
-                        .HasForeignKey("SupplierId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });

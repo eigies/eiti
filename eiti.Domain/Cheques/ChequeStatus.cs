@@ -6,5 +6,6 @@ public enum ChequeStatus
     Depositado = 2,
     Acreditado = 3,
     Rechazado = 4,
-    Anulado = 5
+    Anulado = 5,
+    Entregado = 6
 }

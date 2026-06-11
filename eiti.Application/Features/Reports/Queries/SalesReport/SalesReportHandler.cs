@@ -73,6 +73,17 @@ public sealed class SalesReportHandler : IRequestHandler<SalesReportQuery, Resul
             };
         }
 
+        // Mayorista = ventas por Cuenta Corriente; Minorista = ventas normales.
+        if (!string.IsNullOrWhiteSpace(request.SaleType))
+        {
+            sales = request.SaleType.ToLowerInvariant() switch
+            {
+                "wholesale" => sales.Where(s => s.IsCuentaCorriente).ToList(),
+                "retail" => sales.Where(s => !s.IsCuentaCorriente).ToList(),
+                _ => sales
+            };
+        }
+
         // Asignaciones de transporte (instalador/vehículo) mapeadas por la asignación vigente de cada venta
         var saleIds = sales.Select(s => s.Id).ToList();
         var assignments = saleIds.Count == 0

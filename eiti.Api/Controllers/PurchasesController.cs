@@ -1,9 +1,8 @@
 using eiti.Api.Extensions;
-using eiti.Application.Features.Purchases.Commands.AddPurchasePayment;
 using eiti.Application.Features.Purchases.Commands.CancelPurchase;
-using eiti.Application.Features.Purchases.Commands.CancelPurchasePayment;
 using eiti.Application.Features.Purchases.Commands.CreatePurchase;
 using eiti.Application.Features.Purchases.Queries.GetPurchaseById;
+using eiti.Application.Features.Purchases.Queries.ListCarteraCheques;
 using eiti.Application.Features.Purchases.Queries.ListPurchases;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -66,32 +65,10 @@ public sealed class PurchasesController : ControllerBase
         return result.ToActionResult();
     }
 
-    [HttpPost("{id:guid}/payments")]
-    public async Task<IActionResult> AddPurchasePayment(
-        Guid id,
-        [FromBody] AddPurchasePaymentRequest request,
-        CancellationToken cancellationToken)
+    [HttpGet("cartera-cheques")]
+    public async Task<IActionResult> ListCarteraCheques(CancellationToken cancellationToken)
     {
-        var result = await _sender.Send(
-            new AddPurchasePaymentCommand(id, request.Method, request.Amount, request.Date, request.Reference, request.Notes),
-            cancellationToken);
-        return result.ToActionResult();
-    }
-
-    [HttpDelete("{id:guid}/payments/{paymentId:guid}")]
-    public async Task<IActionResult> CancelPurchasePayment(
-        Guid id,
-        Guid paymentId,
-        CancellationToken cancellationToken)
-    {
-        var result = await _sender.Send(new CancelPurchasePaymentCommand(id, paymentId), cancellationToken);
+        var result = await _sender.Send(new ListCarteraChequesQuery(), cancellationToken);
         return result.ToActionResult();
     }
 }
-
-public sealed record AddPurchasePaymentRequest(
-    int Method,
-    decimal Amount,
-    DateTime Date,
-    string? Reference,
-    string? Notes);

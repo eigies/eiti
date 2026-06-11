@@ -94,13 +94,39 @@ public sealed class PurchaseRepository : IPurchaseRepository
             .Include(p => p.Details)
             .Include(p => p.Payments)
             .Where(p => p.CompanyId == companyId
-                && p.SupplierId != null
                 && p.Status == PurchaseStatus.Active)
             .ToListAsync(ct);
 
         return purchases
-            .GroupBy(p => p.SupplierId!.Value)
+            .GroupBy(p => p.SupplierId)
             .ToDictionary(g => g.Key, g => g.Sum(p => p.PendingAmount));
+    }
+
+    public async Task<List<Purchase>> ListAllBySupplierAsync(
+        Guid companyId,
+        Guid supplierId,
+        CancellationToken ct = default)
+    {
+        return await _context.Purchases
+            .Include(p => p.Details)
+            .Include(p => p.Payments)
+            .Where(p => p.CompanyId == companyId && p.SupplierId == supplierId)
+            .OrderByDescending(p => p.CreatedAt)
+            .ToListAsync(ct);
+    }
+
+    public async Task<List<Purchase>> ListBySupplierPaymentIdAsync(
+        Guid companyId,
+        Guid supplierPaymentId,
+        CancellationToken ct = default)
+    {
+        // Compras que tienen filas de imputación generadas por ese pago de proveedor (tracked, para revertir).
+        return await _context.Purchases
+            .Include(p => p.Details)
+            .Include(p => p.Payments)
+            .Where(p => p.CompanyId == companyId
+                && p.Payments.Any(pay => pay.SupplierPaymentId == supplierPaymentId))
+            .ToListAsync(ct);
     }
 
     public async Task<List<Purchase>> ListPendingBySupplierAsync(

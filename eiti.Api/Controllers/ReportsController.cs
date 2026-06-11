@@ -49,10 +49,11 @@ public sealed class ReportsController : ControllerBase
         [FromQuery] int? channel,
         [FromQuery] string? deliveryMode,
         [FromQuery] Guid? categoryId,
+        [FromQuery] string? saleType,
         CancellationToken cancellationToken = default)
     {
         var result = await _sender.Send(
-            new SalesReportQuery(dateFrom, dateTo, groupBy ?? "product", customerId, installerId, vehicleId, channel, deliveryMode, categoryId),
+            new SalesReportQuery(dateFrom, dateTo, groupBy ?? "product", customerId, installerId, vehicleId, channel, deliveryMode, categoryId, saleType),
             cancellationToken);
         return result.ToActionResult();
     }

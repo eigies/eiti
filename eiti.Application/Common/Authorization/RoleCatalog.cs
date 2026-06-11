@@ -19,6 +19,7 @@ public static class RoleCatalog
                 PermissionCodes.CashOpen,
                 PermissionCodes.CashClose,
                 PermissionCodes.CashWithdraw,
+                PermissionCodes.CashIncome,
                 PermissionCodes.CashDrawerManage,
                 PermissionCodes.CashDrawerAssign,
                 PermissionCodes.CashDrawerViewAll,
@@ -71,6 +72,7 @@ public static class RoleCatalog
                 PermissionCodes.CashOpen,
                 PermissionCodes.CashClose,
                 PermissionCodes.CashWithdraw,
+                PermissionCodes.CashIncome,
                 PermissionCodes.CashDrawerManage,
                 PermissionCodes.CashDrawerAssign,
                 PermissionCodes.CashDrawerViewAll,
@@ -130,6 +132,7 @@ public static class RoleCatalog
                 PermissionCodes.CashOpen,
                 PermissionCodes.CashClose,
                 PermissionCodes.CashWithdraw,
+                PermissionCodes.CashIncome,
                 PermissionCodes.CashHistoryExport
             })
     };

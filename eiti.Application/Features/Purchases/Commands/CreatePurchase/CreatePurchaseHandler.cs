@@ -57,16 +57,11 @@ public sealed class CreatePurchaseHandler : IRequestHandler<CreatePurchaseComman
         var companyId = _currentUserService.CompanyId!;
         var userId = _currentUserService.UserId!;
 
-        // Validate supplier if provided
-        string? supplierName = null;
-        Supplier? supplier = null;
-        if (command.SupplierId.HasValue)
-        {
-            supplier = await _supplierRepository.GetByIdAsync(command.SupplierId.Value, companyId.Value, cancellationToken);
-            if (supplier is null)
-                return Result<CreatePurchaseResponse>.Failure(CreatePurchaseErrors.SupplierNotFound);
-            supplierName = supplier.Name;
-        }
+        // El proveedor es obligatorio: toda compra vive dentro de la cuenta corriente de un proveedor.
+        var supplier = await _supplierRepository.GetByIdAsync(command.SupplierId, companyId.Value, cancellationToken);
+        if (supplier is null)
+            return Result<CreatePurchaseResponse>.Failure(CreatePurchaseErrors.SupplierNotFound);
+        var supplierName = supplier.Name;
 
         // Validate duplicate invoice number (per company + supplier, ignoring cancelled)
         if (!string.IsNullOrWhiteSpace(command.InvoiceNumber))
@@ -75,13 +70,6 @@ public sealed class CreatePurchaseHandler : IRequestHandler<CreatePurchaseComman
                 companyId.Value, command.SupplierId, command.InvoiceNumber.Trim(), cancellationToken);
             if (duplicate)
                 return Result<CreatePurchaseResponse>.Failure(CreatePurchaseErrors.DuplicateInvoiceNumber);
-        }
-
-        // Validate payment methods
-        foreach (var payment in command.Payments)
-        {
-            if (!Enum.IsDefined(typeof(PurchasePaymentMethod), payment.Method))
-                return Result<CreatePurchaseResponse>.Failure(CreatePurchaseErrors.InvalidPaymentMethod);
         }
 
         // Build purchase details, fetching products
@@ -153,9 +141,10 @@ public sealed class CreatePurchaseHandler : IRequestHandler<CreatePurchaseComman
                 cancellationToken);
         }
 
-        // Auto-aplicar saldo a favor del proveedor (igual que cuenta corriente).
+        // Auto-aplicar saldo a favor del proveedor (igual que cuenta corriente). Los pagos ya no se cargan
+        // al crear la compra: se registran a nivel proveedor desde la "bolsa".
         decimal creditApplied = 0m;
-        if (supplier is not null && supplier.CreditBalance > 0)
+        if (supplier.CreditBalance > 0)
         {
             creditApplied = Math.Min(supplier.CreditBalance, purchase.GrandTotal);
             if (creditApplied > 0)
@@ -167,68 +156,11 @@ public sealed class CreatePurchaseHandler : IRequestHandler<CreatePurchaseComman
                     DateTime.UtcNow,
                     null,
                     "Saldo a favor aplicado automáticamente"));
-            }
-        }
-
-        // Always prefer the user's assigned drawer; fall back to any open session only for users with CashDrawerViewAll and no assigned drawer.
-        CashSession? openSession = null;
-
-        if (command.Payments.Count > 0)
-        {
-            var assignedDrawer = await _cashDrawerRepository.GetByAssignedUserAsync(userId, companyId, cancellationToken);
-
-            if (assignedDrawer is not null)
-            {
-                openSession = await _cashSessionRepository.GetOpenByDrawerAsync(assignedDrawer.Id, companyId, cancellationToken);
-                if (openSession is null)
-                    return Result<CreatePurchaseResponse>.Failure(CreatePurchaseErrors.NoCashSessionOpen);
-            }
-            else if (_currentUserService.HasPermission(PermissionCodes.CashDrawerViewAll))
-            {
-                openSession = await _cashSessionRepository.GetAnyOpenByCompanyAsync(companyId, cancellationToken);
-                if (openSession is null)
-                    return Result<CreatePurchaseResponse>.Failure(CreatePurchaseErrors.NoCashSessionOpen);
-            }
-            else
-            {
-                return Result<CreatePurchaseResponse>.Failure(CreatePurchaseErrors.NoAssignedCashDrawer);
-            }
-        }
-
-        foreach (var paymentRequest in command.Payments)
-        {
-            var method = (PurchasePaymentMethod)paymentRequest.Method;
-
-            var purchasePayment = PurchasePayment.Create(
-                method,
-                paymentRequest.Amount,
-                paymentRequest.Date,
-                paymentRequest.Reference,
-                paymentRequest.Notes);
-
-            purchase.AddPayment(purchasePayment);
-            if (method != PurchasePaymentMethod.SupplierCredit)
-                openSession!.RegisterPurchaseExpense(paymentRequest.Amount, purchase.Id, userId, method);
-        }
-
-        // Sobrepago: el excedente queda como saldo a favor del proveedor.
-        decimal excess = 0m;
-        if (supplier is not null)
-        {
-            excess = Math.Max(0m, purchase.TotalPaid - purchase.GrandTotal);
-            if (excess > 0)
-            {
-                supplier.AddCredit(excess);
-                // Opción B: el excedente se aplica a las otras compras pendientes del proveedor (FIFO);
-                // lo que reste queda como saldo a favor. La compra nueva todavía no está en la DB, así que
-                // no entra en la lista de pendientes (se excluye igual por Id por las dudas).
-                await SupplierCreditApplicator.ApplyToPendingPurchasesAsync(
-                    supplier, companyId.Value, _purchaseRepository, purchase.Id, cancellationToken);
-            }
-
-            if (creditApplied > 0 || excess > 0)
                 _supplierRepository.Update(supplier);
+            }
         }
+
+        const decimal excess = 0m;
 
         await _purchaseRepository.AddAsync(purchase, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);

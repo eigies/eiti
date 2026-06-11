@@ -8,6 +8,7 @@ public sealed class CreatePurchaseValidator : AbstractValidator<CreatePurchaseCo
     public CreatePurchaseValidator()
     {
         RuleFor(x => x.BranchId).NotEmpty();
+        RuleFor(x => x.SupplierId).NotEmpty().WithMessage("El proveedor es obligatorio.");
 
         RuleFor(x => x.Details)
             .NotEmpty().WithMessage("At least one purchase detail is required.");
@@ -17,14 +18,6 @@ public sealed class CreatePurchaseValidator : AbstractValidator<CreatePurchaseCo
             detail.RuleFor(d => d.ProductId).NotEmpty();
             detail.RuleFor(d => d.Quantity).GreaterThan(0).WithMessage("Quantity must be greater than zero.");
             detail.RuleFor(d => d.UnitCost).GreaterThanOrEqualTo(0).WithMessage("Unit cost cannot be negative.");
-        });
-
-        RuleForEach(x => x.Payments).ChildRules(payment =>
-        {
-            payment.RuleFor(p => p.Method)
-                .Must(m => Enum.IsDefined(typeof(PurchasePaymentMethod), m))
-                .WithMessage("Invalid payment method.");
-            payment.RuleFor(p => p.Amount).GreaterThan(0).WithMessage("Payment amount must be greater than zero.");
         });
 
         RuleFor(x => x.IvaPct)

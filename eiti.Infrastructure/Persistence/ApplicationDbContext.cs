@@ -60,6 +60,7 @@ public sealed class ApplicationDbContext : DbContext
     public DbSet<UserRoleAudit> UserRoleAudits { get; set; }
     public DbSet<PasswordResetToken> PasswordResetTokens { get; set; }
     public DbSet<Supplier> Suppliers => Set<Supplier>();
+    public DbSet<SupplierPayment> SupplierPayments => Set<SupplierPayment>();
     public DbSet<Purchase> Purchases => Set<Purchase>();
     public DbSet<PurchaseDetail> PurchaseDetails => Set<PurchaseDetail>();
     public DbSet<PurchasePayment> PurchasePayments => Set<PurchasePayment>();

@@ -17,7 +17,7 @@ public sealed class PurchaseConfiguration : IEntityTypeConfiguration<Purchase>
         builder.Property(p => p.Code).HasMaxLength(20).IsRequired();
         builder.Property(p => p.CompanyId).IsRequired();
         builder.Property(p => p.BranchId).IsRequired();
-        builder.Property(p => p.SupplierId).IsRequired(false);
+        builder.Property(p => p.SupplierId).IsRequired();
         builder.Property(p => p.Status).HasConversion<int>().IsRequired();
         builder.Property(p => p.InvoiceNumber).HasMaxLength(100).IsRequired(false);
         builder.Property(p => p.Notes).HasMaxLength(500).IsRequired(false);
@@ -41,7 +41,7 @@ public sealed class PurchaseConfiguration : IEntityTypeConfiguration<Purchase>
         builder.HasOne<Supplier>()
             .WithMany()
             .HasForeignKey(p => p.SupplierId)
-            .IsRequired(false)
+            .IsRequired()
             .OnDelete(DeleteBehavior.Restrict);
 
         builder.HasMany(p => p.Details)

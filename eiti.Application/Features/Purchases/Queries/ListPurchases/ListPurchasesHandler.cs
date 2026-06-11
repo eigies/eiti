@@ -51,7 +51,7 @@ public sealed class ListPurchasesHandler : IRequestHandler<ListPurchasesQuery, R
 
         // Load supplier names for all unique supplier IDs
         var supplierMap = new Dictionary<Guid, string>();
-        var supplierIds = purchases.Where(p => p.SupplierId.HasValue).Select(p => p.SupplierId!.Value).Distinct().ToList();
+        var supplierIds = purchases.Select(p => p.SupplierId).Distinct().ToList();
         foreach (var supplierId in supplierIds)
         {
             var supplier = await _supplierRepository.GetByIdAsync(supplierId, companyId.Value, cancellationToken);
@@ -62,7 +62,7 @@ public sealed class ListPurchasesHandler : IRequestHandler<ListPurchasesQuery, R
         var items = purchases.Select(p => new ListPurchasesItemResponse(
             p.Id,
             p.SupplierId,
-            p.SupplierId.HasValue && supplierMap.TryGetValue(p.SupplierId.Value, out var name) ? name : null,
+            supplierMap.TryGetValue(p.SupplierId, out var name) ? name : null,
             p.InvoiceNumber,
             (int)p.Status,
             p.Status.ToString(),

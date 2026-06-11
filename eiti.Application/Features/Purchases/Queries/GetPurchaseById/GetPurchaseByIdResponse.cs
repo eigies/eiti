@@ -47,4 +47,6 @@ public sealed record GetPurchasePaymentResponse(
     string? Reference,
     string? Notes,
     DateTime Date,
-    DateTime CreatedAt);
+    DateTime CreatedAt,
+    Guid? ChequeId = null,
+    string? ChequeNumero = null);

@@ -6,7 +6,7 @@ public sealed class Purchase
     public string Code { get; private set; } = string.Empty;
     public Guid CompanyId { get; private set; }
     public Guid BranchId { get; private set; }
-    public Guid? SupplierId { get; private set; }
+    public Guid SupplierId { get; private set; }
     public PurchaseStatus Status { get; private set; }
     public string? InvoiceNumber { get; private set; }
     public string? Notes { get; private set; }
@@ -36,7 +36,7 @@ public sealed class Purchase
     public static Purchase Create(
         Guid companyId,
         Guid branchId,
-        Guid? supplierId,
+        Guid supplierId,
         IReadOnlyList<PurchaseDetail> details,
         string? invoiceNumber,
         string? notes,
