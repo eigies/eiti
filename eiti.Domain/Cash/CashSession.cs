@@ -150,6 +150,42 @@ public sealed class CashSession : AggregateRoot<CashSessionId>
             ccPaymentGroupId: ccPaymentGroupId);
     }
 
+    public void RegisterCcTransferIncome(
+        decimal amount,
+        Guid saleId,
+        UserId createdByUserId,
+        Guid? ccPaymentGroupId = null)
+    {
+        EnsureOpen();
+        AddMovement(
+            CashMovementType.TransferIncome,
+            CashMovementDirection.In,
+            amount,
+            CashReferenceTypes.CuentaCorriente,
+            saleId,
+            "Pago CC por transferencia",
+            createdByUserId,
+            ccPaymentGroupId: ccPaymentGroupId);
+    }
+
+    public void RegisterCcCardIncome(
+        decimal amount,
+        Guid saleId,
+        UserId createdByUserId,
+        Guid? ccPaymentGroupId = null)
+    {
+        EnsureOpen();
+        AddMovement(
+            CashMovementType.CardIncome,
+            CashMovementDirection.In,
+            amount,
+            CashReferenceTypes.CuentaCorriente,
+            saleId,
+            "Pago CC con tarjeta",
+            createdByUserId,
+            ccPaymentGroupId: ccPaymentGroupId);
+    }
+
     public void RegisterCcPaymentCancel(
         decimal amount,
         Guid saleId,

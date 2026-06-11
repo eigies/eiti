@@ -133,13 +133,16 @@ public sealed class AddCcPaymentGroupHandler : IRequestHandler<AddCcPaymentGroup
             // Transferencia y tarjeta de un cobro de cuenta corriente: se registran para que se VEAN en la
             // caja (conciliación), con dirección In pero SIN sumar al esperado de efectivo — exactamente
             // igual que en las ventas directas (ExpectedClosingAmount excluye TransferIncome/CardIncome).
+            // Se usan los métodos CC (ReferenceType = CuentaCorriente + grupo) para que NO caigan bajo el
+            // índice anti-duplicado IX_CashMovements_ReferenceId_Type (filtrado a ReferenceType = 'Sale'),
+            // que es para ventas directas; una CC puede tener varios cobros del mismo tipo en el tiempo.
             var transferAmount = payments.Where(p => p.Method == SalePaymentMethod.Transfer).Sum(p => p.Amount);
             if (transferAmount > 0)
-                session.RegisterTransferIncome(transferAmount, sale.Id.Value, _currentUserService.UserId!);
+                session.RegisterCcTransferIncome(transferAmount, sale.Id.Value, _currentUserService.UserId!, ccGroupId);
 
             var cardAmount = payments.Where(p => p.Method == SalePaymentMethod.Card).Sum(p => p.Amount);
             if (cardAmount > 0)
-                session.RegisterCardIncome(cardAmount, sale.Id.Value, _currentUserService.UserId!);
+                session.RegisterCcCardIncome(cardAmount, sale.Id.Value, _currentUserService.UserId!, ccGroupId);
         }
 
         // Stock confirmation if sale transitioned to Paid
