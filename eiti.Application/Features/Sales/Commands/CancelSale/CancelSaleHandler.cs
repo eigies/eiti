@@ -110,12 +110,10 @@ public sealed class CancelSaleHandler : IRequestHandler<CancelSaleCommand, Resul
                     cancellationToken);
             }
 
-            var ccPaidOnHold = sale.CcPayments
-                .Where(p => p.Status == SaleCcPaymentStatus.Active && p.Method == SalePaymentMethod.Cash)
-                .Sum(p => p.Amount);
+            var ccCancelledLinesOnHold = CaptureActiveCcLines(sale);
             sale.Cancel();
             CancelActiveCcPayments(sale);
-            await RegisterCcCancellationIfNeeded(sale, ccPaidOnHold, cancellationToken);
+            await RegisterCcCancellationIfNeeded(sale, ccCancelledLinesOnHold, cancellationToken);
         }
         else if (sale.SaleStatus == SaleStatus.Paid)
         {
@@ -217,12 +215,10 @@ public sealed class CancelSaleHandler : IRequestHandler<CancelSaleCommand, Resul
                 openSessionForPaid.RegisterSaleCancellation(sale.Payments, sale.Id.Value, _currentUserService.UserId!, originalCashSessionId);
             }
 
-            var ccPaidOnPaid = sale.CcPayments
-                .Where(p => p.Status == SaleCcPaymentStatus.Active && p.Method == SalePaymentMethod.Cash)
-                .Sum(p => p.Amount);
+            var ccCancelledLinesOnPaid = CaptureActiveCcLines(sale);
             sale.Cancel();
             CancelActiveCcPayments(sale);
-            await RegisterCcCancellationIfNeeded(sale, ccPaidOnPaid, cancellationToken);
+            await RegisterCcCancellationIfNeeded(sale, ccCancelledLinesOnPaid, cancellationToken);
         }
 
         if (existingTransportAssignmentId is not null)
@@ -251,9 +247,21 @@ public sealed class CancelSaleHandler : IRequestHandler<CancelSaleCommand, Resul
         }
     }
 
-    private async Task RegisterCcCancellationIfNeeded(Sale sale, decimal ccPaidAmount, CancellationToken cancellationToken)
+    private static List<(SalePaymentMethod Method, decimal Amount)> CaptureActiveCcLines(Sale sale)
     {
-        if (!sale.IsCuentaCorriente || ccPaidAmount <= 0 || _currentUserService.UserId is null)
+        return sale.CcPayments
+            .Where(p => p.Status == SaleCcPaymentStatus.Active)
+            .GroupBy(p => p.Method)
+            .Select(g => (g.Key, g.Sum(p => p.Amount)))
+            .ToList();
+    }
+
+    private async Task RegisterCcCancellationIfNeeded(
+        Sale sale,
+        IReadOnlyList<(SalePaymentMethod Method, decimal Amount)> cancelledLines,
+        CancellationToken cancellationToken)
+    {
+        if (!sale.IsCuentaCorriente || cancelledLines.All(line => line.Amount <= 0) || _currentUserService.UserId is null)
             return;
 
         var session = await _cashSessionRepository.GetAnyOpenByBranchAsync(
@@ -262,6 +270,6 @@ public sealed class CancelSaleHandler : IRequestHandler<CancelSaleCommand, Resul
             cancellationToken);
 
         if (session is not null)
-            session.RegisterCcPaymentCancel(ccPaidAmount, sale.Id.Value, _currentUserService.UserId);
+            session.RegisterCcPaymentCancellation(cancelledLines, sale.Id.Value, _currentUserService.UserId);
     }
 }

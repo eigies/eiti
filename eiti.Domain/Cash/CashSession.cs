@@ -186,20 +186,38 @@ public sealed class CashSession : AggregateRoot<CashSessionId>
             ccPaymentGroupId: ccPaymentGroupId);
     }
 
-    public void RegisterCcPaymentCancel(
-        decimal amount,
+    public void RegisterCcPaymentCancellation(
+        IEnumerable<(SalePaymentMethod Method, decimal Amount)> lines,
         Guid saleId,
-        UserId createdByUserId)
+        UserId createdByUserId,
+        Guid? ccPaymentGroupId = null)
     {
         EnsureOpen();
-        AddMovement(
-            CashMovementType.CuentaCorrienteCancellation,
-            CashMovementDirection.Out,
-            amount,
-            CashReferenceTypes.CuentaCorriente,
-            saleId,
-            "Pago CC anulado",
-            createdByUserId);
+
+        // Reversa de un cobro de cuenta corriente, por método: el efectivo sale del cajón (Out)
+        // y transferencia/tarjeta/cheque se registran como reversa neutra (None) para trazabilidad
+        // sin tocar el efectivo esperado — espejo de RegisterSaleCancellation para ventas directas.
+        foreach (var (method, amount) in lines.Where(line => line.Amount > 0))
+        {
+            var (direction, description) = method switch
+            {
+                SalePaymentMethod.Cash => (CashMovementDirection.Out, "Pago CC anulado - efectivo"),
+                SalePaymentMethod.Transfer => (CashMovementDirection.None, "Pago CC anulado - transferencia"),
+                SalePaymentMethod.Card => (CashMovementDirection.None, "Pago CC anulado - tarjeta"),
+                SalePaymentMethod.Check => (CashMovementDirection.None, "Pago CC anulado - cheque"),
+                _ => (CashMovementDirection.None, "Pago CC anulado - otros")
+            };
+
+            AddMovement(
+                CashMovementType.CuentaCorrienteCancellation,
+                direction,
+                amount,
+                CashReferenceTypes.CuentaCorriente,
+                saleId,
+                description,
+                createdByUserId,
+                ccPaymentGroupId: ccPaymentGroupId);
+        }
     }
 
     public void RegisterSaleCancellation(

@@ -65,18 +65,23 @@ public sealed class CancelCcPaymentHandler : IRequestHandler<CancelCcPaymentComm
                 Error.NotFound("Sales.CancelCcPayment.PaymentNotFound", "The payment was not found."));
         }
 
-        // Solo se revierte del cajón la porción que entró en EFECTIVO (simétrico con el alta).
-        decimal cancelledAmount;
+        // Se revierte en caja TODO lo cancelado, discriminado por método: el efectivo sale del
+        // cajón (Out) y transferencia/tarjeta se registran como reversa neutra (None) para
+        // trazabilidad — espejo de la cancelación de venta directa (RegisterSaleCancellation).
+        List<(SalePaymentMethod Method, decimal Amount)> cancelledLines;
         if (targetPayment.GroupId.HasValue)
         {
-            cancelledAmount = sale.CcPayments
-                .Where(p => p.GroupId == targetPayment.GroupId && p.Status == SaleCcPaymentStatus.Active && p.Method == SalePaymentMethod.Cash)
-                .Sum(p => p.Amount);
+            cancelledLines = sale.CcPayments
+                .Where(p => p.GroupId == targetPayment.GroupId && p.Status == SaleCcPaymentStatus.Active)
+                .GroupBy(p => p.Method)
+                .Select(g => (g.Key, g.Sum(p => p.Amount)))
+                .ToList();
         }
         else
         {
-            cancelledAmount = targetPayment.Method == SalePaymentMethod.Cash ? targetPayment.Amount : 0m;
+            cancelledLines = new List<(SalePaymentMethod, decimal)> { (targetPayment.Method, targetPayment.Amount) };
         }
+        var cancelledGroupId = targetPayment.GroupId;
 
         var wasPaid = sale.SaleStatus == SaleStatus.Paid;
 
@@ -96,9 +101,9 @@ public sealed class CancelCcPaymentHandler : IRequestHandler<CancelCcPaymentComm
             companyId,
             cancellationToken);
 
-        if (session is not null && _currentUserService.UserId is not null && cancelledAmount > 0)
+        if (session is not null && _currentUserService.UserId is not null && cancelledLines.Any(line => line.Amount > 0))
         {
-            session.RegisterCcPaymentCancel(cancelledAmount, sale.Id.Value, _currentUserService.UserId);
+            session.RegisterCcPaymentCancellation(cancelledLines, sale.Id.Value, _currentUserService.UserId, cancelledGroupId);
         }
 
         if (wasPaid && sale.SaleStatus == SaleStatus.OnHold)
