@@ -9,6 +9,7 @@ using eiti.Infrastructure.Settings;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Npgsql;
 using Resend;
 
 namespace eiti.Infrastructure;
@@ -25,9 +26,12 @@ public static class DependencyInjection
         // evitando tocar decenas de usos. Debe setearse antes de crear el data source de Npgsql.
         AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
 
+        var connectionString = NormalizePostgresConnectionString(
+            configuration.GetConnectionString("DefaultConnection"));
+
         services.AddDbContext<ApplicationDbContext>(options =>
             options.UseNpgsql(
-                configuration.GetConnectionString("DefaultConnection"),
+                connectionString,
                 b => b.MigrationsAssembly(typeof(ApplicationDbContext).Assembly.FullName)));
 
         services.Configure<JwtSettings>(configuration.GetSection(JwtSettings.SectionName));
@@ -74,5 +78,35 @@ public static class DependencyInjection
         services.AddHttpClient<IWhatsAppNotificationService, WhatsAppNotificationService>();
 
         return services;
+    }
+
+    // Railway/Heroku/etc entregan la conexión Postgres como URL (postgresql://user:pass@host:port/db),
+    // pero Npgsql espera el formato keyword (Host=...;Username=...;...). Si llega una URL, la convierte;
+    // si ya viene en formato keyword, la deja igual.
+    private static string? NormalizePostgresConnectionString(string? connectionString)
+    {
+        if (string.IsNullOrWhiteSpace(connectionString))
+            return connectionString;
+
+        if (!connectionString.StartsWith("postgres://", StringComparison.OrdinalIgnoreCase)
+            && !connectionString.StartsWith("postgresql://", StringComparison.OrdinalIgnoreCase))
+            return connectionString;
+
+        var uri = new Uri(connectionString);
+        var userInfo = uri.UserInfo.Split(':', 2);
+
+        var builder = new NpgsqlConnectionStringBuilder
+        {
+            Host = uri.Host,
+            Port = uri.Port > 0 ? uri.Port : 5432,
+            Database = uri.AbsolutePath.TrimStart('/'),
+            Username = Uri.UnescapeDataString(userInfo[0]),
+            Password = userInfo.Length > 1 ? Uri.UnescapeDataString(userInfo[1]) : null,
+            // Prefer: usa TLS si el servidor lo ofrece (proxy público) y texto plano si no (red privada).
+            SslMode = SslMode.Prefer,
+            TrustServerCertificate = true
+        };
+
+        return builder.ConnectionString;
     }
 }

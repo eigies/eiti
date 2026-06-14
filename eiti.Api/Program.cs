@@ -4,13 +4,28 @@ using eiti.Application;
 using eiti.Application.Abstractions.Services;
 using eiti.Infrastructure;
 using eiti.Infrastructure.Authentication;
+using eiti.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Railway (y la mayoría de los PaaS) inyectan el puerto a escuchar vía la env var PORT.
+// Si está presente, escuchamos ahí; si no, queda el ASPNETCORE_URLS del contenedor/launchSettings.
+var port = Environment.GetEnvironmentVariable("PORT");
+if (!string.IsNullOrWhiteSpace(port))
+{
+    builder.WebHost.UseUrls($"http://+:{port}");
+}
+
+// Orígenes permitidos por CORS además de loopback (ej. el dominio de Vercel en producción).
+// Se configuran por `Cors:AllowedOrigins` (array) o la env var Cors__AllowedOrigins__0, etc.
+var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
+    ?? Array.Empty<string>();
 
 builder.Services.AddCors(options =>
 {
@@ -23,9 +38,15 @@ builder.Services.AddCors(options =>
                       return false;
                   }
 
-                  return uri.IsLoopback &&
-                         (uri.Scheme == Uri.UriSchemeHttp ||
-                          uri.Scheme == Uri.UriSchemeHttps);
+                  // Desarrollo: cualquier origen loopback (localhost) por http/https.
+                  if (uri.IsLoopback &&
+                      (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps))
+                  {
+                      return true;
+                  }
+
+                  // Producción: orígenes explícitamente configurados (Vercel).
+                  return allowedOrigins.Contains(origin, StringComparer.OrdinalIgnoreCase);
               })
               .AllowAnyHeader()
               .AllowAnyMethod();
@@ -106,6 +127,13 @@ builder.Services.AddRateLimiter(options =>
 });
 
 var app = builder.Build();
+
+// Aplica migraciones pendientes al arranque para que el contenedor sea autosuficiente en Railway.
+using (var scope = app.Services.CreateScope())
+{
+    var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+    dbContext.Database.Migrate();
+}
 
 if (app.Environment.IsDevelopment())
 {
