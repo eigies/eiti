@@ -69,13 +69,13 @@ public sealed class CustomerConfiguration : IEntityTypeConfiguration<Customer>
 
         builder.HasIndex(customer => new { customer.CompanyId, customer.Email })
             .IsUnique()
-            .HasFilter("[Email] IS NOT NULL");
+            .HasFilter("\"Email\" IS NOT NULL");
         builder.HasIndex(customer => new { customer.CompanyId, customer.DocumentType, customer.DocumentNumber })
             .IsUnique()
-            .HasFilter("[DocumentType] IS NOT NULL AND [DocumentNumber] IS NOT NULL");
+            .HasFilter("\"DocumentType\" IS NOT NULL AND \"DocumentNumber\" IS NOT NULL");
         builder.HasIndex(customer => new { customer.CompanyId, customer.TaxId })
             .IsUnique()
-            .HasFilter("[TaxId] IS NOT NULL");
+            .HasFilter("\"TaxId\" IS NOT NULL");
         builder.HasIndex(customer => new { customer.CompanyId, customer.Name });
 
         builder.Property(customer => customer.CreditBalance).HasColumnType("decimal(18,2)").IsRequired();

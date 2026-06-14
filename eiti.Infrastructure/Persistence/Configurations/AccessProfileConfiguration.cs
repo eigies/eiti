@@ -42,7 +42,7 @@ public sealed class AccessProfileConfiguration : IEntityTypeConfiguration<Access
         builder.Property(profile => profile.UpdatedAt).IsRequired();
 
         builder.HasIndex(profile => new { profile.CompanyId, profile.Name }).IsUnique();
-        builder.HasIndex(profile => new { profile.CompanyId, profile.SystemKey }).IsUnique().HasFilter("[SystemKey] IS NOT NULL");
+        builder.HasIndex(profile => new { profile.CompanyId, profile.SystemKey }).IsUnique().HasFilter("\"SystemKey\" IS NOT NULL");
 
         builder.HasOne<Company>()
             .WithMany()

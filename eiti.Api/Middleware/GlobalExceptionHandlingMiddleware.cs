@@ -2,9 +2,9 @@ using System.Net;
 using System.Text.Json;
 using FluentValidation;
 using Microsoft.AspNetCore.Http;
-using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Npgsql;
 
 namespace eiti.Api.Middleware;
 
@@ -75,8 +75,8 @@ public sealed class GlobalExceptionHandlingMiddleware
         await context.Response.WriteAsync(JsonSerializer.Serialize(response));
     }
 
-    // SQL Server: 2627 = unique constraint, 2601 = duplicate key in unique index.
+    // PostgreSQL: SQLSTATE 23505 = unique_violation (índice/constraint único duplicado).
     private static bool IsUniqueConstraintViolation(DbUpdateException exception) =>
-        exception.InnerException is SqlException sqlException &&
-        (sqlException.Number == 2627 || sqlException.Number == 2601);
+        exception.InnerException is PostgresException postgresException &&
+        postgresException.SqlState == PostgresErrorCodes.UniqueViolation;
 }

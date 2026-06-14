@@ -18,10 +18,12 @@ public sealed class ApplicationDbContextFactory : IDesignTimeDbContextFactory<Ap
             .Build();
 
         var connectionString = configuration.GetConnectionString("DefaultConnection")
-            ?? "Server=localhost\\SQLEXPRESS;Database=eitiDb;Trusted_Connection=True;TrustServerCertificate=True;Encrypt=False;";
+            ?? "Host=localhost;Port=5432;Database=eitidb;Username=postgres;Password=postgres";
+
+        AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
 
         var optionsBuilder = new DbContextOptionsBuilder<ApplicationDbContext>();
-        optionsBuilder.UseSqlServer(
+        optionsBuilder.UseNpgsql(
             connectionString,
             sql => sql.MigrationsAssembly(typeof(ApplicationDbContext).Assembly.FullName));
 

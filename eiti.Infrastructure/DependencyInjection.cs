@@ -19,8 +19,14 @@ public static class DependencyInjection
         this IServiceCollection services,
         IConfiguration configuration)
     {
+        // Npgsql 6+ mapea DateTime a 'timestamp with time zone' y exige DateTimeKind.Utc, lo que
+        // rompe los muchos DateTime con Kind=Unspecified que ya existen en el código. El switch legacy
+        // restaura el comportamiento previo (DateTime <-> 'timestamp without time zone', sin exigir Kind),
+        // evitando tocar decenas de usos. Debe setearse antes de crear el data source de Npgsql.
+        AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
+
         services.AddDbContext<ApplicationDbContext>(options =>
-            options.UseSqlServer(
+            options.UseNpgsql(
                 configuration.GetConnectionString("DefaultConnection"),
                 b => b.MigrationsAssembly(typeof(ApplicationDbContext).Assembly.FullName)));
 

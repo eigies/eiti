@@ -64,6 +64,6 @@ public sealed class CashMovementConfiguration : IEntityTypeConfiguration<CashMov
         // quedan fuera del filtro porque una venta puede tener varios a lo largo del tiempo.
         builder.HasIndex(movement => new { movement.ReferenceId, movement.Type })
             .IsUnique()
-            .HasFilter("[ReferenceType] = 'Sale' AND [Type] IN (2, 10, 11)");
+            .HasFilter("\"ReferenceType\" = 'Sale' AND \"Type\" IN (2, 10, 11)");
     }
 }

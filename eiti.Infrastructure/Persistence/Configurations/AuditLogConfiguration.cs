@@ -44,15 +44,15 @@ public sealed class AuditLogConfiguration : IEntityTypeConfiguration<AuditLog>
             .IsRequired(false);
 
         builder.Property(audit => audit.PayloadJson)
-            .HasColumnType("nvarchar(max)")
+            .HasColumnType("text")
             .IsRequired(false);
 
         builder.Property(audit => audit.BeforeJson)
-            .HasColumnType("nvarchar(max)")
+            .HasColumnType("text")
             .IsRequired(false);
 
         builder.Property(audit => audit.AfterJson)
-            .HasColumnType("nvarchar(max)")
+            .HasColumnType("text")
             .IsRequired(false);
 
         builder.Property(audit => audit.Timestamp).IsRequired();
