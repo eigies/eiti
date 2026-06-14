@@ -30,7 +30,7 @@ public static class UpdateSaleErrors
 
     public static readonly Error CashDrawerRequired = Error.Validation(
         "Sales.Update.CashDrawerRequired",
-        "A cash drawer is required when cash amount is greater than zero.");
+        "A cash drawer with an open session is required to charge a sale by cash, transfer or card.");
 
     public static readonly Error CashSessionRequired = Error.Conflict(
         "Sales.Update.CashSessionRequired",

@@ -306,7 +306,13 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
             var cardAmount = sale.GetPaymentAmount(SalePaymentMethod.Card);
             CashSession? session = null;
 
-            if (cashAmount > 0)
+            // Efectivo, transferencia y tarjeta generan un movimiento de ingreso en caja, por lo que
+            // los tres exigen un cajón resuelto + sesión abierta. Sin esta validación, un cobro por
+            // transferencia/tarjeta de un usuario sin cajón asignado se marcaba pagado pero no se
+            // imputaba a ninguna caja (la venta quedaba "perdida" para el arqueo y los reportes).
+            var requiresCashSession = cashAmount > 0 || transferAmount > 0 || cardAmount > 0;
+
+            if (requiresCashSession)
             {
                 if (_currentUserService.UserId is null || effectiveCashDrawerId is null)
                 {
@@ -324,14 +330,6 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
                     return Result<CreateSaleResponse>.Failure(CreateSaleErrors.CashSessionRequired);
                 }
             }
-            else if ((transferAmount > 0 || cardAmount > 0) && effectiveCashDrawerId.HasValue && _currentUserService.UserId is not null)
-            {
-                session = await _cashSessionRepository.GetOpenForBranchAsync(
-                    branch.Id,
-                    new CashDrawerId(effectiveCashDrawerId.Value),
-                    companyId,
-                    cancellationToken);
-            }
 
             try
             {
@@ -344,14 +342,14 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
                     session!.RegisterSaleIncome(cashAmount, sale.Id.Value, _currentUserService.UserId!);
                 }
 
-                if (transferAmount > 0 && session is not null)
+                if (transferAmount > 0)
                 {
-                    session.RegisterTransferIncome(transferAmount, sale.Id.Value, _currentUserService.UserId!);
+                    session!.RegisterTransferIncome(transferAmount, sale.Id.Value, _currentUserService.UserId!);
                 }
 
-                if (cardAmount > 0 && session is not null)
+                if (cardAmount > 0)
                 {
-                    session.RegisterCardIncome(cardAmount, sale.Id.Value, _currentUserService.UserId!);
+                    session!.RegisterCardIncome(cardAmount, sale.Id.Value, _currentUserService.UserId!);
                 }
 
                 foreach (var detail in groupedDetails)

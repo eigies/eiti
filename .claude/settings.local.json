@@ -45,15 +45,18 @@
       "Bash(sqlcmd *)",
       "Bash(Select-String -Pattern \"Error|error TS|Built|chunk|0 errors\")",
       "PowerShell(ng build *)",
-      "PowerShell(powershell -ExecutionPolicy Bypass -File \"C:\\\\Eiti\\\\eiti\\\\.claude\\\\skills\\\\git-commit-dual\\\\scripts\\\\commit-dual.ps1\" -Message \"feat\\(purchases\\): IVA/IIBB se suman al saldo pendiente + grandTotal en responses\" -Push)"
+      "PowerShell(powershell -ExecutionPolicy Bypass -File \"C:\\\\Eiti\\\\eiti\\\\.claude\\\\skills\\\\git-commit-dual\\\\scripts\\\\commit-dual.ps1\" -Message \"feat\\(purchases\\): IVA/IIBB se suman al saldo pendiente + grandTotal en responses\" -Push)",
+      "PowerShell(git *)",
+      "PowerShell(powershell -ExecutionPolicy Bypass -File .\\\\.claude\\\\skills\\\\git-commit-front\\\\scripts\\\\commit-front.ps1 -Message \"fix\\(sales\\): exigir caja abierta para cobrar por transferencia/tarjeta + modal claro cuando el vendedor no tiene caja\" -Push)",
+      "PowerShell(powershell -ExecutionPolicy Bypass -File .\\\\.claude\\\\skills\\\\git-commit-back\\\\scripts\\\\commit-back.ps1 -Message \"fix\\(sales\\): exigir caja abierta para cobrar por transferencia/tarjeta + modal claro cuando el vendedor no tiene caja\" -Push)"
     ]
   },
+  "enabledMcpjsonServers": [
+    "notion"
+  ],
   "statusLine": {
     "type": "command",
     "command": "bash /c/Eiti/eiti/.claude/statusline-command.sh"
   },
-  "teammateMode": "tmux",
-  "enabledMcpjsonServers": [
-    "notion"
-  ]
+  "teammateMode": "tmux"
 }
