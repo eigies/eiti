@@ -1,22 +1,20 @@
-// Copia datos SQL Server -> PostgreSQL tabla por tabla, usando el mismo esquema (generado por EF).
-// Uso:  dotnet run --project tools/DbCopy -- "<sqlserver-conn>" "<postgres-conn>"
-// - Fuente: Windows auth (Trusted_Connection) contra el SQLEXPRESS local.
-// - Destino: Railway/Postgres (Npgsql).
+// Copia datos SQL Server -> PostgreSQL usando COPY (streaming binario), tabla por tabla.
+// Uso:  DbCopy.exe "<sqlserver-conn>" "<postgres-conn>"
+// - Fuente: solo lectura (SELECT *). NUNCA modifica el origen.
+// - Destino: DELETE de cada tabla + COPY FROM STDIN (rapido). Idempotente.
 // - Desactiva FK con session_replication_role=replica (orden de tablas irrelevante).
-// - Idempotente: limpia cada tabla destino antes de cargar.
+// - Lee los tipos reales de columna del destino para mapear correctamente (date/numeric/uuid/etc.).
 
 using System.Data;
 using Microsoft.Data.SqlClient;
 using Npgsql;
 using NpgsqlTypes;
 
-// Npgsql 6+ exige Kind=Utc para timestamptz; el SqlDataReader entrega DateTime con Kind=Unspecified.
-// El switch legacy mapea DateTime <-> 'timestamp without time zone' sin exigir Kind (igual que la app).
 AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
 
 if (args.Length < 2)
 {
-    Console.Error.WriteLine("Uso: dotnet run -- \"<sqlserver-conn>\" \"<postgres-conn>\"");
+    Console.Error.WriteLine("Uso: DbCopy.exe \"<sqlserver-conn>\" \"<postgres-conn>\"");
     return 1;
 }
 
@@ -28,7 +26,7 @@ src.Open();
 using var dst = new NpgsqlConnection(dstConn);
 dst.Open();
 
-// Desactiva FK/triggers en la sesión destino para no depender del orden de inserción.
+// FK/triggers off en la sesion destino (orden de insercion irrelevante).
 using (var cmd = new NpgsqlCommand("SET session_replication_role = replica;", dst))
     cmd.ExecuteNonQuery();
 
@@ -41,69 +39,89 @@ using (var r = cmd.ExecuteReader())
     while (r.Read())
         tables.Add(r.GetString(0));
 
-// Primero limpia todas las tablas destino (idempotencia; FK off => orden irrelevante).
+// Limpia todas las tablas destino primero (idempotencia; FK off => orden irrelevante).
 foreach (var table in tables)
     using (var del = new NpgsqlCommand($"DELETE FROM \"{table}\";", dst))
         del.ExecuteNonQuery();
 
 long grandTotal = 0;
+var sw = System.Diagnostics.Stopwatch.StartNew();
+
 foreach (var table in tables)
 {
+    // Tipos reales de las columnas del destino.
+    var targetTypes = new Dictionary<string, NpgsqlDbType>(StringComparer.OrdinalIgnoreCase);
+    using (var cmd = new NpgsqlCommand(
+        "SELECT column_name, data_type FROM information_schema.columns " +
+        "WHERE table_schema='public' AND table_name=@t", dst))
+    {
+        cmd.Parameters.AddWithValue("t", table);
+        using var r = cmd.ExecuteReader();
+        while (r.Read())
+            targetTypes[r.GetString(0)] = MapPgType(r.GetString(1));
+    }
+
     using var selectCmd = new SqlCommand($"SELECT * FROM [{table}]", src);
     using var reader = selectCmd.ExecuteReader();
 
-    var fieldCount = reader.FieldCount;
-    var colNames = new string[fieldCount];
-    var npgTypes = new NpgsqlDbType[fieldCount];
-    for (var i = 0; i < fieldCount; i++)
+    // Columnas presentes en origen Y destino.
+    var cols = new List<string>();
+    for (var i = 0; i < reader.FieldCount; i++)
     {
-        colNames[i] = reader.GetName(i);
-        npgTypes[i] = MapType(reader.GetFieldType(i));
+        var name = reader.GetName(i);
+        if (targetTypes.ContainsKey(name))
+            cols.Add(name);
     }
 
-    var colList = string.Join(",", colNames.Select(c => "\"" + c + "\""));
-    var paramList = string.Join(",", Enumerable.Range(0, fieldCount).Select(i => "@p" + i));
-    var insertSql = $"INSERT INTO \"{table}\" ({colList}) VALUES ({paramList})";
-
+    var colList = string.Join(",", cols.Select(c => "\"" + c + "\""));
     var count = 0;
-    using var tx = dst.BeginTransaction();
-    while (reader.Read())
+
+    using (var importer = dst.BeginBinaryImport(
+        $"COPY \"{table}\" ({colList}) FROM STDIN (FORMAT BINARY)"))
     {
-        using var ins = new NpgsqlCommand(insertSql, dst, tx);
-        for (var i = 0; i < fieldCount; i++)
+        while (reader.Read())
         {
-            var val = reader.GetValue(i);
-            var p = new NpgsqlParameter("p" + i, npgTypes[i]) { Value = val ?? DBNull.Value };
-            ins.Parameters.Add(p);
+            importer.StartRow();
+            foreach (var col in cols)
+            {
+                var val = reader.GetValue(reader.GetOrdinal(col));
+                if (val is null || val is DBNull)
+                    importer.WriteNull();
+                else
+                    importer.Write(val, targetTypes[col]);
+            }
+            count++;
         }
-        ins.ExecuteNonQuery();
-        count++;
+        importer.Complete();
     }
-    tx.Commit();
 
     grandTotal += count;
-    Console.WriteLine($"{table,-40} {count,8}");
+    Console.WriteLine($"{table,-40} {count,10}");
 }
 
-Console.WriteLine(new string('-', 50));
-Console.WriteLine($"{"TOTAL filas",-40} {grandTotal,8}");
-Console.WriteLine($"{tables.Count} tablas migradas.");
+sw.Stop();
+Console.WriteLine(new string('-', 52));
+Console.WriteLine($"{"TOTAL filas",-40} {grandTotal,10}");
+Console.WriteLine($"{tables.Count} tablas migradas en {sw.Elapsed.TotalSeconds:F1}s.");
 return 0;
 
-static NpgsqlDbType MapType(Type t) => t switch
+static NpgsqlDbType MapPgType(string dataType) => dataType.ToLowerInvariant() switch
 {
-    _ when t == typeof(Guid) => NpgsqlDbType.Uuid,
-    _ when t == typeof(bool) => NpgsqlDbType.Boolean,
-    _ when t == typeof(byte) => NpgsqlDbType.Smallint,
-    _ when t == typeof(short) => NpgsqlDbType.Smallint,
-    _ when t == typeof(int) => NpgsqlDbType.Integer,
-    _ when t == typeof(long) => NpgsqlDbType.Bigint,
-    _ when t == typeof(decimal) => NpgsqlDbType.Numeric,
-    _ when t == typeof(double) => NpgsqlDbType.Double,
-    _ when t == typeof(float) => NpgsqlDbType.Real,
-    _ when t == typeof(DateTime) => NpgsqlDbType.Timestamp,
-    _ when t == typeof(DateTimeOffset) => NpgsqlDbType.TimestampTz,
-    _ when t == typeof(TimeSpan) => NpgsqlDbType.Interval,
-    _ when t == typeof(byte[]) => NpgsqlDbType.Bytea,
+    "uuid" => NpgsqlDbType.Uuid,
+    "boolean" => NpgsqlDbType.Boolean,
+    "smallint" => NpgsqlDbType.Smallint,
+    "integer" => NpgsqlDbType.Integer,
+    "bigint" => NpgsqlDbType.Bigint,
+    "numeric" => NpgsqlDbType.Numeric,
+    "real" => NpgsqlDbType.Real,
+    "double precision" => NpgsqlDbType.Double,
+    "date" => NpgsqlDbType.Date,
+    "timestamp without time zone" => NpgsqlDbType.Timestamp,
+    "timestamp with time zone" => NpgsqlDbType.TimestampTz,
+    "time without time zone" => NpgsqlDbType.Time,
+    "interval" => NpgsqlDbType.Interval,
+    "bytea" => NpgsqlDbType.Bytea,
+    "character varying" => NpgsqlDbType.Varchar,
+    "character" => NpgsqlDbType.Char,
     _ => NpgsqlDbType.Text
 };
