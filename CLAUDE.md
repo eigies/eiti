@@ -1,5 +1,25 @@
 # Agustin CLAUDE.md File
 
+## Infra, Deploy & Git Flow (Cloud)
+
+**Producción — todo en la nube (IIS / SQL Server jubilados):**
+- **Front:** Vercel → https://eiticloud.com (+ www)
+- **API + DB:** Railway → https://api.eiticloud.com · PostgreSQL (red privada con la API, región São Paulo)
+- **Email:** Resend (dominio `eiticloud.com` verificado; from `no-reply@eiticloud.com`)
+
+**Ramas (ambos repos: backend `eiti` y `eiti-front`):**
+- `main` → producción. De acá sale cada release con tag `vX.Y.Z`.
+- `develop` → integración / base del trabajo diario.
+- `feature/<nombre>` → sale de `develop`; al terminar, merge a `develop`.
+
+**Flujo:** `feature/* → develop → (cuando está OK) → main → tag vX.Y.Z → deploy`.
+
+**Deploy:**
+- Back: `railway up --service eiti-api` (Docker via `eiti.Api/Dockerfile`, config en `railway.json`). Las migraciones EF se aplican solas al arranque (`Database.Migrate()`).
+- Front: `vercel deploy --prod`.
+- Push-to-deploy automático: conectar los repos en Railway/Vercel (git integration, `main`→prod). Hoy el deploy es por CLI.
+- Secrets / connection string: SIEMPRE por **env vars** en Railway (`ConnectionStrings__DefaultConnection`, `JwtSettings__Secret`, `EmailSettings__*`), nunca hardcodeados en `appsettings.json`.
+
 ## Workflow Orchestration
 
 ### 1. Plan Mode Default
@@ -163,11 +183,12 @@
 
 ---
 
-## Backend (.NET 8) — C:/Eiti/eiti
+## Backend (.NET 10) — C:/Eiti/eiti
 
 ### Stack
 
-- .NET 8 · Clean Architecture · Vertical Slice · MediatR · FluentValidation · EF Core · SQL Server
+- .NET 10 · Clean Architecture · Vertical Slice · MediatR · FluentValidation · EF Core · PostgreSQL (Npgsql)
+- Provider Npgsql con `AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true)` (DateTime). `HasFilter` usa comillas dobles PG (`"Col"`), no corchetes.
 - Pattern: `Result<T>` (never throw for business errors) · `ICurrentUserService` for auth context
 - Error types: `Validation`, `NotFound`, `Conflict`, `Unauthorized`, `Forbidden`
 

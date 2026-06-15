@@ -47,3 +47,6 @@ Thumbs.db
 CLAUDE.local.md
 DOCUMENTATION_REPORT.md
 DOCUMENTATION_EXAMPLES.md
+
+# build artifacts de tools
+tools/DbCopy/publish/
