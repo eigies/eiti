@@ -38,6 +38,16 @@ public interface ICashSessionRepository
         CompanyId companyId,
         CancellationToken cancellationToken = default);
 
+    Task<CashSession?> GetByCcPaymentGroupIdAsync(
+        Guid ccPaymentGroupId,
+        CompanyId companyId,
+        CancellationToken cancellationToken = default);
+
+    Task<CashSession?> GetBySupplierPaymentIdAsync(
+        Guid supplierPaymentId,
+        CompanyId companyId,
+        CancellationToken cancellationToken = default);
+
     Task<CashSession?> GetLastClosedByDrawerAsync(
         CashDrawerId cashDrawerId,
         CompanyId companyId,

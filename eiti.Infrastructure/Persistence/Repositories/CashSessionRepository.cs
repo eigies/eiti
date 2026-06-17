@@ -124,6 +124,36 @@ public sealed class CashSessionRepository : ICashSessionRepository
                 cancellationToken);
     }
 
+    public async Task<CashSession?> GetByCcPaymentGroupIdAsync(
+        Guid ccPaymentGroupId,
+        CompanyId companyId,
+        CancellationToken cancellationToken = default)
+    {
+        return await _context.CashSessions
+            .Include(session => session.Movements)
+            .Where(session => session.CompanyId == companyId
+                && session.Movements.Any(movement =>
+                    movement.CcPaymentGroupId == ccPaymentGroupId
+                    && movement.Type != CashMovementType.CuentaCorrienteCancellation))
+            .OrderBy(session => session.OpenedAt)
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
+    public async Task<CashSession?> GetBySupplierPaymentIdAsync(
+        Guid supplierPaymentId,
+        CompanyId companyId,
+        CancellationToken cancellationToken = default)
+    {
+        return await _context.CashSessions
+            .Include(session => session.Movements)
+            .Where(session => session.CompanyId == companyId
+                && session.Movements.Any(movement =>
+                    movement.SupplierPaymentId == supplierPaymentId
+                    && movement.Type == CashMovementType.PurchaseExpense))
+            .OrderBy(session => session.OpenedAt)
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
     public async Task<CashSession?> GetLastClosedByDrawerAsync(
         CashDrawerId cashDrawerId,
         CompanyId companyId,

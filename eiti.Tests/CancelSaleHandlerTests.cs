@@ -47,6 +47,7 @@ public sealed class CancelSaleHandlerTests
         var saleRepository = new Mock<ISaleRepository>();
         var branchProductStockRepository = new Mock<IBranchProductStockRepository>();
         var stockMovementRepository = new Mock<IStockMovementRepository>();
+        var cashDrawerRepository = new Mock<ICashDrawerRepository>();
         var cashSessionRepository = new Mock<ICashSessionRepository>();
         var saleTransportAssignmentRepository = new Mock<ISaleTransportAssignmentRepository>();
         var unitOfWork = new Mock<IUnitOfWork>();
@@ -72,6 +73,7 @@ public sealed class CancelSaleHandlerTests
             saleRepository.Object,
             branchProductStockRepository.Object,
             stockMovementRepository.Object,
+            cashDrawerRepository.Object,
             cashSessionRepository.Object,
             saleTransportAssignmentRepository.Object,
             unitOfWork.Object);

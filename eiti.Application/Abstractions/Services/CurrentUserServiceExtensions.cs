@@ -49,7 +49,8 @@ public static class CurrentUserServiceExtensions
     /// </summary>
     public static Result EnsureBranchAccess(this ICurrentUserService service, Guid branchId)
     {
-        if (service.CanViewAllBranches || service.AllowedBranchIds.Contains(branchId))
+        var allowed = service.AllowedBranchIds;
+        if (service.CanViewAllBranches || allowed is null || allowed.Count == 0 || allowed.Contains(branchId))
         {
             return Result.Success();
         }
@@ -65,12 +66,12 @@ public static class CurrentUserServiceExtensions
     /// </summary>
     public static IEnumerable<Guid> FilterAllowedBranchIds(this ICurrentUserService service, IEnumerable<Guid> branchIds)
     {
-        if (service.CanViewAllBranches)
+        var allowed = service.AllowedBranchIds;
+        if (service.CanViewAllBranches || allowed is null || allowed.Count == 0)
         {
             return branchIds;
         }
 
-        var allowed = service.AllowedBranchIds;
         return branchIds.Where(allowed.Contains);
     }
 

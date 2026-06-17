@@ -55,7 +55,19 @@ public sealed class CashMovementConfiguration : IEntityTypeConfiguration<CashMov
 
         builder.Property(movement => movement.OriginalCashSessionId).IsRequired(false);
 
+        builder.Property(movement => movement.PaymentMethod).IsRequired(false);
+
+        builder.Property(movement => movement.SaleCcPaymentId).IsRequired(false);
+
+        builder.Property(movement => movement.SupplierPaymentId).IsRequired(false);
+
         builder.HasIndex(movement => new { movement.CashSessionId, movement.OccurredAt });
+
+        builder.HasIndex(movement => movement.CcPaymentGroupId);
+
+        builder.HasIndex(movement => movement.SaleCcPaymentId);
+
+        builder.HasIndex(movement => movement.SupplierPaymentId);
 
         // Anti-duplicado: una venta directa produce a lo sumo UN movimiento de ingreso por tipo
         // (efectivo=2, transferencia=10, tarjeta=11). Un doble submit concurrente que intente

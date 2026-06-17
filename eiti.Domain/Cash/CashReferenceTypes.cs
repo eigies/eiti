@@ -8,5 +8,6 @@ public static class CashReferenceTypes
     public const string Withdrawal = "Withdrawal";
     public const string Transfer = "Transfer";
     public const string Purchase = "Purchase";
+    public const string SupplierPayment = "SupplierPayment";
     public const string Deposit = "Deposit";
 }

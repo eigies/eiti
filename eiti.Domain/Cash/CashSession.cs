@@ -97,7 +97,8 @@ public sealed class CashSession : AggregateRoot<CashSessionId>
             CashReferenceTypes.Sale,
             saleId,
             "Sale payment",
-            createdByUserId);
+            createdByUserId,
+            paymentMethod: (int)SalePaymentMethod.Cash);
     }
 
     public void RegisterTransferIncome(
@@ -113,7 +114,8 @@ public sealed class CashSession : AggregateRoot<CashSessionId>
             CashReferenceTypes.Sale,
             saleId,
             "Pago por transferencia",
-            createdByUserId);
+            createdByUserId,
+            paymentMethod: (int)SalePaymentMethod.Transfer);
     }
 
     public void RegisterCardIncome(
@@ -129,14 +131,16 @@ public sealed class CashSession : AggregateRoot<CashSessionId>
             CashReferenceTypes.Sale,
             saleId,
             "Pago con tarjeta",
-            createdByUserId);
+            createdByUserId,
+            paymentMethod: (int)SalePaymentMethod.Card);
     }
 
     public void RegisterCcPaymentIncome(
         decimal amount,
         Guid saleId,
         UserId createdByUserId,
-        Guid? ccPaymentGroupId = null)
+        Guid? ccPaymentGroupId = null,
+        Guid? saleCcPaymentId = null)
     {
         EnsureOpen();
         AddMovement(
@@ -147,14 +151,17 @@ public sealed class CashSession : AggregateRoot<CashSessionId>
             saleId,
             "Pago cuenta corriente",
             createdByUserId,
-            ccPaymentGroupId: ccPaymentGroupId);
+            ccPaymentGroupId: ccPaymentGroupId,
+            paymentMethod: (int)SalePaymentMethod.Cash,
+            saleCcPaymentId: saleCcPaymentId);
     }
 
     public void RegisterCcTransferIncome(
         decimal amount,
         Guid saleId,
         UserId createdByUserId,
-        Guid? ccPaymentGroupId = null)
+        Guid? ccPaymentGroupId = null,
+        Guid? saleCcPaymentId = null)
     {
         EnsureOpen();
         AddMovement(
@@ -165,14 +172,17 @@ public sealed class CashSession : AggregateRoot<CashSessionId>
             saleId,
             "Pago CC por transferencia",
             createdByUserId,
-            ccPaymentGroupId: ccPaymentGroupId);
+            ccPaymentGroupId: ccPaymentGroupId,
+            paymentMethod: (int)SalePaymentMethod.Transfer,
+            saleCcPaymentId: saleCcPaymentId);
     }
 
     public void RegisterCcCardIncome(
         decimal amount,
         Guid saleId,
         UserId createdByUserId,
-        Guid? ccPaymentGroupId = null)
+        Guid? ccPaymentGroupId = null,
+        Guid? saleCcPaymentId = null)
     {
         EnsureOpen();
         AddMovement(
@@ -183,11 +193,43 @@ public sealed class CashSession : AggregateRoot<CashSessionId>
             saleId,
             "Pago CC con tarjeta",
             createdByUserId,
-            ccPaymentGroupId: ccPaymentGroupId);
+            ccPaymentGroupId: ccPaymentGroupId,
+            paymentMethod: (int)SalePaymentMethod.Card,
+            saleCcPaymentId: saleCcPaymentId);
+    }
+
+    public void RegisterCcNonCashIncome(
+        SalePaymentMethod method,
+        decimal amount,
+        Guid saleId,
+        UserId createdByUserId,
+        Guid? ccPaymentGroupId = null,
+        Guid? saleCcPaymentId = null)
+    {
+        EnsureOpen();
+
+        var description = method switch
+        {
+            SalePaymentMethod.Check => "Pago CC con cheque",
+            SalePaymentMethod.Other => "Pago CC otros",
+            _ => "Pago CC no efectivo"
+        };
+
+        AddMovement(
+            CashMovementType.CuentaCorrienteIncome,
+            CashMovementDirection.None,
+            amount,
+            CashReferenceTypes.CuentaCorriente,
+            saleId,
+            description,
+            createdByUserId,
+            ccPaymentGroupId: ccPaymentGroupId,
+            paymentMethod: (int)method,
+            saleCcPaymentId: saleCcPaymentId);
     }
 
     public void RegisterCcPaymentCancellation(
-        IEnumerable<(SalePaymentMethod Method, decimal Amount)> lines,
+        IEnumerable<(SalePaymentMethod Method, decimal Amount, Guid? SaleCcPaymentId)> lines,
         Guid saleId,
         UserId createdByUserId,
         Guid? ccPaymentGroupId = null)
@@ -197,7 +239,7 @@ public sealed class CashSession : AggregateRoot<CashSessionId>
         // Reversa de un cobro de cuenta corriente, por método: el efectivo sale del cajón (Out)
         // y transferencia/tarjeta/cheque se registran como reversa neutra (None) para trazabilidad
         // sin tocar el efectivo esperado — espejo de RegisterSaleCancellation para ventas directas.
-        foreach (var (method, amount) in lines.Where(line => line.Amount > 0))
+        foreach (var (method, amount, saleCcPaymentId) in lines.Where(line => line.Amount > 0))
         {
             var (direction, description) = method switch
             {
@@ -216,7 +258,9 @@ public sealed class CashSession : AggregateRoot<CashSessionId>
                 saleId,
                 description,
                 createdByUserId,
-                ccPaymentGroupId: ccPaymentGroupId);
+                ccPaymentGroupId: ccPaymentGroupId,
+                paymentMethod: (int)method,
+                saleCcPaymentId: saleCcPaymentId);
         }
     }
 
@@ -242,18 +286,19 @@ public sealed class CashSession : AggregateRoot<CashSessionId>
             AddMovement(
                 CashMovementType.SaleCancellation,
                 direction,
-                payment.Amount,
-                CashReferenceTypes.Sale,
-                saleId,
-                description,
-                createdByUserId,
-                originalCashSessionId);
+            payment.Amount,
+            CashReferenceTypes.Sale,
+            saleId,
+            description,
+            createdByUserId,
+            originalCashSessionId,
+            paymentMethod: (int)payment.Method);
         }
     }
 
-    public void RegisterPurchaseExpense(
+    public void RegisterSupplierPaymentExpense(
         decimal amount,
-        Guid purchaseId,
+        Guid supplierPaymentId,
         UserId createdByUserId,
         Domain.Purchases.PurchasePaymentMethod method = Domain.Purchases.PurchasePaymentMethod.Cash)
     {
@@ -274,26 +319,34 @@ public sealed class CashSession : AggregateRoot<CashSessionId>
             CashMovementType.PurchaseExpense,
             direction,
             amount,
-            CashReferenceTypes.Purchase,
-            purchaseId,
+            CashReferenceTypes.SupplierPayment,
+            supplierPaymentId,
             methodName,
-            createdByUserId);
+            createdByUserId,
+            paymentMethod: (int)method,
+            supplierPaymentId: supplierPaymentId);
     }
 
-    public void RegisterPurchasePaymentCancel(
+    public void RegisterSupplierPaymentCancel(
         decimal amount,
-        Guid purchaseId,
-        UserId createdByUserId)
+        Guid supplierPaymentId,
+        UserId createdByUserId,
+        Domain.Purchases.PurchasePaymentMethod method = Domain.Purchases.PurchasePaymentMethod.Cash)
     {
         EnsureOpen();
+        var direction = method == Domain.Purchases.PurchasePaymentMethod.Cash
+            ? CashMovementDirection.In
+            : CashMovementDirection.None;
         AddMovement(
             CashMovementType.PurchasePaymentCancellation,
-            CashMovementDirection.In,
+            direction,
             amount,
-            CashReferenceTypes.Purchase,
-            purchaseId,
+            CashReferenceTypes.SupplierPayment,
+            supplierPaymentId,
             "Pago de compra anulado",
-            createdByUserId);
+            createdByUserId,
+            paymentMethod: (int)method,
+            supplierPaymentId: supplierPaymentId);
     }
 
     public void RegisterWithdrawal(
@@ -421,7 +474,10 @@ public sealed class CashSession : AggregateRoot<CashSessionId>
         string description,
         UserId createdByUserId,
         Guid? originalCashSessionId = null,
-        Guid? ccPaymentGroupId = null)
+        Guid? ccPaymentGroupId = null,
+        int? paymentMethod = null,
+        Guid? saleCcPaymentId = null,
+        Guid? supplierPaymentId = null)
     {
         _movements.Add(CashMovement.Create(
             Id,
@@ -433,7 +489,10 @@ public sealed class CashSession : AggregateRoot<CashSessionId>
             description,
             createdByUserId,
             ccPaymentGroupId: ccPaymentGroupId,
-            originalCashSessionId: originalCashSessionId));
+            originalCashSessionId: originalCashSessionId,
+            paymentMethod: paymentMethod,
+            saleCcPaymentId: saleCcPaymentId,
+            supplierPaymentId: supplierPaymentId));
     }
 
     private void EnsureOpen()

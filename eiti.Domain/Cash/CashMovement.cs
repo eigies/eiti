@@ -17,6 +17,9 @@ public sealed class CashMovement : Entity<CashMovementId>
     public Guid? CcPaymentGroupId { get; private set; }
     public Guid? TransferCounterpartSessionId { get; private set; }
     public Guid? OriginalCashSessionId { get; private set; }
+    public int? PaymentMethod { get; private set; }
+    public Guid? SaleCcPaymentId { get; private set; }
+    public Guid? SupplierPaymentId { get; private set; }
 
     private CashMovement()
     {
@@ -34,7 +37,10 @@ public sealed class CashMovement : Entity<CashMovementId>
         UserId createdByUserId,
         Guid? ccPaymentGroupId = null,
         Guid? transferCounterpartSessionId = null,
-        Guid? originalCashSessionId = null)
+        Guid? originalCashSessionId = null,
+        int? paymentMethod = null,
+        Guid? saleCcPaymentId = null,
+        Guid? supplierPaymentId = null)
         : base(id)
     {
         if (amount <= 0)
@@ -54,6 +60,9 @@ public sealed class CashMovement : Entity<CashMovementId>
         CcPaymentGroupId = ccPaymentGroupId;
         TransferCounterpartSessionId = transferCounterpartSessionId;
         OriginalCashSessionId = originalCashSessionId;
+        PaymentMethod = paymentMethod;
+        SaleCcPaymentId = saleCcPaymentId;
+        SupplierPaymentId = supplierPaymentId;
     }
 
     public static CashMovement Create(
@@ -67,7 +76,10 @@ public sealed class CashMovement : Entity<CashMovementId>
         UserId createdByUserId,
         Guid? ccPaymentGroupId = null,
         Guid? transferCounterpartSessionId = null,
-        Guid? originalCashSessionId = null)
+        Guid? originalCashSessionId = null,
+        int? paymentMethod = null,
+        Guid? saleCcPaymentId = null,
+        Guid? supplierPaymentId = null)
     {
         return new CashMovement(
             CashMovementId.New(),
@@ -81,7 +93,10 @@ public sealed class CashMovement : Entity<CashMovementId>
             createdByUserId,
             ccPaymentGroupId,
             transferCounterpartSessionId,
-            originalCashSessionId);
+            originalCashSessionId,
+            paymentMethod,
+            saleCcPaymentId,
+            supplierPaymentId);
     }
 
     private static string NormalizeRequired(string value, int maxLength, string field)

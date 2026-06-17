@@ -3,21 +3,25 @@
 ## Infra, Deploy & Git Flow (Cloud)
 
 **Producción — todo en la nube (IIS / SQL Server jubilados):**
-- **Front:** Vercel → https://eiticloud.com (+ www)
+- **App (el sistema):** Vercel → https://app.eiticloud.com — proyecto `eiti-front` (Angular). El login y uso diario viven acá.
+- **Landing (marketing):** Vercel → https://eiticloud.com (+ www) — proyecto `eiti-landing`, **repo aparte** en `C:/eiti-landing` (Next.js 14 + Framer Motion). Sus CTAs ("Probá gratis"/"Ingresar") apuntan a `app.eiticloud.com`.
 - **API + DB:** Railway → https://api.eiticloud.com · PostgreSQL (red privada con la API, región São Paulo)
 - **Email:** Resend (dominio `eiticloud.com` verificado; from `no-reply@eiticloud.com`)
 
-**Ramas (ambos repos: backend `eiti` y `eiti-front`):**
+**Ramas (repos: backend `eiti`, app `eiti-front`, landing `eiti-landing`):**
 - `main` → producción. De acá sale cada release con tag `vX.Y.Z`.
 - `develop` → integración / base del trabajo diario.
 - `feature/<nombre>` → sale de `develop`; al terminar, merge a `develop`.
 
 **Flujo:** `feature/* → develop → (cuando está OK) → main → tag vX.Y.Z → deploy`.
 
-**Deploy:**
-- Back: `railway up --service eiti-api` (Docker via `eiti.Api/Dockerfile`, config en `railway.json`). Las migraciones EF se aplican solas al arranque (`Database.Migrate()`).
-- Front: `vercel deploy --prod`.
-- Push-to-deploy automático: conectar los repos en Railway/Vercel (git integration, `main`→prod). Hoy el deploy es por CLI.
+**Deploy (todo por CLI; scope Vercel `agustin-testa-s-projects1`):**
+- **Back (API):** `railway up --service eiti-api` (Docker via `eiti.Api/Dockerfile`, config en `railway.json`). Las migraciones EF se aplican solas al arranque (`Database.Migrate()`).
+- **App (front):** desde `C:/EiTeFront/eiti-front` → `vercel deploy --prod --scope agustin-testa-s-projects1` (ese dir está linkeado al proyecto `eiti-front` → `app.eiticloud.com`).
+- **Landing:** desde `C:/eiti-landing` → `vercel deploy --prod --scope agustin-testa-s-projects1` (dir linkeado a `eiti-landing` → `eiticloud.com`).
+- **CORS:** la API permite los orígenes en Railway env `Cors__AllowedOrigins__0..N` (hoy: `eiticloud.com`, `www.eiticloud.com`, `app.eiticloud.com`, `eiti-front.vercel.app`). Origen nuevo = sumarlo ahí y la API redeploya sola.
+- **Dominios (Vercel):** `eiticloud.com`+`www` → `eiti-landing`; `app.eiticloud.com` → `eiti-front`. Para mover un dominio entre proyectos hay que **quitarlo del proyecto viejo** (Settings→Domains→Remove) y **agregarlo al nuevo** (el `--force` del CLI no alcanza, da `alias_conflict`). DNS en Hostinger: apex `@`→A `76.76.21.21`; `www` y `app`→CNAME `cname.vercel-dns.com`.
+- Push-to-deploy automático (git integration `main`→prod en Railway/Vercel): pendiente; hoy todo es por CLI.
 - Secrets / connection string: SIEMPRE por **env vars** en Railway (`ConnectionStrings__DefaultConnection`, `JwtSettings__Secret`, `EmailSettings__*`), nunca hardcodeados en `appsettings.json`.
 
 ## Workflow Orchestration

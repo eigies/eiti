@@ -18,6 +18,7 @@ public sealed class CancelSaleHandler : IRequestHandler<CancelSaleCommand, Resul
     private readonly ISaleRepository _saleRepository;
     private readonly IBranchProductStockRepository _branchProductStockRepository;
     private readonly IStockMovementRepository _stockMovementRepository;
+    private readonly ICashDrawerRepository _cashDrawerRepository;
     private readonly ICashSessionRepository _cashSessionRepository;
     private readonly ISaleTransportAssignmentRepository _saleTransportAssignmentRepository;
     private readonly IUnitOfWork _unitOfWork;
@@ -27,6 +28,7 @@ public sealed class CancelSaleHandler : IRequestHandler<CancelSaleCommand, Resul
         ISaleRepository saleRepository,
         IBranchProductStockRepository branchProductStockRepository,
         IStockMovementRepository stockMovementRepository,
+        ICashDrawerRepository cashDrawerRepository,
         ICashSessionRepository cashSessionRepository,
         ISaleTransportAssignmentRepository saleTransportAssignmentRepository,
         IUnitOfWork unitOfWork)
@@ -35,6 +37,7 @@ public sealed class CancelSaleHandler : IRequestHandler<CancelSaleCommand, Resul
         _saleRepository = saleRepository;
         _branchProductStockRepository = branchProductStockRepository;
         _stockMovementRepository = stockMovementRepository;
+        _cashDrawerRepository = cashDrawerRepository;
         _cashSessionRepository = cashSessionRepository;
         _saleTransportAssignmentRepository = saleTransportAssignmentRepository;
         _unitOfWork = unitOfWork;
@@ -247,26 +250,45 @@ public sealed class CancelSaleHandler : IRequestHandler<CancelSaleCommand, Resul
         }
     }
 
-    private static List<(SalePaymentMethod Method, decimal Amount)> CaptureActiveCcLines(Sale sale)
+    private static List<(SalePaymentMethod Method, decimal Amount, Guid? SaleCcPaymentId)> CaptureActiveCcLines(Sale sale)
     {
         return sale.CcPayments
             .Where(p => p.Status == SaleCcPaymentStatus.Active)
             .GroupBy(p => p.Method)
-            .Select(g => (g.Key, g.Sum(p => p.Amount)))
+            .Select(g => (g.Key, g.Sum(p => p.Amount), g.Count() == 1 ? g.Single().Id.Value : (Guid?)null))
             .ToList();
     }
 
     private async Task RegisterCcCancellationIfNeeded(
         Sale sale,
-        IReadOnlyList<(SalePaymentMethod Method, decimal Amount)> cancelledLines,
+        IReadOnlyList<(SalePaymentMethod Method, decimal Amount, Guid? SaleCcPaymentId)> cancelledLines,
         CancellationToken cancellationToken)
     {
         if (!sale.IsCuentaCorriente || cancelledLines.All(line => line.Amount <= 0) || _currentUserService.UserId is null)
             return;
 
-        var session = await _cashSessionRepository.GetAnyOpenByBranchAsync(
-            sale.BranchId,
+        CashSession? originalSession = null;
+        var firstCancelledGroupId = sale.CcPayments
+            .Where(p => p.Status == SaleCcPaymentStatus.Cancelled && p.GroupId.HasValue)
+            .Select(p => p.GroupId!.Value)
+            .Distinct()
+            .FirstOrDefault();
+
+        if (firstCancelledGroupId != Guid.Empty)
+        {
+            originalSession = await _cashSessionRepository.GetByCcPaymentGroupIdAsync(
+                firstCancelledGroupId,
+                sale.CompanyId,
+                cancellationToken);
+        }
+
+        var session = await CashSessionResolutionPolicy.ResolveOpenSessionAsync(
+            _currentUserService,
+            _cashDrawerRepository,
+            _cashSessionRepository,
             sale.CompanyId,
+            sale.BranchId,
+            originalSession,
             cancellationToken);
 
         if (session is not null)

@@ -14,6 +14,70 @@ namespace eiti.Tests;
 public sealed class GetCurrentCashSessionHandlerTests
 {
     [Fact]
+    public async Task Handle_ShouldNetCcPaymentBreakdownUsingCashMovements()
+    {
+        var companyId = CompanyId.New();
+        var branchId = BranchId.New();
+        var drawerId = CashDrawerId.New();
+        var userId = UserId.New();
+        var saleId = Guid.NewGuid();
+        var groupId = Guid.NewGuid();
+        var session = CashSession.Open(companyId, branchId, drawerId, userId, 0m, null);
+
+        session.RegisterCcTransferIncome(300_000m, saleId, userId, groupId, Guid.NewGuid());
+        session.RegisterCcPaymentCancellation(
+            [(SalePaymentMethod.Transfer, 300_000m, Guid.NewGuid())],
+            saleId,
+            userId,
+            groupId);
+
+        var currentUserService = new Mock<ICurrentUserService>();
+        var cashDrawerRepository = new Mock<ICashDrawerRepository>();
+        var cashSessionRepository = new Mock<ICashSessionRepository>();
+        var saleRepository = new Mock<ISaleRepository>();
+        var purchaseRepository = new Mock<IPurchaseRepository>();
+        var userRepository = new Mock<IUserRepository>();
+
+        currentUserService.SetupGet(x => x.IsAuthenticated).Returns(true);
+        currentUserService.SetupGet(x => x.CompanyId).Returns(companyId);
+        currentUserService.SetupGet(x => x.UserId).Returns(userId);
+        currentUserService.Setup(x => x.HasPermission(It.IsAny<string>())).Returns(true);
+
+        cashSessionRepository
+            .Setup(x => x.GetOpenByDrawerAsync(drawerId, companyId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(session);
+
+        saleRepository
+            .Setup(x => x.GetPaymentsByCashSessionIdAsync(session.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+
+        saleRepository
+            .Setup(x => x.GetCcPaymentsByGroupIdsAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+
+        saleRepository
+            .Setup(x => x.GetCodesBySaleIdsAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<Guid, string?>());
+
+        userRepository
+            .Setup(x => x.GetUsernamesByIdsAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<Guid, string> { [userId.Value] = "agustin" });
+
+        var handler = new GetCurrentCashSessionHandler(
+            currentUserService.Object,
+            cashDrawerRepository.Object,
+            cashSessionRepository.Object,
+            saleRepository.Object,
+            purchaseRepository.Object,
+            userRepository.Object);
+
+        var result = await handler.Handle(new GetCurrentCashSessionQuery(drawerId.Value), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.PaymentBreakdown.Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task Handle_ShouldKeepSaleCodeForCancelledSaleMovements()
     {
         var companyId = CompanyId.New();

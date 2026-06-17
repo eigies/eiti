@@ -62,6 +62,7 @@ public sealed class CancelSupplierPaymentHandler : IRequestHandler<CancelSupplie
             return Result.Failure(CancelSupplierPaymentErrors.PaymentNotFound);
 
         // Para efectivo hay que reintegrar a la caja; otros métodos no movieron efectivo.
+        // Exige caja propia (drawer asignado) o permiso CashDrawerViewAll.
         CashSession? session = null;
         if (payment.Method == PurchasePaymentMethod.Cash)
         {
@@ -98,12 +99,16 @@ public sealed class CancelSupplierPaymentHandler : IRequestHandler<CancelSupplie
             }
         }
 
-        // Reverso neto sobre el saldo del proveedor: (imputado − monto) ajusta el saldo a favor.
-        supplier.AddCredit(imputedTotal - payment.Amount);
+        // Si el pago genero saldo a favor, la anulacion lo revierte.
+        var creditGeneratedByPayment = Math.Max(0m, payment.Amount - imputedTotal);
+        if (creditGeneratedByPayment > 0m)
+        {
+            supplier.ConsumeCredit(creditGeneratedByPayment);
+        }
         _supplierRepository.Update(supplier);
 
         // Reintegro de caja (solo efectivo) y devolución del cheque a cartera.
-        session?.RegisterPurchasePaymentCancel(payment.Amount, payment.Id, userId);
+        session?.RegisterSupplierPaymentCancel(payment.Amount, payment.Id, userId, payment.Method);
 
         if (payment.Method == PurchasePaymentMethod.Check && payment.ChequeId.HasValue)
         {

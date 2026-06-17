@@ -21,7 +21,7 @@ internal static class CashSessionMapper
         Dictionary<Guid, string>? usernames = null,
         IReadOnlyList<SaleCcPayment>? ccPayments = null)
     {
-        var breakdown = BuildBreakdown(payments ?? [], ccPayments);
+        var breakdown = BuildBreakdown(session.Movements, payments ?? []);
 
         return new CashSessionResponse(
             session.Id.Value,
@@ -53,7 +53,10 @@ internal static class CashSessionMapper
                         ? saleCodes.GetValueOrDefault(movement.ReferenceId.Value)
                         : null,
                     usernames?.GetValueOrDefault(movement.CreatedByUserId.Value),
-                    movement.OriginalCashSessionId))
+                    movement.OriginalCashSessionId,
+                    movement.PaymentMethod,
+                    movement.SaleCcPaymentId,
+                    movement.SupplierPaymentId))
                 .ToList(),
             breakdown);
     }
@@ -69,8 +72,13 @@ internal static class CashSessionMapper
                 movement.Type == CashMovementType.SaleIncome ||
                 movement.Type == CashMovementType.CardIncome ||
                 movement.Type == CashMovementType.TransferIncome ||
-                movement.Type == CashMovementType.CuentaCorrienteIncome)
-            .Sum(movement => movement.Amount);
+                movement.Type == CashMovementType.CuentaCorrienteIncome ||
+                movement.Type == CashMovementType.SaleCancellation ||
+                movement.Type == CashMovementType.CuentaCorrienteCancellation)
+            .Sum(movement =>
+                movement.Type is CashMovementType.SaleCancellation or CashMovementType.CuentaCorrienteCancellation
+                    ? -movement.Amount
+                    : movement.Amount);
 
         var withdrawals = session.Movements
             .Where(movement => movement.Type == CashMovementType.CashWithdrawal)
@@ -81,7 +89,7 @@ internal static class CashSessionMapper
             .Sum(movement => movement.Amount);
 
         var salesCancellations = session.Movements
-            .Where(movement => movement.Type == CashMovementType.SaleCancellation)
+            .Where(movement => movement.Type is CashMovementType.SaleCancellation or CashMovementType.CuentaCorrienteCancellation)
             .Sum(movement => movement.Amount);
 
         var transferBreakdown = BuildTransferBankBreakdown(payments ?? [], bankNames ?? new Dictionary<int, string>());
@@ -115,25 +123,70 @@ internal static class CashSessionMapper
     }
 
     private static IReadOnlyList<PaymentMethodBreakdownItem> BuildBreakdown(
-        IReadOnlyList<SalePayment> payments,
-        IReadOnlyList<SaleCcPayment>? ccPayments = null)
+        IEnumerable<CashMovement> movements,
+        IReadOnlyList<SalePayment> payments)
     {
-        var allEntries = payments
+        var saleEntries = payments
             .Where(p => p.Method != SalePaymentMethod.CustomerCredit)
-            .Select(p => (p.Method, p.Amount, Surcharge: p.Method == SalePaymentMethod.Card ? (p.CardSurchargeAmt ?? 0m) : 0m))
-            .Concat((ccPayments ?? [])
-                .Where(p => p.Method != SalePaymentMethod.CustomerCredit)
-                .Select(p => (p.Method, p.Amount, Surcharge: p.Method == SalePaymentMethod.Card ? (p.CardSurchargeAmt ?? 0m) : 0m)));
+            .Select(p => (p.Method, Amount: p.Amount, Surcharge: p.Method == SalePaymentMethod.Card ? (p.CardSurchargeAmt ?? 0m) : 0m));
 
-        return allEntries
+        var ccEntries = movements
+            .Select(ToCuentaCorrienteBreakdownEntry)
+            .Where(entry => entry is not null)
+            .Select(entry => entry!.Value);
+
+        return saleEntries
+            .Concat(ccEntries)
             .GroupBy(e => e.Method)
             .Select(g => new PaymentMethodBreakdownItem(
                 (int)g.Key,
                 MethodNames.GetValueOrDefault(g.Key, g.Key.ToString()),
                 g.Sum(e => e.Amount - e.Surcharge),
                 g.Sum(e => e.Surcharge)))
-            .Where(item => item.Amount > 0)
+            .Where(item => item.Amount != 0 || item.SurchargeAmount != 0)
             .OrderBy(item => item.Method)
             .ToList();
+    }
+
+    private static (SalePaymentMethod Method, decimal Amount, decimal Surcharge)? ToCuentaCorrienteBreakdownEntry(CashMovement movement)
+    {
+        if (movement.ReferenceType != CashReferenceTypes.CuentaCorriente
+            && movement.Type != CashMovementType.CuentaCorrienteCancellation)
+        {
+            return null;
+        }
+
+        var method = ResolveSalePaymentMethod(movement);
+        if (method is null || method == SalePaymentMethod.CustomerCredit)
+        {
+            return null;
+        }
+
+        var sign = movement.Type == CashMovementType.CuentaCorrienteCancellation ? -1m : 1m;
+        return (method.Value, sign * movement.Amount, 0m);
+    }
+
+    private static SalePaymentMethod? ResolveSalePaymentMethod(CashMovement movement)
+    {
+        if (movement.PaymentMethod.HasValue
+            && Enum.IsDefined(typeof(SalePaymentMethod), movement.PaymentMethod.Value))
+        {
+            return (SalePaymentMethod)movement.PaymentMethod.Value;
+        }
+
+        var description = movement.Description.ToLowerInvariant();
+        if (description.Contains("transferencia")) return SalePaymentMethod.Transfer;
+        if (description.Contains("tarjeta")) return SalePaymentMethod.Card;
+        if (description.Contains("cheque")) return SalePaymentMethod.Check;
+        if (description.Contains("otros")) return SalePaymentMethod.Other;
+        if (description.Contains("efectivo")) return SalePaymentMethod.Cash;
+
+        return movement.Type switch
+        {
+            CashMovementType.TransferIncome => SalePaymentMethod.Transfer,
+            CashMovementType.CardIncome => SalePaymentMethod.Card,
+            CashMovementType.CuentaCorrienteIncome => SalePaymentMethod.Cash,
+            _ => null
+        };
     }
 }

@@ -82,7 +82,7 @@ public sealed class AddSupplierPaymentHandler : IRequestHandler<AddSupplierPayme
             amount = cheque.Monto;
         }
 
-        // Resolver caja abierta (misma política que el pago de compra anterior).
+        // Resolver caja abierta: exige caja propia (drawer asignado) o permiso CashDrawerViewAll.
         var assignedDrawer = await _cashDrawerRepository.GetByAssignedUserAsync(userId, companyId, cancellationToken);
         CashSession? session;
         if (assignedDrawer is not null)
@@ -122,7 +122,7 @@ public sealed class AddSupplierPaymentHandler : IRequestHandler<AddSupplierPayme
         await _supplierPaymentRepository.AddAsync(payment, cancellationToken);
 
         // Caja: el cheque/transferencia no mueven efectivo (dirección None); el efectivo sí.
-        session.RegisterPurchaseExpense(amount, payment.Id, userId, method);
+        session.RegisterSupplierPaymentExpense(amount, payment.Id, userId, method);
 
         // El cheque sale de cartera (Entregado al proveedor).
         cheque?.EndorseToSupplier();

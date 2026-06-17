@@ -128,7 +128,12 @@ public sealed class AddCcPaymentGroupHandler : IRequestHandler<AddCcPaymentGroup
             // Solo la porción en EFECTIVO de un pago de cuenta corriente entra al cajón físico.
             var cashAmount = payments.Where(p => p.Method == SalePaymentMethod.Cash).Sum(p => p.Amount);
             if (cashAmount > 0)
-                session.RegisterCcPaymentIncome(cashAmount, sale.Id.Value, _currentUserService.UserId!, ccGroupId);
+                session.RegisterCcPaymentIncome(
+                    cashAmount,
+                    sale.Id.Value,
+                    _currentUserService.UserId!,
+                    ccGroupId,
+                    payments.FirstOrDefault(p => p.Method == SalePaymentMethod.Cash)?.Id.Value);
 
             // Transferencia y tarjeta de un cobro de cuenta corriente: se registran para que se VEAN en la
             // caja (conciliación), con dirección In pero SIN sumar al esperado de efectivo — exactamente
@@ -138,11 +143,34 @@ public sealed class AddCcPaymentGroupHandler : IRequestHandler<AddCcPaymentGroup
             // que es para ventas directas; una CC puede tener varios cobros del mismo tipo en el tiempo.
             var transferAmount = payments.Where(p => p.Method == SalePaymentMethod.Transfer).Sum(p => p.Amount);
             if (transferAmount > 0)
-                session.RegisterCcTransferIncome(transferAmount, sale.Id.Value, _currentUserService.UserId!, ccGroupId);
+                session.RegisterCcTransferIncome(
+                    transferAmount,
+                    sale.Id.Value,
+                    _currentUserService.UserId!,
+                    ccGroupId,
+                    payments.FirstOrDefault(p => p.Method == SalePaymentMethod.Transfer)?.Id.Value);
 
             var cardAmount = payments.Where(p => p.Method == SalePaymentMethod.Card).Sum(p => p.Amount);
             if (cardAmount > 0)
-                session.RegisterCcCardIncome(cardAmount, sale.Id.Value, _currentUserService.UserId!, ccGroupId);
+                session.RegisterCcCardIncome(
+                    cardAmount,
+                    sale.Id.Value,
+                    _currentUserService.UserId!,
+                    ccGroupId,
+                    payments.FirstOrDefault(p => p.Method == SalePaymentMethod.Card)?.Id.Value);
+
+            foreach (var nonCashGroup in payments
+                .Where(p => p.Method is SalePaymentMethod.Check or SalePaymentMethod.Other)
+                .GroupBy(p => p.Method))
+            {
+                session.RegisterCcNonCashIncome(
+                    nonCashGroup.Key,
+                    nonCashGroup.Sum(p => p.Amount),
+                    sale.Id.Value,
+                    _currentUserService.UserId!,
+                    ccGroupId,
+                    nonCashGroup.Count() == 1 ? nonCashGroup.Single().Id.Value : null);
+            }
         }
 
         // Stock confirmation if sale transitioned to Paid
