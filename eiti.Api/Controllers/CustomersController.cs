@@ -1,5 +1,6 @@
 using eiti.Api.Extensions;
 using eiti.Application.Features.Customers.Commands.AddCustomerPayment;
+using eiti.Application.Features.Customers.Commands.ApplyCustomerCredit;
 using eiti.Application.Features.Customers.Commands.CancelCustomerPayment;
 using eiti.Application.Features.Customers.Commands.CreateCustomer;
 using eiti.Application.Features.Customers.Commands.DeleteCustomer;
@@ -134,6 +135,15 @@ public sealed class CustomersController : ControllerBase
         CancellationToken cancellationToken)
     {
         var result = await _sender.Send(new CancelCustomerPaymentCommand(id, paymentId), cancellationToken);
+        return result.ToActionResult();
+    }
+
+    [HttpPost("{id:guid}/apply-credit")]
+    public async Task<IActionResult> ApplyCustomerCredit(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        var result = await _sender.Send(new ApplyCustomerCreditCommand(id), cancellationToken);
         return result.ToActionResult();
     }
 }
