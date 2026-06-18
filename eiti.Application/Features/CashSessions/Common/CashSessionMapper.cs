@@ -56,7 +56,8 @@ internal static class CashSessionMapper
                     movement.OriginalCashSessionId,
                     movement.PaymentMethod,
                     movement.SaleCcPaymentId,
-                    movement.SupplierPaymentId))
+                    movement.SupplierPaymentId,
+                    movement.CustomerPaymentId))
                 .ToList(),
             breakdown);
     }
@@ -69,14 +70,13 @@ internal static class CashSessionMapper
     {
         var salesIncome = session.Movements
             .Where(movement =>
-                movement.Type == CashMovementType.SaleIncome ||
-                movement.Type == CashMovementType.CardIncome ||
-                movement.Type == CashMovementType.TransferIncome ||
-                movement.Type == CashMovementType.CuentaCorrienteIncome ||
-                movement.Type == CashMovementType.SaleCancellation ||
-                movement.Type == CashMovementType.CuentaCorrienteCancellation)
+                movement.ReferenceType == CashReferenceTypes.Sale &&
+                (movement.Type == CashMovementType.SaleIncome ||
+                 movement.Type == CashMovementType.CardIncome ||
+                 movement.Type == CashMovementType.TransferIncome ||
+                 movement.Type == CashMovementType.SaleCancellation))
             .Sum(movement =>
-                movement.Type is CashMovementType.SaleCancellation or CashMovementType.CuentaCorrienteCancellation
+                movement.Type == CashMovementType.SaleCancellation
                     ? -movement.Amount
                     : movement.Amount);
 
@@ -135,8 +135,14 @@ internal static class CashSessionMapper
             .Where(entry => entry is not null)
             .Select(entry => entry!.Value);
 
+        var supplierEntries = movements
+            .Select(ToSupplierPaymentBreakdownEntry)
+            .Where(entry => entry is not null)
+            .Select(entry => entry!.Value);
+
         return saleEntries
             .Concat(ccEntries)
+            .Concat(supplierEntries)
             .GroupBy(e => e.Method)
             .Select(g => new PaymentMethodBreakdownItem(
                 (int)g.Key,
@@ -150,8 +156,13 @@ internal static class CashSessionMapper
 
     private static (SalePaymentMethod Method, decimal Amount, decimal Surcharge)? ToCuentaCorrienteBreakdownEntry(CashMovement movement)
     {
-        if (movement.ReferenceType != CashReferenceTypes.CuentaCorriente
-            && movement.Type != CashMovementType.CuentaCorrienteCancellation)
+        // Cobros de cuenta corriente (por-venta legacy y bolsa por-cliente) entran al desglose. La cancelación
+        // de ambos usa el mismo tipo (CuentaCorrienteCancellation). Los cobros a nivel cliente usan
+        // ReferenceType = CustomerPayment; los por-venta usan CuentaCorriente.
+        var isCcReference = movement.ReferenceType == CashReferenceTypes.CuentaCorriente
+            || movement.ReferenceType == CashReferenceTypes.CustomerPayment;
+
+        if (!isCcReference && movement.Type != CashMovementType.CuentaCorrienteCancellation)
         {
             return null;
         }
@@ -164,6 +175,47 @@ internal static class CashSessionMapper
 
         var sign = movement.Type == CashMovementType.CuentaCorrienteCancellation ? -1m : 1m;
         return (method.Value, sign * movement.Amount, 0m);
+    }
+
+    private static (SalePaymentMethod Method, decimal Amount, decimal Surcharge)? ToSupplierPaymentBreakdownEntry(CashMovement movement)
+    {
+        if (movement.ReferenceType != CashReferenceTypes.SupplierPayment ||
+            movement.Type is not (CashMovementType.PurchaseExpense or CashMovementType.PurchasePaymentCancellation))
+        {
+            return null;
+        }
+
+        var method = ResolveSupplierPaymentMethod(movement);
+        if (method is null || method == SalePaymentMethod.CustomerCredit)
+        {
+            return null;
+        }
+
+        var sign = movement.Type == CashMovementType.PurchasePaymentCancellation ? 1m : -1m;
+        return (method.Value, sign * movement.Amount, 0m);
+    }
+
+    private static SalePaymentMethod? ResolveSupplierPaymentMethod(CashMovement movement)
+    {
+        if (movement.PaymentMethod.HasValue)
+        {
+            return movement.PaymentMethod.Value switch
+            {
+                1 => SalePaymentMethod.Cash,
+                2 => SalePaymentMethod.Transfer,
+                3 => SalePaymentMethod.Check,
+                4 => SalePaymentMethod.Other,
+                _ => null
+            };
+        }
+
+        var description = movement.Description.ToLowerInvariant();
+        if (description.Contains("transferencia")) return SalePaymentMethod.Transfer;
+        if (description.Contains("cheque")) return SalePaymentMethod.Check;
+        if (description.Contains("efectivo")) return SalePaymentMethod.Cash;
+        if (description.Contains("otro")) return SalePaymentMethod.Other;
+
+        return null;
     }
 
     private static SalePaymentMethod? ResolveSalePaymentMethod(CashMovement movement)

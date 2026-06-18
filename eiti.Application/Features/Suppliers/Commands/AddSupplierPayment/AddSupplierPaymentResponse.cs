@@ -1,3 +1,5 @@
+using eiti.Application.Features.Purchases.Common;
+
 namespace eiti.Application.Features.Suppliers.Commands.AddSupplierPayment;
 
 public sealed record AddSupplierPaymentResponse(
@@ -6,4 +8,5 @@ public sealed record AddSupplierPaymentResponse(
     decimal Amount,
     decimal AppliedToPurchases,
     decimal CreditAdded,
-    decimal SupplierCreditBalance);
+    decimal SupplierCreditBalance,
+    IReadOnlyList<SupplierPaymentImputacion> Imputaciones);

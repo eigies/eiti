@@ -99,6 +99,29 @@ public sealed class CustomerRepository : ICustomerRepository
             cancellationToken);
     }
 
+    public async Task<IReadOnlyList<Customer>> ListByIdsAsync(
+        CompanyId companyId,
+        IEnumerable<CustomerId> ids,
+        CancellationToken cancellationToken = default)
+    {
+        var idList = ids.Distinct().ToList();
+        if (idList.Count == 0)
+            return [];
+
+        return await _context.Customers
+            .Where(customer => customer.CompanyId == companyId && idList.Contains(customer.Id))
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<Customer>> ListWithPositiveCreditAsync(
+        CompanyId companyId,
+        CancellationToken cancellationToken = default)
+    {
+        return await _context.Customers
+            .Where(customer => customer.CompanyId == companyId && customer.CreditBalance > 0)
+            .ToListAsync(cancellationToken);
+    }
+
     public void Update(Customer customer)
     {
         _context.Customers.Update(customer);

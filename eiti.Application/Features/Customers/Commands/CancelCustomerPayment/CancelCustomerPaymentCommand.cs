@@ -2,10 +2,10 @@ using eiti.Application.Common;
 using eiti.Application.Common.Authorization;
 using MediatR;
 
-namespace eiti.Application.Features.Sales.Commands.CancelCcPayment;
+namespace eiti.Application.Features.Customers.Commands.CancelCustomerPayment;
 
-public sealed record CancelCcPaymentCommand(
-    Guid SaleId,
+public sealed record CancelCustomerPaymentCommand(
+    Guid CustomerId,
     Guid PaymentId
 ) : IRequest<Result>, IRequirePermissions
 {

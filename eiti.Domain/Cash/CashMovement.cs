@@ -20,6 +20,7 @@ public sealed class CashMovement : Entity<CashMovementId>
     public int? PaymentMethod { get; private set; }
     public Guid? SaleCcPaymentId { get; private set; }
     public Guid? SupplierPaymentId { get; private set; }
+    public Guid? CustomerPaymentId { get; private set; }
 
     private CashMovement()
     {
@@ -40,7 +41,8 @@ public sealed class CashMovement : Entity<CashMovementId>
         Guid? originalCashSessionId = null,
         int? paymentMethod = null,
         Guid? saleCcPaymentId = null,
-        Guid? supplierPaymentId = null)
+        Guid? supplierPaymentId = null,
+        Guid? customerPaymentId = null)
         : base(id)
     {
         if (amount <= 0)
@@ -63,6 +65,7 @@ public sealed class CashMovement : Entity<CashMovementId>
         PaymentMethod = paymentMethod;
         SaleCcPaymentId = saleCcPaymentId;
         SupplierPaymentId = supplierPaymentId;
+        CustomerPaymentId = customerPaymentId;
     }
 
     public static CashMovement Create(
@@ -79,7 +82,8 @@ public sealed class CashMovement : Entity<CashMovementId>
         Guid? originalCashSessionId = null,
         int? paymentMethod = null,
         Guid? saleCcPaymentId = null,
-        Guid? supplierPaymentId = null)
+        Guid? supplierPaymentId = null,
+        Guid? customerPaymentId = null)
     {
         return new CashMovement(
             CashMovementId.New(),
@@ -96,7 +100,8 @@ public sealed class CashMovement : Entity<CashMovementId>
             originalCashSessionId,
             paymentMethod,
             saleCcPaymentId,
-            supplierPaymentId);
+            supplierPaymentId,
+            customerPaymentId);
     }
 
     private static string NormalizeRequired(string value, int maxLength, string field)

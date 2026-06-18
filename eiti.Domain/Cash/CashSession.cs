@@ -264,6 +264,75 @@ public sealed class CashSession : AggregateRoot<CashSessionId>
         }
     }
 
+    // Cobro a nivel cliente (bolsa). UN asiento por cobro según método, espejo de los CC income:
+    // efectivo entra al cajón (In, suma al esperado); transferencia/tarjeta In pero excluidos del esperado
+    // (ExpectedClosingAmount zeroes TransferIncome/CardIncome); cheque/otros visibles con dirección None.
+    // ReferenceType = CustomerPayment para quedar fuera del índice anti-duplicado (filtrado a 'Sale').
+    public void RegisterCustomerPaymentIncome(
+        SalePaymentMethod method,
+        decimal amount,
+        Guid customerPaymentId,
+        UserId createdByUserId)
+    {
+        EnsureOpen();
+
+        var (type, direction, description) = method switch
+        {
+            SalePaymentMethod.Cash     => (CashMovementType.CuentaCorrienteIncome, CashMovementDirection.In,   "Cobro cliente - efectivo"),
+            SalePaymentMethod.Transfer => (CashMovementType.TransferIncome,        CashMovementDirection.In,   "Cobro cliente - transferencia"),
+            SalePaymentMethod.Card     => (CashMovementType.CardIncome,            CashMovementDirection.In,   "Cobro cliente - tarjeta"),
+            SalePaymentMethod.Check    => (CashMovementType.CuentaCorrienteIncome, CashMovementDirection.None, "Cobro cliente - cheque"),
+            _                          => (CashMovementType.CuentaCorrienteIncome, CashMovementDirection.None, "Cobro cliente - otros"),
+        };
+
+        AddMovement(
+            type,
+            direction,
+            amount,
+            CashReferenceTypes.CustomerPayment,
+            customerPaymentId,
+            description,
+            createdByUserId,
+            paymentMethod: (int)method,
+            customerPaymentId: customerPaymentId);
+    }
+
+    // Reversa de un cobro a nivel cliente, por método: el efectivo sale del cajón (Out) y
+    // transferencia/tarjeta/cheque/otros se registran como reversa neutra (None) para trazabilidad
+    // sin tocar el efectivo esperado — espejo de RegisterCcPaymentCancellation.
+    public void RegisterCustomerPaymentCancellation(
+        SalePaymentMethod method,
+        decimal amount,
+        Guid customerPaymentId,
+        UserId createdByUserId)
+    {
+        EnsureOpen();
+
+        var direction = method == SalePaymentMethod.Cash
+            ? CashMovementDirection.Out
+            : CashMovementDirection.None;
+
+        var description = method switch
+        {
+            SalePaymentMethod.Cash     => "Cobro cliente anulado - efectivo",
+            SalePaymentMethod.Transfer => "Cobro cliente anulado - transferencia",
+            SalePaymentMethod.Card     => "Cobro cliente anulado - tarjeta",
+            SalePaymentMethod.Check    => "Cobro cliente anulado - cheque",
+            _                          => "Cobro cliente anulado - otros",
+        };
+
+        AddMovement(
+            CashMovementType.CuentaCorrienteCancellation,
+            direction,
+            amount,
+            CashReferenceTypes.CustomerPayment,
+            customerPaymentId,
+            description,
+            createdByUserId,
+            paymentMethod: (int)method,
+            customerPaymentId: customerPaymentId);
+    }
+
     public void RegisterSaleCancellation(
         IEnumerable<SalePayment> payments,
         Guid saleId,
@@ -477,7 +546,8 @@ public sealed class CashSession : AggregateRoot<CashSessionId>
         Guid? ccPaymentGroupId = null,
         int? paymentMethod = null,
         Guid? saleCcPaymentId = null,
-        Guid? supplierPaymentId = null)
+        Guid? supplierPaymentId = null,
+        Guid? customerPaymentId = null)
     {
         _movements.Add(CashMovement.Create(
             Id,
@@ -492,7 +562,8 @@ public sealed class CashSession : AggregateRoot<CashSessionId>
             originalCashSessionId: originalCashSessionId,
             paymentMethod: paymentMethod,
             saleCcPaymentId: saleCcPaymentId,
-            supplierPaymentId: supplierPaymentId));
+            supplierPaymentId: supplierPaymentId,
+            customerPaymentId: customerPaymentId));
     }
 
     private void EnsureOpen()

@@ -63,6 +63,29 @@ public interface ISaleRepository
         CustomerId? customerId,
         CancellationToken cancellationToken = default);
 
+    // Bolsa por cliente: ventas CC activas con saldo pendiente > 0, más vieja primero (fuente FIFO). Tracked.
+    Task<IReadOnlyList<Sale>> ListPendingCcSalesByCustomerAsync(
+        CompanyId companyId,
+        CustomerId customerId,
+        CancellationToken cancellationToken = default);
+
+    // Todas las ventas CC del cliente (cualquier estado) para la bolsa/cuenta. Tracked.
+    Task<IReadOnlyList<Sale>> ListCcSalesByCustomerAsync(
+        CompanyId companyId,
+        CustomerId customerId,
+        CancellationToken cancellationToken = default);
+
+    // Ventas con imputaciones internas (SaleCcPayment) generadas por un cobro a nivel cliente. Tracked, para revertir.
+    Task<IReadOnlyList<Sale>> ListByCustomerPaymentIdAsync(
+        CompanyId companyId,
+        Guid customerPaymentId,
+        CancellationToken cancellationToken = default);
+
+    // Saldo CC pendiente por cliente (ventas CC activas con pendiente > 0). Para la lista de cuentas.
+    Task<Dictionary<Guid, decimal>> GetPendingCcTotalsByCustomerAsync(
+        CompanyId companyId,
+        CancellationToken cancellationToken = default);
+
     Task<IReadOnlyList<Sale>> ListReservingByProductAsync(
         CompanyId companyId,
         ProductId productId,

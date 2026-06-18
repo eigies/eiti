@@ -1,98 +1,107 @@
-# F3: Desglose de ingresos por medio de pago en caja (footer + PDF/Excel)
+# Cuenta Corriente de clientes en "modo bolsa" (espejo de proveedores)
 
-- [x] Crear PaymentMethodBreakdownItem.cs en CashSessions/Common/
-- [x] Agregar PaymentBreakdown a CashSessionSummaryResponse
-- [x] Agregar GetPaymentsBySaleIdsAsync a ISaleRepository
-- [x] Implementar GetPaymentsBySaleIdsAsync en SaleRepository
-- [x] Actualizar GetCashSessionSummaryHandler para cargar pagos por sale IDs
-- [x] Actualizar CashSessionMapper.MapSummary para construir PaymentBreakdown
-- [x] Build backend (0 errores)
-- [x] Agregar PaymentMethodBreakdownItem a cash.models.ts (frontend)
-- [x] Agregar paymentBreakdown a CashSessionSummaryResponse frontend
-- [x] Actualizar cash.component.ts: footer visual de desglose
-- [x] Actualizar exportSession() Excel: filas/hoja de desglose
-- [x] Actualizar exportSessionsPdf(): sección de desglose al pie de cada sesion
-- [x] Documentar en tasks/lessons.md
+## Objetivo
+Llevar la CC de clientes al mismo modelo que proveedores: **bolsa por cliente** (saldo global,
+débitos = ventas CC / créditos = cobros), con **cobro a nivel cliente** imputado **FIFO** a las ventas
+pendientes, y la misma trazabilidad cobro→venta (desglose A, resumen al cobrar B, aviso al anular D).
 
----
+## Decisiones cerradas con el usuario
+1. **Espejo completo** (no orquestador liviano): nuevo `CustomerPayment` a nivel cliente + FIFO +
+   caja/cheque/tarjeta al nivel del cobro + UI bolsa.
+2. **Reemplazar** el flujo por-venta (`/sales-cc/:id/payments`) por la bolsa. Los cobros viejos por-venta
+   quedan **legacy** (visibles, sin desglose).
 
-# Agent-F5: Mejoras UI grilla de productos (solo frontend)
+## Hechos del código (verificados)
+- `SalePaymentMethod.CustomerCredit = 6` ya existe → método de las imputaciones internas FIFO (front ya lo
+  rotula "Saldo a favor"). Cuentan en `Sale.CcPaidTotal` y transicionan la venta a Paid.
+- CC se gatea con `PermissionCodes.SalesPay` (cobrar) / `SalesAccess` (ver). **No hace falta permiso nuevo**
+  ni tocar las 3 listas.
+- `Customer.CreditBalance` + `AddCredit/ConsumeCredit` ya existen (hoy solo se genera al sobre-pagar UNA
+  venta; no se auto-imputa). La bolsa lo va a auto-imputar como en proveedores.
+- `Sale`: `IsCuentaCorriente`, `CcPaidTotal` (suma CcPayments activos), `CcPendingAmount`, `AddCcPayment`,
+  `CancelCcPayment`. La confirmación de stock ocurre cuando la venta pasa a Paid.
+- Caja CC actual (en `AddCcPaymentGroup`): efectivo→cajón; transferencia/tarjeta visibles pero excluidas del
+  esperado; cheque/otro registrados; creación de `Cheque` (`CreateForCcPayment`); recargo de tarjeta por plan
+  del banco. `CancelCcPayment` revierte por método + revierte crédito + revierte stock.
+- gpt5-5 ya agregó a `CashMovement` referencias `SupplierPaymentId`/`SaleCcPaymentId` y el `CashSessionMapper`
+  deriva el desglose desde movimientos → el patrón a seguir para `CustomerPaymentId`.
 
-## Plan
-- [x] Leer Rules.md y archivos existentes (ts, html, css)
-- [x] CAMBIO 1: Ocultar columnas no esenciales (Descripcion, Unitario, Reservado, Actualizado)
-  - [x] Agregar `compactMode: boolean` y getter `showHiddenColumns` en .ts
-  - [x] Agregar botón "Columnas ▼ / Compacto ▲" en bulk-bar
-  - [x] Agregar `*ngIf="showHiddenColumns"` en th+td de columnas ocultables
-  - [x] En bulkEditMode `showHiddenColumns` retorna true automáticamente
-- [x] CAMBIO 2: Botón ojo y popup de detalle
-  - [x] Extender `ProductModalMode` a incluir 'detail'
-  - [x] Agregar `openDetailModal(product)` y `toggleCompactMode()` en .ts
-  - [x] Agregar `submitModal()` guard para 'detail'
-  - [x] Agregar botón ojo antes de "Editar" en columna Acciones
-  - [x] Agregar bloque detail-panel en modal HTML
-  - [x] Actualizar modal__head para título/icono del modo 'detail'
-  - [x] Excluir 'detail' del form edit/delete
-- [x] CAMBIO 3: Ajustes visuales de densidad en CSS
-  - [x] Reducir padding th: 0.72→0.56rem; td: 0.82→0.6rem
-  - [x] Reducir min-width de .tbl: 1320px→900px
-  - [x] Agregar estilos .btn-icon, .btn-icon--eye, .detail-panel, .detail-section, .detail-row, etc.
-- [x] Verificar bulkEditMode y modos edit/delete/stock (no se tocó lógica existente)
-- [x] Documentar en tasks/lessons.md
+## Blueprint: reusar el feature de proveedores casi 1:1
+- Dominio: `CustomerPayment` ↔ `SupplierPayment`; `CustomerCreditApplicator` ↔ `SupplierCreditApplicator`.
+- App: `AddCustomerPayment`/`CancelCustomerPayment` ↔ `AddSupplierPayment`/`CancelSupplierPayment`;
+  `ListCustomerAccounts`/`GetCustomerAccount` ↔ `ListSupplierAccounts`/`GetSupplierAccount`.
+- Front: `customer-account.component` ↔ `supplier-account.component` (plantilla casi idéntica).
+- A/B/D salen gratis encima, igual que en proveedores.
 
 ---
 
-# F2: Pase entre cajas (transferencia de dinero entre CashDrawers)
+## FASE 1 — Dominio + entidad + migración estructural (bajo riesgo, nada cableado)
+- [ ] `eiti.Domain/Customers/CustomerPayment.cs`: Id, CompanyId, CustomerId, BranchId, Method
+      (SalePaymentMethod), Amount, Date, Notes, Status (Active/Cancelled), CreatedAt, CreatedByUserId,
+      ChequeId?, y campos de tarjeta (CardBankId, CardCuotas, CardSurchargePct, CardSurchargeAmt,
+      TotalCobrado). Métodos `Create(...)`, `Cancel()`, `SetCardData(...)`. (Espejo de SupplierPayment +
+      campos de tarjeta de SaleCcPayment.)
+- [ ] `SaleCcPayment`: agregar `Guid? CustomerPaymentId` + parámetro opcional en `Create(...)` (back-link de
+      las imputaciones FIFO con el cobro que las generó).
+- [ ] EF: `CustomerPaymentConfiguration` + `DbSet<CustomerPayment>` + mapear `SaleCcPayment.CustomerPaymentId`
+      (`decimal(18,2)`, índices por CustomerId/Status).
+- [ ] `ICustomerPaymentRepository` (+ impl + DI).
+- [ ] `ISaleRepository.ListPendingCcSalesByCustomerAsync(companyId, customerId)` — ventas CC activas con
+      pendiente > 0, **más vieja primero** (fuente FIFO). + `ListCcSalesByCustomerAsync` para la bolsa.
+- [ ] Migración estructural: tabla `CustomerPayments` + columna `SaleCcPayments.CustomerPaymentId`.
+      Generar desde `eiti.Infrastructure`. **No aplicar a prod sin OK.**
+- [ ] Build con dependencias.
 
-- [x] Actualizar enum CashMovementType (CashTransferOut=5, CashTransferIn=6)
-- [x] Agregar TransferCounterpartSessionId a CashMovement
-- [x] Agregar RegisterTransferOut / RegisterTransferIn a CashSession
-- [x] Crear CashTransferErrors.cs
-- [x] Crear CreateCashTransferCommand.cs
-- [x] Crear CreateCashTransferCommandValidator.cs
-- [x] Crear CreateCashTransferHandler.cs
-- [x] Agregar endpoint POST /cash-sessions/transfers en CashSessionsController
-- [x] Actualizar CashMovementConfiguration para TransferCounterpartSessionId
-- [x] Crear migration AddCashTransferSupport
-- [x] Build backend (0 errores)
-- [x] Agregar transferencia al CashService (frontend)
-- [x] Agregar modal de transferencia al cash.component.ts
-- [x] Documentar en tasks/lessons.md
+## FASE 2 — FIFO + comandos con caja/cheque/tarjeta/stock
+- [ ] `CustomerCreditApplicator.ApplyToPendingCcSalesAsync(...)` (espejo del de proveedores): consume
+      `CreditBalance`, crea `SaleCcPayment` método `CustomerCredit` con `CustomerPaymentId`, devuelve
+      imputaciones `[{ saleId, code, amount }]` + ventas que pasaron a Paid (para confirmar stock).
+- [ ] `AddCustomerPayment` (gated `SalesPay`): registra `CustomerPayment` real (método/cheque/tarjeta/caja).
+      - Resolver caja abierta (`CashDrawerAccessPolicy`).
+      - Cheque: validar/crear (referencia al CustomerPayment); recargo de tarjeta por plan del banco.
+      - Caja: **un asiento por cobro** según método (nuevos métodos `RegisterCustomerPaymentIncome` /
+        por-método, espejo de los CC income; efectivo al esperado, transfer/tarjeta visibles excluidos).
+      - `customer.AddCredit(monto)` + applicator FIFO; excedente queda como saldo a favor.
+      - Confirmar stock de las ventas que pasaron a Paid.
+- [ ] `CancelCustomerPayment` (gated `SalesPay`): cancela las imputaciones (ventas vuelven a pendiente),
+      descuenta del `CreditBalance` el sobrante que dejó, revierte caja, devuelve cheque, revierte stock.
+- [ ] Caja: `CashMovement.CustomerPaymentId` + `CashReferenceTypes.CustomerPayment` + métodos en
+      `CashSession` + mapear en `CashSessionMapper` (que los cobros entren en los contadores/desglose).
+      Migración de columna+índice de caja. **No aplicar a prod sin OK.**
+- [ ] Controller: endpoints `GET customer-accounts`, `GET customers/{id}/account`,
+      `POST customers/{id}/payments`, `DELETE customers/{id}/payments/{paymentId}`.
+- [ ] Retirar endpoints de cobro por-venta (`AddCcPaymentGroup`/`CancelCcPayment`) o dejarlos solo-lectura
+      para legacy (a decidir al llegar).
+- [ ] Build con dependencias.
 
----
+## FASE 3 — Queries (bolsa + desglose)
+- [ ] `ListCustomerAccounts` (gated `SalesAccess`): clientes con `saldoPendiente` (deuda CC) + `saldoAFavor`.
+- [ ] `GetCustomerAccount` (gated `SalesAccess`): cabecera (deuda/cobrado/saldo/saldo a favor) + movimientos
+      unificados (ventas CC débitos + CustomerPayment créditos + cobros legacy por-venta) + **desglose A**
+      por cobro (imputaciones + sobrante), calculado desde los `SaleCcPayment` con `CustomerPaymentId`.
+- [ ] **B** — `AddCustomerPaymentResponse` incluye `Imputaciones`.
+- [ ] Build con dependencias.
 
-# F1: Canal de origen en ventas
+## FASE 4 — Frontend (reusar supplier-account)
+- [ ] `customer-account.models.ts` + `customer-account.service.ts` (list/get/addPayment/cancelPayment).
+- [ ] `customer-accounts` (lista de clientes con saldo) + `customer-account` (bolsa) — plantilla de
+      `supplier-account`. Incluye A (fila de cobro expandible), B (toast), D (confirm con ventas que vuelven).
+- [ ] Rutas: `clients-cc` → lista; `clients-cc/customer/:customerId` → bolsa. Retirar
+      `sales-cc/:id/payments`. Navbar apunta a la lista.
+- [ ] `ng build --configuration development`.
 
-- [x] Crear enum SaleSourceChannel en eiti.Domain/Sales/
-- [x] Agregar propiedad y método SetSourceChannel en Sale.cs
-- [x] Actualizar SaleConfiguration.cs para mapear la nueva columna
-- [x] Crear migration AddSaleSourceChannel
-- [x] Agregar SaleSourceChannel? SourceChannel a CreateSaleCommand
-- [x] Agregar SaleSourceChannel? SourceChannel a UpdateSaleCommand
-- [x] Llamar sale.SetSourceChannel en CreateSaleHandler
-- [x] Llamar sale.SetSourceChannel en UpdateSaleHandler
-- [x] Agregar SourceChannel a ListSalesItemResponse
-- [x] Incluir SourceChannel en ListSalesHandler mapper
-- [x] Build backend (0 errores)
-- [x] Agregar sourceChannel a SaleResponse en sale.models.ts (frontend)
-- [x] Agregar sourceChannel al CreateSaleRequest en sale.models.ts
-- [x] Agregar sourceChannel al lineForm y editMetaForm en sales-page.component.ts
-- [x] Agregar select de canal en el formulario de nueva venta (HTML)
-- [x] Agregar select de canal en el formulario de edición (HTML)
-- [x] Mostrar badge de canal en sale-card (HTML)
-- [x] Agregar filtro por canal en la lista (HTML + TS)
-- [x] Build frontend (0 errores)
-- [x] Documentar en tasks/lessons.md
+## FASE 5 — Datos legacy + verificación e2e
+- [ ] Cobros viejos por-venta visibles como legacy (sin desglose), igual que en proveedores.
+- [ ] Flujo manual: lista de clientes → bolsa → cobrar parcial (FIFO a la venta más vieja) → cheque entero →
+      sobre-cobro a saldo a favor → anular (ventas vuelven a pendiente, caja/cheque/stock revertidos) →
+      caja muestra contadores correctos.
 
----
+## Caveat (igual que proveedores)
+Anular un cobro revierte sus imputaciones directas y el sobrante de saldo a favor. Si ese saldo ya fue
+consumido por una venta posterior, `CreditBalance` puede quedar inconsistente (misma limitación que hoy y que
+en proveedores). Se documenta.
 
-# F6: Caja con multiples usuarios asignados
-
-- [x] Relevar modelo actual de asignacion de caja en backend y frontend
-- [x] Reemplazar asignacion singular por tabla `CashDrawerUserAssignments`
-- [x] Mantener restriccion de negocio: un usuario solo puede pertenecer a una caja
-- [x] Ajustar repositorio y login para resolver la caja efectiva del usuario desde la nueva tabla
-- [x] Adaptar administracion frontend para asignar varios usuarios por caja
-- [x] Crear migracion con backfill desde `CashDrawers.AssignedUserId`
-- [x] Incluir `Designer.cs` y snapshot consistentes para la migracion
-- [x] Verificar build frontend final
+## Riesgo principal
+La caja: tocar `CashSession`/`CashMovement`/`CashSessionMapper` es el área que gpt5-5 acaba de estabilizar.
+Hay que sumar el caso CustomerPayment sin romper los contadores existentes. Es la parte de mayor cuidado y la
+que más tests amerita.

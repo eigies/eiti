@@ -16,4 +16,5 @@ public sealed record CashSessionMovementResponse(
     Guid? OriginalCashSessionId,
     int? PaymentMethod,
     Guid? SaleCcPaymentId,
-    Guid? SupplierPaymentId);
+    Guid? SupplierPaymentId,
+    Guid? CustomerPaymentId);

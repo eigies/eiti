@@ -19,6 +19,9 @@ public sealed class SaleCcPayment : Entity<SaleCcPaymentId>
     public decimal? CardSurchargeAmt { get; private set; }
     public decimal? TotalCobrado { get; private set; }
 
+    // Back-link de las imputaciones FIFO (method = CustomerCredit) con el cobro a nivel cliente que las generó.
+    public Guid? CustomerPaymentId { get; private set; }
+
     private SaleCcPayment()
     {
     }
@@ -35,7 +38,8 @@ public sealed class SaleCcPayment : Entity<SaleCcPaymentId>
         int? cardCuotas = null,
         decimal? cardSurchargePct = null,
         decimal? cardSurchargeAmt = null,
-        decimal? totalCobrado = null)
+        decimal? totalCobrado = null,
+        Guid? customerPaymentId = null)
         : base(id)
     {
         if (amount <= 0)
@@ -61,6 +65,7 @@ public sealed class SaleCcPayment : Entity<SaleCcPaymentId>
         CardSurchargePct = cardSurchargePct;
         CardSurchargeAmt = cardSurchargeAmt;
         TotalCobrado = totalCobrado;
+        CustomerPaymentId = customerPaymentId;
     }
 
     public static SaleCcPayment Create(
@@ -74,9 +79,10 @@ public sealed class SaleCcPayment : Entity<SaleCcPaymentId>
         int? cardCuotas = null,
         decimal? cardSurchargePct = null,
         decimal? cardSurchargeAmt = null,
-        decimal? totalCobrado = null)
+        decimal? totalCobrado = null,
+        Guid? customerPaymentId = null)
     {
-        return new SaleCcPayment(SaleCcPaymentId.New(), saleId, method, amount, date, notes, groupId, cardBankId, cardCuotas, cardSurchargePct, cardSurchargeAmt, totalCobrado);
+        return new SaleCcPayment(SaleCcPaymentId.New(), saleId, method, amount, date, notes, groupId, cardBankId, cardCuotas, cardSurchargePct, cardSurchargeAmt, totalCobrado, customerPaymentId);
     }
 
     public void SetCardData(int bankId, int cuotas, decimal surchargePct, decimal surchargeAmt)

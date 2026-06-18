@@ -37,6 +37,7 @@ public sealed class ApplicationDbContext : DbContext
     public DbSet<CashSession> CashSessions { get; set; }
     public DbSet<CashMovement> CashMovements { get; set; }
     public DbSet<Customer> Customers { get; set; }
+    public DbSet<CustomerPayment> CustomerPayments => Set<CustomerPayment>();
     public DbSet<Company> Companies { get; set; }
     public DbSet<CompanyOnboarding> CompanyOnboarding { get; set; }
     public DbSet<Product> Products { get; set; }

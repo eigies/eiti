@@ -1,6 +1,7 @@
 using eiti.Application.Abstractions.Repositories;
 using eiti.Application.Abstractions.Services;
 using eiti.Application.Common;
+using eiti.Application.Features.Purchases.Common;
 using eiti.Domain.Purchases;
 using MediatR;
 
@@ -63,6 +64,23 @@ public sealed class GetSupplierAccountHandler
             .Sum(p => p.PendingAmount);
         var pagadoTotal = deudaTotal - saldoPendiente;
 
+        // Imputaciones por pago de proveedor: qué facturas cubrió cada pago y por cuánto (solo filas activas).
+        var imputacionesByPayment = new Dictionary<Guid, List<SupplierPaymentImputacion>>();
+        foreach (var p in purchases)
+        {
+            foreach (var pay in p.Payments.Where(x =>
+                x.SupplierPaymentId.HasValue && x.Status == PurchasePaymentStatus.Active))
+            {
+                if (!imputacionesByPayment.TryGetValue(pay.SupplierPaymentId!.Value, out var list))
+                {
+                    list = new List<SupplierPaymentImputacion>();
+                    imputacionesByPayment[pay.SupplierPaymentId.Value] = list;
+                }
+
+                list.Add(new SupplierPaymentImputacion(p.Id, p.Code, p.InvoiceNumber, pay.Amount));
+            }
+        }
+
         var movements = new List<SupplierAccountMovement>();
 
         foreach (var p in purchases)
@@ -77,6 +95,8 @@ public sealed class GetSupplierAccountHandler
                 true,
                 (int)p.Status,
                 p.Status.ToString(),
+                null,
+                null,
                 null,
                 null));
 
@@ -97,6 +117,8 @@ public sealed class GetSupplierAccountHandler
                     (int)legacy.Status,
                     legacy.Status.ToString(),
                     legacy.Method.ToString(),
+                    null,
+                    null,
                     null));
             }
         }
@@ -106,6 +128,23 @@ public sealed class GetSupplierAccountHandler
             var chequeNumero = pay.ChequeId.HasValue && chequeNumeroById.TryGetValue(pay.ChequeId.Value, out var num)
                 ? num
                 : null;
+
+            // Desglose pago → facturas (solo para pagos activos; al anular las imputaciones se cancelan).
+            IReadOnlyList<SupplierPaymentImputacion>? imputaciones = null;
+            decimal? sobrante = null;
+            if (pay.Status == PurchasePaymentStatus.Active
+                && imputacionesByPayment.TryGetValue(pay.Id, out var paymentImputaciones))
+            {
+                imputaciones = paymentImputaciones;
+                sobrante = Math.Max(0m, pay.Amount - paymentImputaciones.Sum(i => i.Amount));
+            }
+            else if (pay.Status == PurchasePaymentStatus.Active)
+            {
+                // Pago activo sin imputaciones: todo quedó como saldo a favor.
+                imputaciones = [];
+                sobrante = pay.Amount;
+            }
+
             movements.Add(new SupplierAccountMovement(
                 "pago",
                 pay.Id,
@@ -117,7 +156,9 @@ public sealed class GetSupplierAccountHandler
                 (int)pay.Status,
                 pay.Status.ToString(),
                 pay.Method.ToString(),
-                chequeNumero));
+                chequeNumero,
+                imputaciones,
+                sobrante));
         }
 
         var ordered = movements

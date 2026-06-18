@@ -129,7 +129,7 @@ public sealed class AddSupplierPaymentHandler : IRequestHandler<AddSupplierPayme
 
         // Imputación FIFO a las compras pendientes del proveedor; el excedente queda como saldo a favor.
         supplier.AddCredit(amount);
-        await SupplierCreditApplicator.ApplyToPendingPurchasesAsync(
+        var imputaciones = await SupplierCreditApplicator.ApplyToPendingPurchasesAsync(
             supplier, companyId.Value, _purchaseRepository, null, cancellationToken, payment.Id);
         _supplierRepository.Update(supplier);
 
@@ -145,7 +145,8 @@ public sealed class AddSupplierPaymentHandler : IRequestHandler<AddSupplierPayme
             amount,
             appliedToPurchases,
             creditAdded,
-            creditAfter));
+            creditAfter,
+            imputaciones));
     }
 
     private static readonly TimeSpan ArgentinaOffset = TimeSpan.FromHours(-3);

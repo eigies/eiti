@@ -1,5 +1,6 @@
 using eiti.Application.Common;
 using eiti.Application.Common.Authorization;
+using eiti.Application.Features.Purchases.Common;
 using MediatR;
 
 namespace eiti.Application.Features.Suppliers.Queries.GetSupplierAccount;
@@ -32,4 +33,6 @@ public sealed record SupplierAccountMovement(
     int Status,
     string StatusName,
     string? Method,
-    string? ChequeNumero);
+    string? ChequeNumero,
+    IReadOnlyList<SupplierPaymentImputacion>? Imputaciones,  // qué facturas cubrió este pago
+    decimal? Sobrante);                                      // excedente del pago a saldo a favor

@@ -63,6 +63,19 @@ public sealed class AuditSnapshotService : IAuditSnapshotService
         "UpdateCustomerCommand"
     ];
 
+    // Cobros de cuenta corriente a nivel cliente (la "bolsa"): se audita el CustomerPayment con su
+    // desglose de imputaciones + el saldo a favor del cliente. AddCustomerPayment crea el cobro (snapshot
+    // solo "después", con el PaymentId de la respuesta); CancelCustomerPayment lo muta (snapshot antes/después).
+    private static readonly HashSet<string> CustomerPaymentCreateActions =
+    [
+        "AddCustomerPaymentCommand"
+    ];
+
+    private static readonly HashSet<string> CustomerPaymentActions =
+    [
+        "CancelCustomerPaymentCommand"
+    ];
+
     private static readonly HashSet<string> SupplierCreateActions =
     [
         "CreateSupplierCommand"
@@ -99,6 +112,9 @@ public sealed class AuditSnapshotService : IAuditSnapshotService
 
         if (CustomerActions.Contains(actionType) && TryGetGuid(request, "Id", out var customerId))
             return Serialize(await BuildCustomerSnapshotAsync(customerId, companyId, cancellationToken));
+
+        if (CustomerPaymentActions.Contains(actionType) && TryGetGuid(request, "PaymentId", out var cancelPaymentId))
+            return Serialize(await BuildCustomerPaymentSnapshotAsync(cancelPaymentId, companyId, cancellationToken));
 
         if (SupplierActions.Contains(actionType) && TryGetGuid(request, "Id", out var supplierId))
             return Serialize(await BuildSupplierSnapshotAsync(supplierId, companyId, cancellationToken));
@@ -147,6 +163,12 @@ public sealed class AuditSnapshotService : IAuditSnapshotService
             || (CustomerActions.Contains(actionType) && TryGetGuid(request, "Id", out createdCustomerId)))
         {
             return Serialize(await BuildCustomerSnapshotAsync(createdCustomerId, companyId, cancellationToken));
+        }
+
+        if ((CustomerPaymentCreateActions.Contains(actionType) && TryGetResponseGuid(response, "PaymentId", out var customerPaymentId))
+            || (CustomerPaymentActions.Contains(actionType) && TryGetGuid(request, "PaymentId", out customerPaymentId)))
+        {
+            return Serialize(await BuildCustomerPaymentSnapshotAsync(customerPaymentId, companyId, cancellationToken));
         }
 
         if ((SupplierCreateActions.Contains(actionType) && TryGetResponseId(response, out var createdSupplierId))
@@ -393,6 +415,59 @@ public sealed class AuditSnapshotService : IAuditSnapshotService
         };
     }
 
+    private async Task<object?> BuildCustomerPaymentSnapshotAsync(Guid paymentId, Guid companyId, CancellationToken cancellationToken)
+    {
+        var payment = await _context.CustomerPayments
+            .AsNoTracking()
+            .FirstOrDefaultAsync(p => p.Id == paymentId && p.CompanyId == companyId, cancellationToken);
+
+        if (payment is null)
+            return null;
+
+        var customer = await _context.Customers
+            .AsNoTracking()
+            .FirstOrDefaultAsync(
+                c => c.Id == new CustomerId(payment.CustomerId) && c.CompanyId == new CompanyId(companyId),
+                cancellationToken);
+
+        // Imputaciones: filas SaleCcPayment (método CustomerCredit) generadas por este cobro.
+        var imputaciones = await _context.SaleCcPayments
+            .AsNoTracking()
+            .Where(p => p.CustomerPaymentId == paymentId)
+            .Select(p => new
+            {
+                SaleId = p.SaleId.Value,
+                Method = (int)p.Method,
+                p.Amount,
+                Status = (int)p.Status
+            })
+            .ToListAsync(cancellationToken);
+
+        return new
+        {
+            Entity = "CustomerPayment",
+            Id = payment.Id,
+            payment.CustomerId,
+            CustomerName = customer?.Name,
+            Method = (int)payment.Method,
+            MethodName = payment.Method.ToString(),
+            payment.Amount,
+            Status = (int)payment.Status,
+            StatusName = payment.Status.ToString(),
+            payment.Date,
+            payment.Reference,
+            payment.Notes,
+            payment.ChequeId,
+            payment.CardBankId,
+            payment.CardCuotas,
+            payment.CardSurchargePct,
+            payment.CardSurchargeAmt,
+            payment.TotalCobrado,
+            CustomerCreditBalance = customer?.CreditBalance,
+            Imputaciones = imputaciones
+        };
+    }
+
     private async Task<object?> BuildSupplierSnapshotAsync(Guid supplierId, Guid companyId, CancellationToken cancellationToken)
     {
         var supplier = await _context.Suppliers
@@ -487,5 +562,17 @@ public sealed class AuditSnapshotService : IAuditSnapshotService
         var source = responseValue ?? response;
 
         return TryGetGuid(source, "Id", out id);
+    }
+
+    private static bool TryGetResponseGuid(object? response, string propertyName, out Guid id)
+    {
+        id = Guid.Empty;
+        if (response is null)
+            return false;
+
+        var responseValue = response.GetType().GetProperty("Value")?.GetValue(response);
+        var source = responseValue ?? response;
+
+        return TryGetGuid(source, propertyName, out id);
     }
 }

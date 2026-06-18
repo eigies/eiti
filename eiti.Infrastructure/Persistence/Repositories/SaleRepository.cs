@@ -199,6 +199,74 @@ public sealed class SaleRepository : ISaleRepository
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyList<Sale>> ListPendingCcSalesByCustomerAsync(
+        CompanyId companyId,
+        CustomerId customerId,
+        CancellationToken cancellationToken = default)
+    {
+        // CC activas (no canceladas) del cliente, más vieja primero (FIFO). Tracked: las imputaciones se persisten
+        // en el SaveChanges del handler. El filtro de pendiente > 0 se aplica en memoria (CcPendingAmount es computado).
+        var sales = await _context.Sales
+            .Include(sale => sale.Details)
+            .Include(sale => sale.CcPayments)
+            .Where(sale => sale.CompanyId == companyId
+                && sale.CustomerId == customerId
+                && sale.IsCuentaCorriente
+                && sale.SaleStatus != SaleStatus.Cancel)
+            .OrderBy(sale => sale.CreatedAt)
+            .ToListAsync(cancellationToken);
+
+        return sales
+            .Where(sale => sale.CcPendingAmount > 0)
+            .ToList();
+    }
+
+    public async Task<IReadOnlyList<Sale>> ListCcSalesByCustomerAsync(
+        CompanyId companyId,
+        CustomerId customerId,
+        CancellationToken cancellationToken = default)
+    {
+        return await _context.Sales
+            .Include(sale => sale.Details)
+            .Include(sale => sale.CcPayments)
+            .Where(sale => sale.CompanyId == companyId
+                && sale.CustomerId == customerId
+                && sale.IsCuentaCorriente)
+            .OrderByDescending(sale => sale.CreatedAt)
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<Sale>> ListByCustomerPaymentIdAsync(
+        CompanyId companyId,
+        Guid customerPaymentId,
+        CancellationToken cancellationToken = default)
+    {
+        return await _context.Sales
+            .Include(sale => sale.Details)
+            .Include(sale => sale.CcPayments)
+            .Where(sale => sale.CompanyId == companyId
+                && sale.CcPayments.Any(p => p.CustomerPaymentId == customerPaymentId))
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<Dictionary<Guid, decimal>> GetPendingCcTotalsByCustomerAsync(
+        CompanyId companyId,
+        CancellationToken cancellationToken = default)
+    {
+        var sales = await _context.Sales
+            .Include(sale => sale.CcPayments)
+            .Where(sale => sale.CompanyId == companyId
+                && sale.IsCuentaCorriente
+                && sale.SaleStatus != SaleStatus.Cancel
+                && sale.CustomerId != null)
+            .ToListAsync(cancellationToken);
+
+        return sales
+            .Where(sale => sale.CustomerId != null && sale.CcPendingAmount > 0)
+            .GroupBy(sale => sale.CustomerId!.Value)
+            .ToDictionary(g => g.Key, g => g.Sum(sale => sale.CcPendingAmount));
+    }
+
     public async Task<IReadOnlyList<Sale>> ListReservingByProductAsync(
         CompanyId companyId,
         ProductId productId,

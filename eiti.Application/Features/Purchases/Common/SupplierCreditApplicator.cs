@@ -12,7 +12,8 @@ internal static class SupplierCreditApplicator
     // del proveedor, disponible para la próxima compra (mismo comportamiento que hoy).
     // El pago SupplierCredit es una imputación interna: NO toca la caja (el efectivo ya se movió
     // en el pago/sobrepago que generó el excedente).
-    public static async Task ApplyToPendingPurchasesAsync(
+    // Devuelve el detalle de qué compras (facturas) cubrió y por cuánto, en orden FIFO.
+    public static async Task<IReadOnlyList<SupplierPaymentImputacion>> ApplyToPendingPurchasesAsync(
         Supplier supplier,
         Guid companyId,
         IPurchaseRepository purchaseRepository,
@@ -20,8 +21,10 @@ internal static class SupplierCreditApplicator
         CancellationToken cancellationToken,
         Guid? supplierPaymentId = null)
     {
+        var imputaciones = new List<SupplierPaymentImputacion>();
+
         if (supplier.CreditBalance <= 0)
-            return;
+            return imputaciones;
 
         var pendingPurchases = await purchaseRepository.ListPendingBySupplierAsync(
             companyId, supplier.Id, cancellationToken);
@@ -50,6 +53,11 @@ internal static class SupplierCreditApplicator
                 null,
                 "Saldo a favor aplicado automáticamente",
                 supplierPaymentId: supplierPaymentId));
+
+            imputaciones.Add(new SupplierPaymentImputacion(
+                purchase.Id, purchase.Code, purchase.InvoiceNumber, applied));
         }
+
+        return imputaciones;
     }
 }

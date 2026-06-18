@@ -47,6 +47,15 @@ public interface ICustomerRepository
         CompanyId companyId,
         CancellationToken cancellationToken = default);
 
+    Task<IReadOnlyList<Customer>> ListByIdsAsync(
+        CompanyId companyId,
+        IEnumerable<CustomerId> ids,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<Customer>> ListWithPositiveCreditAsync(
+        CompanyId companyId,
+        CancellationToken cancellationToken = default);
+
     void Update(Customer customer);
 
     void Delete(Customer customer);

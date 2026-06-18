@@ -1,8 +1,5 @@
 using eiti.Api.Extensions;
 using eiti.Application.Features.SaleTransport;
-using eiti.Application.Features.Sales.Commands.AddCcPayment;
-using eiti.Application.Features.Sales.Commands.AddCcPaymentGroup;
-using eiti.Application.Features.Sales.Commands.CancelCcPayment;
 using eiti.Application.Features.Sales.Commands.CancelSale;
 using eiti.Application.Features.Sales.Commands.CreateCcSale;
 using eiti.Application.Features.Sales.Commands.CreateSale;
@@ -155,40 +152,6 @@ public sealed class SalesController : ControllerBase
         return result.ToActionResult();
     }
 
-    [HttpPost("{id:guid}/cc-payments")]
-    public async Task<IActionResult> AddCcPayment(
-        Guid id,
-        [FromBody] AddCcPaymentRequest request,
-        CancellationToken cancellationToken)
-    {
-        var result = await _sender.Send(
-            new AddCcPaymentCommand(id, request.IdPaymentMethod, request.Amount, request.Date, request.Notes),
-            cancellationToken);
-        return result.ToActionResult();
-    }
-
-    [HttpPost("{id:guid}/cc-payments/{paymentId:guid}/cancel")]
-    public async Task<IActionResult> CancelCcPayment(
-        Guid id,
-        Guid paymentId,
-        CancellationToken cancellationToken)
-    {
-        var result = await _sender.Send(new CancelCcPaymentCommand(id, paymentId), cancellationToken);
-        return result.ToActionResult();
-    }
-
-    [HttpPost("{id:guid}/cc-payment-group")]
-    public async Task<IActionResult> AddCcPaymentGroup(
-        Guid id,
-        [FromBody] AddCcPaymentGroupRequest request,
-        CancellationToken cancellationToken)
-    {
-        var result = await _sender.Send(
-            new AddCcPaymentGroupCommand(id, request.Methods, request.Date, request.Notes, request.CashDrawerId),
-            cancellationToken);
-        return result.ToActionResult();
-    }
-
     [HttpGet("cc")]
     public async Task<IActionResult> ListCcSales(
         [FromQuery] Guid? customerId,
@@ -200,16 +163,4 @@ public sealed class SalesController : ControllerBase
 }
 
 public sealed record UpdateSaleTransportStatusRequest(int Status);
-
-public sealed record AddCcPaymentRequest(
-    int IdPaymentMethod,
-    decimal Amount,
-    DateTime Date,
-    string? Notes);
-
-public sealed record AddCcPaymentGroupRequest(
-    List<CcPaymentMethodLine> Methods,
-    DateTime Date,
-    string? Notes,
-    Guid? CashDrawerId);
 

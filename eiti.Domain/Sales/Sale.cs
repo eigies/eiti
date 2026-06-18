@@ -258,6 +258,78 @@ public sealed class Sale : AggregateRoot<SaleId>
         return payment;
     }
 
+    // Imputación interna FIFO (bolsa por cliente): aplica una porción del saldo a favor del cliente a esta
+    // venta CC pendiente, registrando un SaleCcPayment con método CustomerCredit y back-link al CustomerPayment
+    // que generó el crédito. NO toca la caja (el efectivo ya se movió en el cobro real). Devuelve true si la
+    // venta pasó a Paid con esta imputación (para que el handler confirme el stock).
+    public bool ApplyCustomerCredit(decimal amount, DateTime date, Guid customerPaymentId, string? notes)
+    {
+        if (!IsCuentaCorriente)
+        {
+            throw new InvalidOperationException("CC payments can only be added to Cuenta Corriente sales.");
+        }
+
+        if (SaleStatus == SaleStatus.Cancel)
+        {
+            throw new InvalidOperationException("Cannot add payments to a cancelled sale.");
+        }
+
+        var wasPaid = SaleStatus == SaleStatus.Paid;
+
+        var payment = SaleCcPayment.Create(
+            Id,
+            SalePaymentMethod.CustomerCredit,
+            amount,
+            date,
+            notes,
+            groupId: null,
+            customerPaymentId: customerPaymentId);
+        _ccPayments.Add(payment);
+
+        if (!wasPaid && NormalizeAmount(CcPaidTotal) >= NormalizeAmount(TotalAmount))
+        {
+            TransitionToPaidFromCc();
+            return true;
+        }
+
+        return false;
+    }
+
+    // Reversa de las imputaciones internas (CustomerCredit) generadas por un cobro a nivel cliente que se anula.
+    // Cancela las filas activas con ese customerPaymentId; si la venta estaba Paid y queda pendiente, vuelve a
+    // OnHold. Devuelve true si revirtió desde Paid (para que el handler revierta el stock).
+    public bool RevertCustomerCredit(Guid customerPaymentId)
+    {
+        if (!IsCuentaCorriente)
+        {
+            throw new InvalidOperationException("CC payments can only be cancelled on Cuenta Corriente sales.");
+        }
+
+        var rows = _ccPayments
+            .Where(p => p.CustomerPaymentId == customerPaymentId && p.Status == SaleCcPaymentStatus.Active)
+            .ToList();
+
+        if (rows.Count == 0)
+        {
+            return false;
+        }
+
+        var wasPaid = SaleStatus == SaleStatus.Paid;
+
+        foreach (var row in rows)
+        {
+            row.Cancel();
+        }
+
+        if (wasPaid && NormalizeAmount(CcPaidTotal) < NormalizeAmount(TotalAmount))
+        {
+            RevertToOnHoldFromCc();
+            return true;
+        }
+
+        return false;
+    }
+
     public IReadOnlyList<SaleCcPayment> AddCcPaymentGroup(
         IEnumerable<(SalePaymentMethod Method, decimal Amount)> methods,
         DateTime date,
