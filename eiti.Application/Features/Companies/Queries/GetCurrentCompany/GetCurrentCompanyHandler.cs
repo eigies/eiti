@@ -47,6 +47,8 @@ public sealed class GetCurrentCompanyHandler
                 company.IsWhatsAppEnabled,
                 company.WhatsAppSenderPhone,
                 company.DefaultNoDeliverySurcharge,
+                company.PdfLogoUrl,
+                company.PdfWatermarkUrl,
                 company.CreatedAt));
     }
 }

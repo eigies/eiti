@@ -22,5 +22,6 @@ public sealed class CreateCustomerValidator : AbstractValidator<CreateCustomerCo
         RuleFor(x => x.TaxId)
             .MaximumLength(20)
             .When(x => !string.IsNullOrWhiteSpace(x.TaxId));
+
     }
 }

@@ -77,7 +77,14 @@ public sealed class UpdateCurrentCompanyHandler
 
         try
         {
-            company.Update(companyName, companyDomain, isWhatsAppEnabled, whatsAppSenderPhone, defaultNoDeliverySurcharge);
+            company.Update(
+                companyName,
+                companyDomain,
+                isWhatsAppEnabled,
+                whatsAppSenderPhone,
+                defaultNoDeliverySurcharge,
+                request.PdfLogoUrl,
+                request.PdfWatermarkUrl);
         }
         catch (ArgumentException ex)
         {
@@ -95,6 +102,8 @@ public sealed class UpdateCurrentCompanyHandler
                 company.IsWhatsAppEnabled,
                 company.WhatsAppSenderPhone,
                 company.DefaultNoDeliverySurcharge,
+                company.PdfLogoUrl,
+                company.PdfWatermarkUrl,
                 company.CreatedAt));
     }
 }

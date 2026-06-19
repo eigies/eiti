@@ -7,4 +7,6 @@ public sealed record GetCurrentCompanyResponse(
     bool IsWhatsAppEnabled,
     string? WhatsAppSenderPhone,
     decimal? DefaultNoDeliverySurcharge,
+    string? PdfLogoUrl,
+    string? PdfWatermarkUrl,
     DateTime CreatedAt);

@@ -9,6 +9,8 @@ public sealed class Company : AggregateRoot<CompanyId>
     public bool IsWhatsAppEnabled { get; private set; }
     public string? WhatsAppSenderPhone { get; private set; }
     public decimal? DefaultNoDeliverySurcharge { get; private set; }
+    public string? PdfLogoUrl { get; private set; }
+    public string? PdfWatermarkUrl { get; private set; }
     public DateTime CreatedAt { get; private set; }
 
     private Company()
@@ -21,6 +23,8 @@ public sealed class Company : AggregateRoot<CompanyId>
         CompanyDomain primaryDomain,
         bool isWhatsAppEnabled,
         string? whatsAppSenderPhone,
+        string? pdfLogoUrl,
+        string? pdfWatermarkUrl,
         DateTime createdAt)
         : base(id)
     {
@@ -28,6 +32,8 @@ public sealed class Company : AggregateRoot<CompanyId>
         PrimaryDomain = primaryDomain;
         IsWhatsAppEnabled = isWhatsAppEnabled;
         WhatsAppSenderPhone = whatsAppSenderPhone;
+        PdfLogoUrl = pdfLogoUrl;
+        PdfWatermarkUrl = pdfWatermarkUrl;
         CreatedAt = createdAt;
     }
 
@@ -41,6 +47,8 @@ public sealed class Company : AggregateRoot<CompanyId>
             primaryDomain,
             false,
             null,
+            null,
+            null,
             DateTime.UtcNow);
     }
 
@@ -52,6 +60,8 @@ public sealed class Company : AggregateRoot<CompanyId>
             CompanyDomain.Create("legacy.local"),
             false,
             null,
+            null,
+            null,
             DateTime.UtcNow);
     }
 
@@ -60,7 +70,9 @@ public sealed class Company : AggregateRoot<CompanyId>
         CompanyDomain primaryDomain,
         bool isWhatsAppEnabled,
         string? whatsAppSenderPhone,
-        decimal? defaultNoDeliverySurcharge = null)
+        decimal? defaultNoDeliverySurcharge = null,
+        string? pdfLogoUrl = null,
+        string? pdfWatermarkUrl = null)
     {
         var normalizedSenderPhone = NormalizeSenderPhone(whatsAppSenderPhone);
         if (isWhatsAppEnabled && string.IsNullOrWhiteSpace(normalizedSenderPhone))
@@ -75,6 +87,8 @@ public sealed class Company : AggregateRoot<CompanyId>
         IsWhatsAppEnabled = isWhatsAppEnabled;
         WhatsAppSenderPhone = normalizedSenderPhone;
         DefaultNoDeliverySurcharge = defaultNoDeliverySurcharge;
+        PdfLogoUrl = NormalizeOptional(pdfLogoUrl, 1_000_000, nameof(pdfLogoUrl));
+        PdfWatermarkUrl = NormalizeOptional(pdfWatermarkUrl, 1_000_000, nameof(pdfWatermarkUrl));
     }
 
     private static string? NormalizeSenderPhone(string? value)
@@ -91,5 +105,21 @@ public sealed class Company : AggregateRoot<CompanyId>
         }
 
         return normalizedValue;
+    }
+
+    private static string? NormalizeOptional(string? value, int maxLength, string field)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var normalized = value.Trim();
+        if (normalized.Length > maxLength)
+        {
+            throw new ArgumentException($"{field} cannot exceed {maxLength} characters.", field);
+        }
+
+        return normalized;
     }
 }

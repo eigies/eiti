@@ -43,6 +43,14 @@ public sealed class CompanyConfiguration : IEntityTypeConfiguration<Company>
             .HasColumnType("decimal(18,2)")
             .IsRequired(false);
 
+        builder.Property(company => company.PdfLogoUrl)
+            .HasColumnType("text")
+            .IsRequired(false);
+
+        builder.Property(company => company.PdfWatermarkUrl)
+            .HasColumnType("text")
+            .IsRequired(false);
+
         builder.Property(company => company.CreatedAt).IsRequired();
 
         builder.HasIndex(company => company.PrimaryDomain).IsUnique();

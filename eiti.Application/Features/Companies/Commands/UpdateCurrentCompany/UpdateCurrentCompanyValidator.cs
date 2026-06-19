@@ -20,5 +20,12 @@ public sealed class UpdateCurrentCompanyValidator : AbstractValidator<UpdateCurr
         RuleFor(x => x.WhatsAppSenderPhone)
             .NotEmpty().WithMessage("WhatsApp sender phone is required when WhatsApp is enabled.")
             .When(x => x.IsWhatsAppEnabled == true);
+
+        RuleFor(x => x.PdfLogoUrl)
+            .MaximumLength(1_000_000).WithMessage("PDF logo cannot exceed 1 MB as text.");
+
+        RuleFor(x => x.PdfWatermarkUrl)
+            .MaximumLength(1_000_000).WithMessage("PDF watermark cannot exceed 1 MB as text.");
+
     }
 }

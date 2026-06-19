@@ -15,5 +15,6 @@ public sealed class UpdateCustomerValidator : AbstractValidator<UpdateCustomerCo
         RuleFor(x => x)
             .Must(x => !string.IsNullOrWhiteSpace(x.Name) || !string.IsNullOrWhiteSpace(x.FirstName))
             .WithMessage("Debe informar nombre o nombre y apellido.");
+
     }
 }

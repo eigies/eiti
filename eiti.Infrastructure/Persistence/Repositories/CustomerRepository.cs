@@ -44,7 +44,6 @@ public sealed class CustomerRepository : ICustomerRepository
         var customers = await _context.Customers
             .Where(customer => customer.CompanyId == companyId)
             .OrderBy(customer => customer.Name)
-            .Take(250)
             .ToListAsync(cancellationToken);
 
         IEnumerable<Customer> filtered = customers;
@@ -71,9 +70,7 @@ public sealed class CustomerRepository : ICustomerRepository
             filtered = filtered.Where(customer => string.Equals(customer.DocumentNumber, normalized, StringComparison.OrdinalIgnoreCase));
         }
 
-        return filtered
-            .Take(25)
-            .ToList();
+        return filtered.ToList();
     }
 
     public async Task<bool> DocumentExistsAsync(
