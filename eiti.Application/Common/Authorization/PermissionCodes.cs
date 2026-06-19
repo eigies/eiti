@@ -27,6 +27,10 @@ public static class PermissionCodes
 
     public const string SalesPriceOverride = "sales.override_price";
 
+    // Permite descargar el remito de la venta CON importes (el remito de traslado sin importes es libre).
+    // No se asigna por defecto a ningún rol: se otorga manualmente vía perfiles de acceso.
+    public const string SalesRemitoAmounts = "sales.remito.amounts";
+
     public const string BanksManage = "banks.manage";
     public const string ChequesManage = "cheques.manage";
 

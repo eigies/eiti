@@ -14,7 +14,8 @@ public sealed record SalesReportQuery(
     int? Channel = null,
     string? DeliveryMode = null,
     Guid? CategoryId = null,
-    string? SaleType = null
+    string? SaleType = null,
+    Guid? BranchId = null
 ) : IRequest<Result<SalesReportResponse>>, IRequirePermissions
 {
     public IReadOnlyCollection<string> RequiredPermissions =>

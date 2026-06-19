@@ -22,6 +22,7 @@ public static class PermissionCatalog
         PermissionCodes.UsersManage,
         PermissionCodes.CustomersDelete,
         PermissionCodes.SalesPriceOverride,
+        PermissionCodes.SalesRemitoAmounts,
         PermissionCodes.BanksManage,
         PermissionCodes.ChequesManage,
         PermissionCodes.CashDrawerAssign,

@@ -57,6 +57,9 @@ public sealed class SalesReportHandler : IRequestHandler<SalesReportQuery, Resul
         }
 
         // Filtros a nivel venta
+        if (request.BranchId.HasValue)
+            sales = sales.Where(s => s.BranchId.Value == request.BranchId.Value).ToList();
+
         if (request.CustomerId.HasValue)
             sales = sales.Where(s => s.CustomerId is not null && s.CustomerId.Value == request.CustomerId.Value).ToList();
 
