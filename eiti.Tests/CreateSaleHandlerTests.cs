@@ -379,4 +379,63 @@ public sealed class CreateSaleHandlerTests
         persistedSale.Should().NotBeNull();
         persistedSale!.Details.Single().UnitPrice.Should().Be(100m);
     }
+
+    [Fact]
+    public async Task Handle_ShouldUseBranchOverride_WhenStockHasPricingOverride()
+    {
+        var companyId = CompanyId.New();
+        var branch = Branch.Create(companyId, "Sucursal Centro", "SC", "San Martin 123");
+        var product = Product.Create(companyId, "BAT-001", "BAT-001", "Contoso", "Bateria nueva", null, 100m, 70m, null);
+        var stock = BranchProductStock.Create(companyId, branch.Id, product.Id);
+        stock.ApplyManualEntry(10);
+        // Override de sucursal: precio 80, costo 50 (distintos del global 100/70).
+        stock.SetPricing(50m, 80m);
+
+        var currentUserService = new Mock<ICurrentUserService>();
+        var branchRepository = new Mock<IBranchRepository>();
+        var customerRepository = new Mock<ICustomerRepository>();
+        var productRepository = new Mock<IProductRepository>();
+        var branchProductStockRepository = new Mock<IBranchProductStockRepository>();
+        var stockMovementRepository = new Mock<IStockMovementRepository>();
+        var saleRepository = new Mock<ISaleRepository>();
+        var cashSessionRepository = new Mock<ICashSessionRepository>();
+        var unitOfWork = new Mock<IUnitOfWork>();
+        eiti.Domain.Sales.Sale? persistedSale = null;
+
+        currentUserService.SetupGet(service => service.IsAuthenticated).Returns(true);
+        currentUserService.SetupGet(service => service.CompanyId).Returns(companyId);
+        currentUserService.Setup(service => service.HasPermission(PermissionCodes.SalesPriceOverride)).Returns(false);
+
+        branchRepository
+            .Setup(repository => repository.GetByIdAsync(branch.Id, companyId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(branch);
+
+        productRepository
+            .Setup(repository => repository.GetByIdsAsync(It.IsAny<IEnumerable<ProductId>>(), companyId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<Product> { product });
+
+        branchProductStockRepository
+            .Setup(repository => repository.GetOrCreateAsync(branch.Id, product.Id, companyId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(stock);
+
+        saleRepository
+            .Setup(repository => repository.AddAsync(It.IsAny<eiti.Domain.Sales.Sale>(), It.IsAny<CancellationToken>()))
+            .Callback<eiti.Domain.Sales.Sale, CancellationToken>((sale, _) => persistedSale = sale)
+            .Returns(Task.CompletedTask);
+
+        var handler = new CreateSaleHandler(
+            currentUserService.Object, branchRepository.Object, customerRepository.Object,
+            productRepository.Object, branchProductStockRepository.Object, stockMovementRepository.Object,
+            saleRepository.Object, new Mock<ICashDrawerRepository>().Object, cashSessionRepository.Object, new Mock<IAddressRepository>().Object, new Mock<IBankRepository>().Object, new Mock<IChequeRepository>().Object, unitOfWork.Object);
+
+        var result = await handler.Handle(
+            new CreateSaleCommand(branch.Id.Value, null, 1, false, null,
+                [new CreateSaleDetailItemRequest(product.Id.Value, 1)], [], []),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        persistedSale.Should().NotBeNull();
+        persistedSale!.Details.Single().UnitPrice.Should().Be(80m);
+        persistedSale.Details.Single().UnitCost.Should().Be(50m);
+    }
 }

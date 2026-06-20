@@ -230,9 +230,9 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
             }
             else
             {
-                unitPrice = product.Price;
+                unitPrice = BranchPricing.ResolvePrice(stock, product);
             }
-            saleDetails.Add(SaleDetail.Create(product.Id, detail.Quantity, unitPrice, detail.DiscountPercent, product.CostPrice));
+            saleDetails.Add(SaleDetail.Create(product.Id, detail.Quantity, unitPrice, detail.DiscountPercent, BranchPricing.ResolveCost(stock, product)));
         }
 
         foreach (var currentDetail in currentGroupedDetails)

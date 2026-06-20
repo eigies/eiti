@@ -69,6 +69,10 @@ public sealed class GetBranchProductStockHandler : IRequestHandler<GetBranchProd
                 stock?.OnHandQuantity ?? 0,
                 stock?.ReservedQuantity ?? 0,
                 stock?.AvailableQuantity ?? 0,
-                stock?.UpdatedAt));
+                stock?.UpdatedAt,
+                stock?.CostOverride,
+                stock?.SalePriceOverride,
+                stock?.SalePriceOverride ?? product.Price,
+                stock?.CostOverride ?? product.CostPrice));
     }
 }

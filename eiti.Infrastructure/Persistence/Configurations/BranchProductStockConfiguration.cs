@@ -35,6 +35,9 @@ public sealed class BranchProductStockConfiguration : IEntityTypeConfiguration<B
         builder.Property(stock => stock.ReservedQuantity).IsRequired();
         builder.Property(stock => stock.UpdatedAt).IsRequired();
 
+        builder.Property(stock => stock.CostOverride).HasColumnType("decimal(18,2)");
+        builder.Property(stock => stock.SalePriceOverride).HasColumnType("decimal(18,2)");
+
         builder.HasIndex(stock => new { stock.BranchId, stock.ProductId }).IsUnique();
         builder.HasIndex(stock => new { stock.CompanyId, stock.BranchId });
         builder.HasIndex(stock => new { stock.CompanyId, stock.ProductId });

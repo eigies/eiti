@@ -15,6 +15,10 @@ public sealed class BranchProductStock : AggregateRoot<BranchProductStockId>
     public DateTime UpdatedAt { get; private set; }
     public int AvailableQuantity => OnHandQuantity - ReservedQuantity;
 
+    // Overrides de precio/costo por sucursal (null = usar el valor global del producto).
+    public decimal? CostOverride { get; private set; }
+    public decimal? SalePriceOverride { get; private set; }
+
     private BranchProductStock()
     {
     }
@@ -40,6 +44,24 @@ public sealed class BranchProductStock : AggregateRoot<BranchProductStockId>
         ProductId productId)
     {
         return new BranchProductStock(BranchProductStockId.New(), companyId, branchId, productId);
+    }
+
+    // Setea (o limpia, con null) el costo/precio de venta de este producto en esta sucursal.
+    public void SetPricing(decimal? costOverride, decimal? salePriceOverride)
+    {
+        if (costOverride is < 0)
+        {
+            throw new ArgumentException("Cost override cannot be negative.", nameof(costOverride));
+        }
+
+        if (salePriceOverride is < 0)
+        {
+            throw new ArgumentException("Sale price override cannot be negative.", nameof(salePriceOverride));
+        }
+
+        CostOverride = costOverride;
+        SalePriceOverride = salePriceOverride;
+        Touch();
     }
 
     public void ApplyManualEntry(int quantity)

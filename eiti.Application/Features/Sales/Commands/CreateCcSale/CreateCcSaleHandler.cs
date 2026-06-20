@@ -117,9 +117,9 @@ public sealed class CreateCcSaleHandler : IRequestHandler<CreateCcSaleCommand, R
             }
             else
             {
-                unitPrice = product.Price;
+                unitPrice = BranchPricing.ResolvePrice(stock, product);
             }
-            saleDetails.Add(SaleDetail.Create(product.Id, detail.Quantity, unitPrice, detail.DiscountPercent, product.CostPrice));
+            saleDetails.Add(SaleDetail.Create(product.Id, detail.Quantity, unitPrice, detail.DiscountPercent, BranchPricing.ResolveCost(stock, product)));
         }
 
         foreach (var detail in groupedDetails)

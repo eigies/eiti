@@ -15,4 +15,8 @@ public sealed record BranchProductStockResponse(
     int OnHandQuantity,
     int ReservedQuantity,
     int AvailableQuantity,
-    DateTime? UpdatedAt);
+    DateTime? UpdatedAt,
+    decimal? CostOverride = null,
+    decimal? SalePriceOverride = null,
+    decimal EffectivePrice = 0,
+    decimal EffectiveCost = 0);
