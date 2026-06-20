@@ -9,6 +9,12 @@
 # MCP config (contains secrets)
 .mcp.json
 
+# Skills (instaladas localmente via npx skills — no versionar)
+.agents/
+agent/
+skills-lock.json
+.claude/skills/
+
 # User and IDE files
 .vs/
 .idea/
