@@ -25,6 +25,20 @@ public sealed class ProductRepository : IProductRepository
                 cancellationToken);
     }
 
+    public async Task<IReadOnlyList<Product>> GetByIdsAsync(
+        IEnumerable<ProductId> ids,
+        CompanyId companyId,
+        CancellationToken cancellationToken = default)
+    {
+        var idList = ids.Distinct().ToList();
+        if (idList.Count == 0)
+            return [];
+
+        return await _context.Products
+            .Where(product => product.CompanyId == companyId && idList.Contains(product.Id))
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task<IReadOnlyList<Product>> GetByCompanyIdAsync(
         CompanyId companyId,
         CancellationToken cancellationToken = default)

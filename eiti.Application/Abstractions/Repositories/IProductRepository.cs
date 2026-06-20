@@ -10,6 +10,11 @@ public interface IProductRepository
         CompanyId companyId,
         CancellationToken cancellationToken = default);
 
+    Task<IReadOnlyList<Product>> GetByIdsAsync(
+        IEnumerable<ProductId> ids,
+        CompanyId companyId,
+        CancellationToken cancellationToken = default);
+
     Task<IReadOnlyList<Product>> GetByCompanyIdAsync(
         CompanyId companyId,
         CancellationToken cancellationToken = default);

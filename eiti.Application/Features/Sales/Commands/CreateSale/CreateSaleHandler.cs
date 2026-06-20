@@ -3,6 +3,7 @@ using eiti.Application.Abstractions.Repositories;
 using eiti.Application.Abstractions.Services;
 using eiti.Application.Common;
 using eiti.Application.Common.Authorization;
+using eiti.Domain.Banks;
 using eiti.Domain.Branches;
 using eiti.Domain.Cash;
 using eiti.Domain.Cheques;
@@ -114,7 +115,7 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
                 companyId,
                 cancellationToken);
 
-            if (openSession is not null && IsFromPreviousBusinessDay(openSession.OpenedAt))
+            if (openSession is not null && BusinessDay.IsFromPreviousBusinessDay(openSession.OpenedAt))
             {
                 return Result<CreateSaleResponse>.Failure(CreateSaleErrors.CashSessionFromPreviousDay);
             }
@@ -141,24 +142,26 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
             })
             .ToList();
 
-        var productMap = new Dictionary<Guid, Product>();
+        // Pre-fetch de todos los productos (detalles + trade-ins) en una sola query (evita N+1).
+        var allProductIds = groupedDetails.Select(d => d.ProductId)
+            .Concat(request.TradeIns.Select(t => t.ProductId))
+            .Distinct()
+            .Select(id => new ProductId(id))
+            .ToList();
+        var productMap = (await _productRepository.GetByIdsAsync(allProductIds, companyId, cancellationToken))
+            .ToDictionary(p => p.Id.Value);
+
         var saleDetails = new List<SaleDetail>();
         var stockMap = new Dictionary<Guid, BranchProductStock>();
 
         foreach (var detail in groupedDetails)
         {
-            var product = await _productRepository.GetByIdAsync(
-                new ProductId(detail.ProductId),
-                companyId,
-                cancellationToken);
-
-            if (product is null)
+            if (!productMap.TryGetValue(detail.ProductId, out var product))
             {
                 return Result<CreateSaleResponse>.Failure(
                     Error.NotFound("Sales.Create.ProductNotFound", $"The product '{detail.ProductId}' was not found."));
             }
 
-            productMap[product.Id.Value] = product;
             var stock = await _branchProductStockRepository.GetOrCreateAsync(
                 branch.Id,
                 product.Id,
@@ -211,7 +214,7 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
                 Error.Validation("Sales.Create.InvalidPayments", ex.Message));
         }
 
-        var tradeInsResult = await BuildTradeInsAsync(request.TradeIns, productMap, companyId, cancellationToken);
+        var tradeInsResult = BuildTradeIns(request.TradeIns, productMap);
         if (!tradeInsResult.IsSuccess)
         {
             return Result<CreateSaleResponse>.Failure(tradeInsResult.Error!);
@@ -231,6 +234,18 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
         if (request.GeneralDiscountPercent > 0)
             itemsSubtotal = itemsSubtotal * (1m - request.GeneralDiscountPercent / 100m);
 
+        // Pre-fetch de los bancos de tarjeta usados en los pagos (1 query, evita N+1 y el doble fetch
+        // entre el cálculo de recargo y el set de datos de tarjeta).
+        var cardBankIds = request.Payments
+            .Where(p => (SalePaymentMethod)p.IdPaymentMethod == SalePaymentMethod.Card && p.CardBankId.HasValue)
+            .Select(p => p.CardBankId!.Value)
+            .Distinct()
+            .ToList();
+        var bankMap = cardBankIds.Count == 0
+            ? new Dictionary<int, Bank>()
+            : (await _bankRepository.GetByIdsAsync(cardBankIds, companyId!, cancellationToken))
+                .ToDictionary(b => b.Id);
+
         var cardSurchargeTotal = 0m;
         foreach (var reqPayment in request.Payments)
         {
@@ -238,14 +253,11 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
                 && reqPayment.CardBankId.HasValue
                 && reqPayment.CardCuotas.HasValue)
             {
-                var bank = await _bankRepository.GetByIdAsync(reqPayment.CardBankId.Value, companyId!, cancellationToken);
-                var plan = bank?.InstallmentPlans.FirstOrDefault(p => p.Cuotas == reqPayment.CardCuotas.Value && p.Active);
+                bankMap.TryGetValue(reqPayment.CardBankId.Value, out var bank);
+                var plan = CardSurchargeCalculator.FindPlan(bank, reqPayment.CardCuotas.Value);
                 if (plan is not null && plan.SurchargePct > 0)
                 {
-                    cardSurchargeTotal += decimal.Round(
-                        itemsSubtotal * plan.SurchargePct / 100m,
-                        2,
-                        MidpointRounding.AwayFromZero);
+                    cardSurchargeTotal += CardSurchargeCalculator.Compute(itemsSubtotal, plan.SurchargePct);
                     break; // One surcharge applies to the sale, even with multiple card payments
                 }
             }
@@ -418,16 +430,13 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
 
             if (payment.Method == SalePaymentMethod.Card
                 && reqLine.CardBankId.HasValue
-                && reqLine.CardCuotas.HasValue)
+                && reqLine.CardCuotas.HasValue
+                && bankMap.TryGetValue(reqLine.CardBankId.Value, out var bank))
             {
-                var bank = await _bankRepository.GetByIdAsync(reqLine.CardBankId.Value, companyId!, cancellationToken);
-                if (bank is not null)
+                var plan = CardSurchargeCalculator.FindPlan(bank, reqLine.CardCuotas.Value);
+                if (plan is not null)
                 {
-                    var plan = bank.InstallmentPlans.FirstOrDefault(p => p.Cuotas == reqLine.CardCuotas.Value && p.Active);
-                    if (plan is not null)
-                    {
-                        payment.SetCardData(bank.Id, plan.Cuotas, plan.SurchargePct, cardSurchargeTotal);
-                    }
+                    payment.SetCardData(bank.Id, plan.Cuotas, plan.SurchargePct, cardSurchargeTotal);
                 }
             }
 
@@ -586,11 +595,10 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
             .ToList();
     }
 
-    private async Task<Result<List<SaleTradeIn>>> BuildTradeInsAsync(
+    // Los productos de trade-in ya vienen en productMap (pre-fetch único arriba) — sin queries por ítem.
+    private static Result<List<SaleTradeIn>> BuildTradeIns(
         IReadOnlyList<CreateSaleTradeInItemRequest> tradeInRequests,
-        IDictionary<Guid, Product> productMap,
-        CompanyId companyId,
-        CancellationToken cancellationToken)
+        IReadOnlyDictionary<Guid, Product> productMap)
     {
         var groupedTradeIns = tradeInRequests
             .GroupBy(tradeIn => tradeIn.ProductId)
@@ -606,12 +614,7 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
 
         foreach (var tradeIn in groupedTradeIns)
         {
-            var product = await _productRepository.GetByIdAsync(
-                new ProductId(tradeIn.ProductId),
-                companyId,
-                cancellationToken);
-
-            if (product is null)
+            if (!productMap.TryGetValue(tradeIn.ProductId, out var product))
             {
                 return Result<List<SaleTradeIn>>.Failure(
                     Error.NotFound("Sales.Create.TradeInProductNotFound", $"The trade-in product '{tradeIn.ProductId}' was not found."));
@@ -625,20 +628,9 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
                         $"The product '{product.Name}' does not allow manual value in sale and cannot be used as a trade-in."));
             }
 
-            productMap[product.Id.Value] = product;
             tradeIns.Add(SaleTradeIn.Create(product.Id, tradeIn.Quantity, tradeIn.Amount));
         }
 
         return Result<List<SaleTradeIn>>.Success(tradeIns);
-    }
-
-    // Argentina is UTC-3 with no DST — compare calendar dates in local business time.
-    private static readonly TimeSpan ArgentinaOffset = TimeSpan.FromHours(-3);
-
-    private static bool IsFromPreviousBusinessDay(DateTime openedAtUtc)
-    {
-        var openedLocal = openedAtUtc + ArgentinaOffset;
-        var nowLocal = DateTime.UtcNow + ArgentinaOffset;
-        return openedLocal.Date < nowLocal.Date;
     }
 }

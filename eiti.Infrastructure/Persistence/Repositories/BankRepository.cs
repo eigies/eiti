@@ -34,6 +34,18 @@ public sealed class BankRepository : IBankRepository
             .FirstOrDefaultAsync(b => b.Id == id && b.CompanyId == companyId, ct);
     }
 
+    public async Task<IReadOnlyList<Bank>> GetByIdsAsync(IEnumerable<int> ids, CompanyId companyId, CancellationToken ct)
+    {
+        var idList = ids.Distinct().ToList();
+        if (idList.Count == 0)
+            return [];
+
+        return await _db.Banks
+            .Include(b => b.InstallmentPlans)
+            .Where(b => b.CompanyId == companyId && idList.Contains(b.Id))
+            .ToListAsync(ct);
+    }
+
     public async Task AddAsync(Bank bank, CancellationToken ct)
     {
         await _db.Banks.AddAsync(bank, ct);

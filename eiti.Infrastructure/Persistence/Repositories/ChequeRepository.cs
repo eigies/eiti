@@ -46,6 +46,17 @@ public sealed class ChequeRepository : IChequeRepository
         return await _db.Cheques.FirstOrDefaultAsync(c => c.Id == id && c.CompanyId == companyId, ct);
     }
 
+    public async Task<IReadOnlyList<Cheque>> ListByIdsAsync(IEnumerable<Guid> ids, CompanyId companyId, CancellationToken ct)
+    {
+        var idList = ids.Distinct().ToList();
+        if (idList.Count == 0)
+            return [];
+
+        return await _db.Cheques
+            .Where(c => c.CompanyId == companyId && idList.Contains(c.Id))
+            .ToListAsync(ct);
+    }
+
     public async Task AddAsync(Cheque cheque, CancellationToken ct)
     {
         await _db.Cheques.AddAsync(cheque, ct);

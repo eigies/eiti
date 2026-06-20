@@ -73,31 +73,19 @@ public sealed class CancelCustomerPaymentHandler : IRequestHandler<CancelCustome
         CashSession? session = null;
         if (payment.Method == SalePaymentMethod.Cash)
         {
-            var assignedDrawer = await _cashDrawerRepository.GetByAssignedUserAsync(userId, companyId, cancellationToken);
-            if (assignedDrawer is not null)
-            {
-                session = await _cashSessionRepository.GetOpenByDrawerAsync(assignedDrawer.Id, companyId, cancellationToken);
-            }
-            else if (_currentUserService.HasPermission(PermissionCodes.CashDrawerViewAll))
-            {
-                session = await _cashSessionRepository.GetAnyOpenByCompanyAsync(companyId, cancellationToken);
-            }
-            else
-            {
+            var resolve = await CashSessionResolver.ResolveOpenSessionAsync(
+                _currentUserService, _cashDrawerRepository, _cashSessionRepository, userId, companyId, cancellationToken);
+            if (resolve.Status == CashSessionResolveStatus.NoAssignedDrawer)
                 return Result.Failure(CancelCustomerPaymentErrors.NoAssignedCashDrawer);
-            }
-
-            if (session is null)
+            if (resolve.Status == CashSessionResolveStatus.NoSessionOpen)
                 return Result.Failure(CancelCustomerPaymentErrors.NoCashSessionOpen);
+            session = resolve.Session;
         }
         else
         {
             // Para no-efectivo igual registramos la reversa neutra (None) en una caja abierta para trazabilidad.
-            var assignedDrawer = await _cashDrawerRepository.GetByAssignedUserAsync(userId, companyId, cancellationToken);
-            if (assignedDrawer is not null)
-                session = await _cashSessionRepository.GetOpenByDrawerAsync(assignedDrawer.Id, companyId, cancellationToken);
-            else if (_currentUserService.HasPermission(PermissionCodes.CashDrawerViewAll))
-                session = await _cashSessionRepository.GetAnyOpenByCompanyAsync(companyId, cancellationToken);
+            session = await CashSessionResolver.ResolveOpenSessionBestEffortAsync(
+                _currentUserService, _cashDrawerRepository, _cashSessionRepository, userId, companyId, cancellationToken);
         }
 
         // Revertir las imputaciones FIFO que generó este cobro (sus ventas vuelven a pendiente).

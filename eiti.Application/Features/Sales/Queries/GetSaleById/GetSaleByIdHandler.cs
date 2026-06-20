@@ -58,15 +58,10 @@ public sealed class GetSaleByIdHandler : IRequestHandler<GetSaleByIdQuery, Resul
         }
 
         var productIds = sale.Details.Select(d => d.ProductId).Distinct().ToList();
-        var productMap = new Dictionary<Guid, Product>();
-        foreach (var productId in productIds)
-        {
-            var product = await _productRepository.GetByIdAsync(productId, companyId, cancellationToken);
-            if (product is not null)
-            {
-                productMap[product.Id.Value] = product;
-            }
-        }
+        var productMap = productIds.Count == 0
+            ? new Dictionary<Guid, Product>()
+            : (await _productRepository.GetByIdsAsync(productIds, companyId, cancellationToken))
+                .ToDictionary(p => p.Id.Value);
 
         string? customerDocument = null;
         if (customer?.DocumentType is not null && !string.IsNullOrWhiteSpace(customer.DocumentNumber))

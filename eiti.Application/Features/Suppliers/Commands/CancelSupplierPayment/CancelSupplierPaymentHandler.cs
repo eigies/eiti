@@ -66,22 +66,13 @@ public sealed class CancelSupplierPaymentHandler : IRequestHandler<CancelSupplie
         CashSession? session = null;
         if (payment.Method == PurchasePaymentMethod.Cash)
         {
-            var assignedDrawer = await _cashDrawerRepository.GetByAssignedUserAsync(userId, companyId, cancellationToken);
-            if (assignedDrawer is not null)
-            {
-                session = await _cashSessionRepository.GetOpenByDrawerAsync(assignedDrawer.Id, companyId, cancellationToken);
-            }
-            else if (_currentUserService.HasPermission(PermissionCodes.CashDrawerViewAll))
-            {
-                session = await _cashSessionRepository.GetAnyOpenByCompanyAsync(companyId, cancellationToken);
-            }
-            else
-            {
+            var resolve = await CashSessionResolver.ResolveOpenSessionAsync(
+                _currentUserService, _cashDrawerRepository, _cashSessionRepository, userId, companyId, cancellationToken);
+            if (resolve.Status == CashSessionResolveStatus.NoAssignedDrawer)
                 return Result.Failure(CancelSupplierPaymentErrors.NoAssignedCashDrawer);
-            }
-
-            if (session is null)
+            if (resolve.Status == CashSessionResolveStatus.NoSessionOpen)
                 return Result.Failure(CancelSupplierPaymentErrors.NoCashSessionOpen);
+            session = resolve.Session;
         }
 
         // Revertir las imputaciones FIFO que generó este pago (sus compras vuelven a Pendiente).

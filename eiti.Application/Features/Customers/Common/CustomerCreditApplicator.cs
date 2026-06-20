@@ -1,6 +1,7 @@
 using eiti.Application.Abstractions.Repositories;
 using eiti.Domain.Companies;
 using eiti.Domain.Customers;
+using eiti.Domain.Sales;
 
 namespace eiti.Application.Features.Customers.Common;
 
@@ -21,9 +22,10 @@ internal static class CustomerCreditApplicator
     {
         var imputaciones = new List<CustomerPaymentImputacion>();
         var salesNowPaid = new List<Guid>();
+        var salesNowPaidEntities = new List<Sale>();
 
         if (customer.CreditBalance <= 0)
-            return new CustomerCreditApplicationResult(imputaciones, salesNowPaid);
+            return new CustomerCreditApplicationResult(imputaciones, salesNowPaid, salesNowPaidEntities);
 
         var pendingSales = await saleRepository.ListPendingCcSalesByCustomerAsync(
             companyId, customer.Id, cancellationToken);
@@ -51,13 +53,19 @@ internal static class CustomerCreditApplicator
             imputaciones.Add(new CustomerPaymentImputacion(sale.Id.Value, sale.Code ?? string.Empty, applied));
 
             if (becamePaid)
+            {
                 salesNowPaid.Add(sale.Id.Value);
+                // La entidad ya viene tracked y con Details cargados (ListPendingCcSalesByCustomerAsync):
+                // el handler confirma stock con ella, sin re-fetch.
+                salesNowPaidEntities.Add(sale);
+            }
         }
 
-        return new CustomerCreditApplicationResult(imputaciones, salesNowPaid);
+        return new CustomerCreditApplicationResult(imputaciones, salesNowPaid, salesNowPaidEntities);
     }
 }
 
 public sealed record CustomerCreditApplicationResult(
     IReadOnlyList<CustomerPaymentImputacion> Imputaciones,
-    IReadOnlyList<Guid> SalesNowPaid);
+    IReadOnlyList<Guid> SalesNowPaid,
+    IReadOnlyList<Sale> SalesNowPaidEntities);

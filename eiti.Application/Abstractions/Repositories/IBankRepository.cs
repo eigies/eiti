@@ -7,5 +7,6 @@ public interface IBankRepository
 {
     Task<IReadOnlyList<Bank>> ListAsync(bool activeOnly, CompanyId companyId, CancellationToken ct);
     Task<Bank?> GetByIdAsync(int id, CompanyId companyId, CancellationToken ct);
+    Task<IReadOnlyList<Bank>> GetByIdsAsync(IEnumerable<int> ids, CompanyId companyId, CancellationToken ct);
     Task AddAsync(Bank bank, CancellationToken ct);
 }

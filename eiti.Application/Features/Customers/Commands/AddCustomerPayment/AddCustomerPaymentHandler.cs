@@ -79,26 +79,15 @@ public sealed class AddCustomerPaymentHandler : IRequestHandler<AddCustomerPayme
             return Result<AddCustomerPaymentResponse>.Failure(AddCustomerPaymentErrors.CustomerNotFound);
 
         // Resolver caja abierta: exige caja propia (drawer asignado) o permiso CashDrawerViewAll.
-        var assignedDrawer = await _cashDrawerRepository.GetByAssignedUserAsync(userId, companyId, cancellationToken);
-        CashSession? session;
-        if (assignedDrawer is not null)
-        {
-            session = await _cashSessionRepository.GetOpenByDrawerAsync(assignedDrawer.Id, companyId, cancellationToken);
-            if (session is null)
-                return Result<AddCustomerPaymentResponse>.Failure(AddCustomerPaymentErrors.NoCashSessionOpen);
-        }
-        else if (_currentUserService.HasPermission(PermissionCodes.CashDrawerViewAll))
-        {
-            session = await _cashSessionRepository.GetAnyOpenByCompanyAsync(companyId, cancellationToken);
-            if (session is null)
-                return Result<AddCustomerPaymentResponse>.Failure(AddCustomerPaymentErrors.NoCashSessionOpen);
-        }
-        else
-        {
-            return Result<AddCustomerPaymentResponse>.Failure(AddCustomerPaymentErrors.NoAssignedCashDrawer);
-        }
+        var resolve = await CashSessionResolver.ResolveOpenSessionAsync(
+            _currentUserService, _cashDrawerRepository, _cashSessionRepository, userId, companyId, cancellationToken);
+        if (resolve.Status != CashSessionResolveStatus.Resolved)
+            return Result<AddCustomerPaymentResponse>.Failure(resolve.Status == CashSessionResolveStatus.NoAssignedDrawer
+                ? AddCustomerPaymentErrors.NoAssignedCashDrawer
+                : AddCustomerPaymentErrors.NoCashSessionOpen);
+        var session = resolve.Session!;
 
-        if (IsFromPreviousBusinessDay(session.OpenedAt))
+        if (BusinessDay.IsFromPreviousBusinessDay(session.OpenedAt))
             return Result<AddCustomerPaymentResponse>.Failure(AddCustomerPaymentErrors.CashSessionFromPreviousDay);
 
         var creditBefore = customer.CreditBalance;
@@ -119,10 +108,10 @@ public sealed class AddCustomerPaymentHandler : IRequestHandler<AddCustomerPayme
         if (method == SalePaymentMethod.Card && command.CardBankId.HasValue && command.CardCuotas.HasValue)
         {
             var bank = await _bankRepository.GetByIdAsync(command.CardBankId.Value, companyId, cancellationToken);
-            var plan = bank?.InstallmentPlans.FirstOrDefault(p => p.Cuotas == command.CardCuotas.Value && p.Active);
+            var plan = CardSurchargeCalculator.FindPlan(bank, command.CardCuotas.Value);
             if (plan is not null)
             {
-                var surchargeAmt = decimal.Round(amount * plan.SurchargePct / 100, 2, MidpointRounding.AwayFromZero);
+                var surchargeAmt = CardSurchargeCalculator.Compute(amount, plan.SurchargePct);
                 payment.SetCardData(bank!.Id, plan.Cuotas, plan.SurchargePct, surchargeAmt);
             }
         }
@@ -159,12 +148,9 @@ public sealed class AddCustomerPaymentHandler : IRequestHandler<AddCustomerPayme
         _customerRepository.Update(customer);
 
         // Confirmar stock de las ventas que pasaron a Paid con estas imputaciones.
-        foreach (var saleId in application.SalesNowPaid)
+        // Reusa las entidades tracked del applicator (ya traen Details) — sin re-fetch por venta.
+        foreach (var sale in application.SalesNowPaidEntities)
         {
-            var sale = await _saleRepository.GetByIdWithCcPaymentsAsync(new SaleId(saleId), cancellationToken);
-            if (sale is null)
-                continue;
-
             foreach (var detail in sale.Details)
             {
                 var stock = await _branchProductStockRepository.GetOrCreateAsync(
@@ -204,14 +190,5 @@ public sealed class AddCustomerPaymentHandler : IRequestHandler<AddCustomerPayme
             creditAdded,
             creditAfter,
             application.Imputaciones));
-    }
-
-    private static readonly TimeSpan ArgentinaOffset = TimeSpan.FromHours(-3);
-
-    private static bool IsFromPreviousBusinessDay(DateTime openedAtUtc)
-    {
-        var openedLocal = openedAtUtc + ArgentinaOffset;
-        var nowLocal = DateTime.UtcNow + ArgentinaOffset;
-        return openedLocal.Date < nowLocal.Date;
     }
 }

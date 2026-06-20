@@ -47,14 +47,12 @@ public sealed class GetSupplierAccountHandler
         var purchases = await _purchaseRepository.ListAllBySupplierAsync(companyId.Value, supplier.Id, cancellationToken);
         var payments = await _supplierPaymentRepository.ListBySupplierAsync(companyId.Value, supplier.Id, cancellationToken);
 
-        // Números de cheque para los pagos que endosaron un cheque.
-        var chequeNumeroById = new Dictionary<Guid, string>();
-        foreach (var chequeId in payments.Where(p => p.ChequeId.HasValue).Select(p => p.ChequeId!.Value).Distinct())
-        {
-            var cheque = await _chequeRepository.GetByIdAsync(chequeId, companyId, cancellationToken);
-            if (cheque is not null)
-                chequeNumeroById[chequeId] = cheque.Numero;
-        }
+        // Números de cheque para los pagos que endosaron un cheque (1 sola query, evita N+1).
+        var chequeIds = payments.Where(p => p.ChequeId.HasValue).Select(p => p.ChequeId!.Value).Distinct().ToList();
+        var chequeNumeroById = chequeIds.Count == 0
+            ? new Dictionary<Guid, string>()
+            : (await _chequeRepository.ListByIdsAsync(chequeIds, companyId, cancellationToken))
+                .ToDictionary(c => c.Id, c => c.Numero);
 
         var deudaTotal = purchases
             .Where(p => p.Status != PurchaseStatus.Cancelled)

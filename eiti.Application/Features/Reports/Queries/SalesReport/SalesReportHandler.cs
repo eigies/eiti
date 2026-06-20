@@ -46,23 +46,16 @@ public sealed class SalesReportHandler : IRequestHandler<SalesReportQuery, Resul
         var from = request.DateFrom.Date;
         var to = request.DateTo.Date.AddDays(1).AddTicks(-1);
 
-        var sales = (await _saleRepository.ListByCompanyAsync(companyId, from, to, null, includeCuentaCorriente: true, cancellationToken))
-            .Where(s => s.SaleStatus != SaleStatus.Cancel)
+        // Filtros baratos empujados a SQL: sucursal, cliente, excluye canceladas y sucursales permitidas.
+        var allowedBranchIds = _currentUserService.CanViewAllBranches
+            ? null
+            : _currentUserService.AllowedBranchIds;
+
+        var sales = (await _saleRepository.ListForSalesReportAsync(
+                companyId, from, to, request.BranchId, request.CustomerId, allowedBranchIds, cancellationToken))
             .ToList();
 
-        if (!_currentUserService.CanViewAllBranches)
-        {
-            var allowed = _currentUserService.AllowedBranchIds;
-            sales = sales.Where(s => allowed.Contains(s.BranchId.Value)).ToList();
-        }
-
-        // Filtros a nivel venta
-        if (request.BranchId.HasValue)
-            sales = sales.Where(s => s.BranchId.Value == request.BranchId.Value).ToList();
-
-        if (request.CustomerId.HasValue)
-            sales = sales.Where(s => s.CustomerId is not null && s.CustomerId.Value == request.CustomerId.Value).ToList();
-
+        // Filtros que se resuelven en memoria (dependen de datos derivados o cargados aparte).
         if (request.Channel.HasValue)
             sales = sales.Where(s => s.SourceChannel is not null && (int)s.SourceChannel.Value == request.Channel.Value).ToList();
 

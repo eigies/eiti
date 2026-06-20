@@ -13,5 +13,6 @@ public interface IChequeRepository
 {
     Task<IReadOnlyList<Cheque>> ListAsync(ChequeFilters filters, CompanyId companyId, CancellationToken ct);
     Task<Cheque?> GetByIdAsync(Guid id, CompanyId companyId, CancellationToken ct);
+    Task<IReadOnlyList<Cheque>> ListByIdsAsync(IEnumerable<Guid> ids, CompanyId companyId, CancellationToken ct);
     Task AddAsync(Cheque cheque, CancellationToken ct);
 }

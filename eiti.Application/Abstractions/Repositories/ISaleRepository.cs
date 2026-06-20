@@ -27,6 +27,18 @@ public interface ISaleRepository
         bool includeCuentaCorriente = false,
         CancellationToken cancellationToken = default);
 
+    // Reporte de ventas: empuja a SQL los filtros baratos (sucursal, cliente, excluye canceladas,
+    // sucursales permitidas) en el rango de fechas. AsNoTracking + solo Include(Details). El resto de
+    // los filtros (canal, entrega, tipo, instalador, vehículo, categoría) se resuelven en el handler.
+    Task<IReadOnlyList<Sale>> ListForSalesReportAsync(
+        CompanyId companyId,
+        DateTime from,
+        DateTime to,
+        Guid? branchId,
+        Guid? customerId,
+        IReadOnlyCollection<Guid>? allowedBranchIds,
+        CancellationToken cancellationToken = default);
+
     Task<bool> HasOnHoldSalesByCashDrawerAsync(
         CompanyId companyId,
         CashDrawerId cashDrawerId,

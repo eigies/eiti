@@ -60,12 +60,9 @@ public sealed class ApplyCustomerCreditHandler
         _customerRepository.Update(customer);
 
         // Confirmar stock de las ventas que pasaron a Paid con estas imputaciones.
-        foreach (var saleId in application.SalesNowPaid)
+        // Reusa las entidades tracked del applicator (ya traen Details) — sin re-fetch por venta.
+        foreach (var sale in application.SalesNowPaidEntities)
         {
-            var sale = await _saleRepository.GetByIdWithCcPaymentsAsync(new SaleId(saleId), cancellationToken);
-            if (sale is null)
-                continue;
-
             foreach (var detail in sale.Details)
             {
                 var stock = await _branchProductStockRepository.GetOrCreateAsync(

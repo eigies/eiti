@@ -83,26 +83,15 @@ public sealed class AddSupplierPaymentHandler : IRequestHandler<AddSupplierPayme
         }
 
         // Resolver caja abierta: exige caja propia (drawer asignado) o permiso CashDrawerViewAll.
-        var assignedDrawer = await _cashDrawerRepository.GetByAssignedUserAsync(userId, companyId, cancellationToken);
-        CashSession? session;
-        if (assignedDrawer is not null)
-        {
-            session = await _cashSessionRepository.GetOpenByDrawerAsync(assignedDrawer.Id, companyId, cancellationToken);
-            if (session is null)
-                return Result<AddSupplierPaymentResponse>.Failure(AddSupplierPaymentErrors.NoCashSessionOpen);
-        }
-        else if (_currentUserService.HasPermission(PermissionCodes.CashDrawerViewAll))
-        {
-            session = await _cashSessionRepository.GetAnyOpenByCompanyAsync(companyId, cancellationToken);
-            if (session is null)
-                return Result<AddSupplierPaymentResponse>.Failure(AddSupplierPaymentErrors.NoCashSessionOpen);
-        }
-        else
-        {
-            return Result<AddSupplierPaymentResponse>.Failure(AddSupplierPaymentErrors.NoAssignedCashDrawer);
-        }
+        var resolve = await CashSessionResolver.ResolveOpenSessionAsync(
+            _currentUserService, _cashDrawerRepository, _cashSessionRepository, userId, companyId, cancellationToken);
+        if (resolve.Status != CashSessionResolveStatus.Resolved)
+            return Result<AddSupplierPaymentResponse>.Failure(resolve.Status == CashSessionResolveStatus.NoAssignedDrawer
+                ? AddSupplierPaymentErrors.NoAssignedCashDrawer
+                : AddSupplierPaymentErrors.NoCashSessionOpen);
+        var session = resolve.Session!;
 
-        if (IsFromPreviousBusinessDay(session.OpenedAt))
+        if (BusinessDay.IsFromPreviousBusinessDay(session.OpenedAt))
             return Result<AddSupplierPaymentResponse>.Failure(AddSupplierPaymentErrors.CashSessionFromPreviousDay);
 
         var creditBefore = supplier.CreditBalance;
@@ -147,14 +136,5 @@ public sealed class AddSupplierPaymentHandler : IRequestHandler<AddSupplierPayme
             creditAdded,
             creditAfter,
             imputaciones));
-    }
-
-    private static readonly TimeSpan ArgentinaOffset = TimeSpan.FromHours(-3);
-
-    private static bool IsFromPreviousBusinessDay(DateTime openedAtUtc)
-    {
-        var openedLocal = openedAtUtc + ArgentinaOffset;
-        var nowLocal = DateTime.UtcNow + ArgentinaOffset;
-        return openedLocal.Date < nowLocal.Date;
     }
 }

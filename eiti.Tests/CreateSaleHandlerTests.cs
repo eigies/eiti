@@ -43,12 +43,8 @@ public sealed class CreateSaleHandlerTests
             .ReturnsAsync(branch);
 
         productRepository
-            .Setup(repository => repository.GetByIdAsync(saleProduct.Id, companyId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(saleProduct);
-
-        productRepository
-            .Setup(repository => repository.GetByIdAsync(tradeInProduct.Id, companyId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(tradeInProduct);
+            .Setup(repository => repository.GetByIdsAsync(It.IsAny<IEnumerable<ProductId>>(), companyId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<Product> { saleProduct, tradeInProduct });
 
         branchProductStockRepository
             .Setup(repository => repository.GetOrCreateAsync(branch.Id, saleProduct.Id, companyId, It.IsAny<CancellationToken>()))
@@ -122,12 +118,8 @@ public sealed class CreateSaleHandlerTests
             .ReturnsAsync(branch);
 
         productRepository
-            .Setup(repository => repository.GetByIdAsync(saleProduct.Id, companyId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(saleProduct);
-
-        productRepository
-            .Setup(repository => repository.GetByIdAsync(regularProduct.Id, companyId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(regularProduct);
+            .Setup(repository => repository.GetByIdsAsync(It.IsAny<IEnumerable<ProductId>>(), companyId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<Product> { saleProduct, regularProduct });
 
         branchProductStockRepository
             .Setup(repository => repository.GetOrCreateAsync(branch.Id, saleProduct.Id, companyId, It.IsAny<CancellationToken>()))
@@ -193,8 +185,8 @@ public sealed class CreateSaleHandlerTests
             .ReturnsAsync(branch);
 
         productRepository
-            .Setup(repository => repository.GetByIdAsync(product.Id, companyId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(product);
+            .Setup(repository => repository.GetByIdsAsync(It.IsAny<IEnumerable<ProductId>>(), companyId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<Product> { product });
 
         branchProductStockRepository
             .Setup(repository => repository.GetOrCreateAsync(branch.Id, product.Id, companyId, It.IsAny<CancellationToken>()))
@@ -249,8 +241,8 @@ public sealed class CreateSaleHandlerTests
             .ReturnsAsync(branch);
 
         productRepository
-            .Setup(repository => repository.GetByIdAsync(product.Id, companyId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(product);
+            .Setup(repository => repository.GetByIdsAsync(It.IsAny<IEnumerable<ProductId>>(), companyId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<Product> { product });
 
         branchProductStockRepository
             .Setup(repository => repository.GetOrCreateAsync(branch.Id, product.Id, companyId, It.IsAny<CancellationToken>()))
@@ -305,8 +297,8 @@ public sealed class CreateSaleHandlerTests
             .ReturnsAsync(branch);
 
         productRepository
-            .Setup(repository => repository.GetByIdAsync(product.Id, companyId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(product);
+            .Setup(repository => repository.GetByIdsAsync(It.IsAny<IEnumerable<ProductId>>(), companyId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<Product> { product });
 
         branchProductStockRepository
             .Setup(repository => repository.GetOrCreateAsync(branch.Id, product.Id, companyId, It.IsAny<CancellationToken>()))
@@ -361,8 +353,8 @@ public sealed class CreateSaleHandlerTests
             .ReturnsAsync(branch);
 
         productRepository
-            .Setup(repository => repository.GetByIdAsync(product.Id, companyId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(product);
+            .Setup(repository => repository.GetByIdsAsync(It.IsAny<IEnumerable<ProductId>>(), companyId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<Product> { product });
 
         branchProductStockRepository
             .Setup(repository => repository.GetOrCreateAsync(branch.Id, product.Id, companyId, It.IsAny<CancellationToken>()))
