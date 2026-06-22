@@ -1,5 +1,6 @@
 using eiti.Api.Extensions;
 using eiti.Application.Features.Stock.Commands.AdjustStock;
+using eiti.Application.Features.Stock.Commands.ImportBranchPricing;
 using eiti.Application.Features.Stock.Commands.SetBranchProductPricing;
 using eiti.Application.Features.Stock.Commands.TransferStock;
 using eiti.Application.Features.Stock.Queries.GetBranchProductStock;
@@ -37,6 +38,15 @@ public sealed class StockController : ControllerBase
     [HttpPut("pricing")]
     public async Task<IActionResult> SetPricing(
         [FromBody] SetBranchProductPricingCommand command,
+        CancellationToken cancellationToken)
+    {
+        var result = await _sender.Send(command, cancellationToken);
+        return result.ToActionResult();
+    }
+
+    [HttpPost("pricing/import")]
+    public async Task<IActionResult> ImportPricing(
+        [FromBody] ImportBranchPricingCommand command,
         CancellationToken cancellationToken)
     {
         var result = await _sender.Send(command, cancellationToken);

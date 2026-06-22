@@ -213,8 +213,11 @@ public sealed class SalesReportHandler : IRequestHandler<SalesReportQuery, Resul
         }
     }
 
+    // null y NoChannel(10) son ambos "Sin canal": misma key para que se agrupen en una sola fila.
     private static string ChannelKey(Sale sale) =>
-        sale.SourceChannel is null ? "0" : ((int)sale.SourceChannel.Value).ToString();
+        sale.SourceChannel is null || sale.SourceChannel == SaleSourceChannel.NoChannel
+            ? "0"
+            : ((int)sale.SourceChannel.Value).ToString();
 
     private static string ChannelLabel(Sale sale) => sale.SourceChannel switch
     {
@@ -223,7 +226,7 @@ public sealed class SalesReportHandler : IRequestHandler<SalesReportQuery, Resul
         SaleSourceChannel.Facebook => "Facebook",
         SaleSourceChannel.Web => "Web",
         SaleSourceChannel.Instagram => "Instagram",
-        SaleSourceChannel.Other => "Otro",
+        SaleSourceChannel.Other => "Llamada",
         SaleSourceChannel.PreviousCustomer => "Cliente anterior",
         SaleSourceChannel.MercadoLibre => "MercadoLibre",
         SaleSourceChannel.Google => "Google",
