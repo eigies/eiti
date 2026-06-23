@@ -5,6 +5,11 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseAppHost>false</UseAppHost>
+    <!-- Contenedor con CPU compartida/limitada: el Server GC (default) crea heaps e hilos de GC
+         por core y hace pausas "stop the world" que en CPU limitada duran segundos (latencia p99
+         altísima con CPU baja). Workstation GC con background reduce drásticamente esas pausas. -->
+    <ServerGarbageCollection>false</ServerGarbageCollection>
+    <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
     <WarningsNotAsErrors>$(WarningsNotAsErrors);NU1902;NU1903</WarningsNotAsErrors>
     <NuGetAudit>false</NuGetAudit>
