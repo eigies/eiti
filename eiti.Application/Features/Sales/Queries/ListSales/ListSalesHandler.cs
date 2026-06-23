@@ -70,37 +70,26 @@ public sealed class ListSalesHandler : IRequestHandler<ListSalesQuery, Result<IR
             .Distinct()
             .ToList();
 
-        var productMap = new Dictionary<Guid, Product>();
         var saleIds = sales.Select(sale => sale.Id).ToList();
         var assignments = await _saleTransportAssignmentRepository.ListBySaleIdsAsync(saleIds, _currentUserService.CompanyId, cancellationToken);
         var assignmentMap = assignments.ToDictionary(item => item.SaleId.Value, item => item);
-        var employeeMap = new Dictionary<Guid, Employee>();
-        var vehicleMap = new Dictionary<Guid, Vehicle>();
-        var customerMap = new Dictionary<Guid, Customer>();
 
-        foreach (var productId in productIds)
-        {
-            var product = await _productRepository.GetByIdAsync(new ProductId(productId), _currentUserService.CompanyId, cancellationToken);
-            if (product is not null)
-            {
-                productMap[productId] = product;
-            }
-        }
+        // Productos en un solo query (antes era N+1: un SELECT por producto).
+        var products = productIds.Count == 0
+            ? []
+            : await _productRepository.GetByIdsAsync(productIds.Select(id => new ProductId(id)), _currentUserService.CompanyId, cancellationToken);
+        var productMap = products.ToDictionary(product => product.Id.Value, product => product);
 
-        foreach (var sale in sales.Where(item => item.CustomerId is not null))
-        {
-            var customerId = sale.CustomerId!.Value;
-            if (customerMap.ContainsKey(customerId))
-            {
-                continue;
-            }
-
-            var customer = await _customerRepository.GetByIdAsync(new CustomerId(customerId), _currentUserService.CompanyId, cancellationToken);
-            if (customer is not null)
-            {
-                customerMap[customerId] = customer;
-            }
-        }
+        // Clientes en un solo query (antes era N+1: un SELECT por cliente).
+        var customerIds = sales
+            .Where(sale => sale.CustomerId is not null)
+            .Select(sale => sale.CustomerId!.Value)
+            .Distinct()
+            .ToList();
+        var customers = customerIds.Count == 0
+            ? []
+            : await _customerRepository.ListByIdsAsync(_currentUserService.CompanyId, customerIds.Select(id => new CustomerId(id)), cancellationToken);
+        var customerMap = customers.ToDictionary(customer => customer.Id.Value, customer => customer);
 
         var addressMap = new Dictionary<Guid, Address>();
         foreach (var customer in customerMap.Values.Where(c => c.AddressId is not null))
@@ -116,25 +105,15 @@ public sealed class ListSalesHandler : IRequestHandler<ListSalesQuery, Result<IR
             }
         }
 
-        foreach (var assignment in assignments)
+        // Empleados y vehículos: un query por compañía y se arma el mapa (antes era N+1 por asignación).
+        var employeeMap = new Dictionary<Guid, Employee>();
+        var vehicleMap = new Dictionary<Guid, Vehicle>();
+        if (assignments.Count > 0)
         {
-            if (!employeeMap.ContainsKey(assignment.DriverEmployeeId.Value))
-            {
-                var employee = await _employeeRepository.GetByIdAsync(assignment.DriverEmployeeId, _currentUserService.CompanyId, cancellationToken);
-                if (employee is not null)
-                {
-                    employeeMap[employee.Id.Value] = employee;
-                }
-            }
-
-            if (!vehicleMap.ContainsKey(assignment.VehicleId.Value))
-            {
-                var vehicle = await _vehicleRepository.GetByIdAsync(assignment.VehicleId, _currentUserService.CompanyId, cancellationToken);
-                if (vehicle is not null)
-                {
-                    vehicleMap[vehicle.Id.Value] = vehicle;
-                }
-            }
+            employeeMap = (await _employeeRepository.ListByCompanyAsync(_currentUserService.CompanyId, cancellationToken))
+                .ToDictionary(employee => employee.Id.Value, employee => employee);
+            vehicleMap = (await _vehicleRepository.ListByCompanyAsync(_currentUserService.CompanyId, cancellationToken))
+                .ToDictionary(vehicle => vehicle.Id.Value, vehicle => vehicle);
         }
 
         return Result<IReadOnlyList<ListSalesItemResponse>>.Success(
