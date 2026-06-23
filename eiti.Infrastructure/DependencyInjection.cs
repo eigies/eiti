@@ -32,7 +32,12 @@ public static class DependencyInjection
         services.AddDbContext<ApplicationDbContext>(options =>
             options.UseNpgsql(
                 connectionString,
-                b => b.MigrationsAssembly(typeof(ApplicationDbContext).Assembly.FullName)));
+                b => b
+                    .MigrationsAssembly(typeof(ApplicationDbContext).Assembly.FullName)
+                    // Evita la explosión cartesiana cuando una query hace Include de varias
+                    // colecciones (Details + Payments + TradeIns + CcPayments): EF corre un
+                    // query por colección en vez de un JOIN gigante que estalla la RAM del API.
+                    .UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery)));
 
         services.Configure<JwtSettings>(configuration.GetSection(JwtSettings.SectionName));
         services.Configure<WhatsAppDispatchOptions>(configuration.GetSection(WhatsAppDispatchOptions.SectionName));
