@@ -39,6 +39,15 @@ public interface ISaleRepository
         IReadOnlyCollection<Guid>? allowedBranchIds,
         CancellationToken cancellationToken = default);
 
+    // Ventas no canceladas (con sus pagos) para el reporte de medios de pago. AsNoTracking + Include(Payments).
+    Task<IReadOnlyList<Sale>> ListWithPaymentsForReportAsync(
+        CompanyId companyId,
+        DateTime from,
+        DateTime to,
+        Guid? branchId,
+        IReadOnlyCollection<Guid>? allowedBranchIds,
+        CancellationToken cancellationToken = default);
+
     Task<bool> HasOnHoldSalesByCashDrawerAsync(
         CompanyId companyId,
         CashDrawerId cashDrawerId,

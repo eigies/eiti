@@ -118,6 +118,39 @@ public sealed class SaleRepository : ISaleRepository
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyList<Sale>> ListWithPaymentsForReportAsync(
+        CompanyId companyId,
+        DateTime from,
+        DateTime to,
+        Guid? branchId,
+        IReadOnlyCollection<Guid>? allowedBranchIds,
+        CancellationToken cancellationToken = default)
+    {
+        var query = _context.Sales
+            .AsNoTracking()
+            .Include(sale => sale.Payments)
+            .Where(sale => sale.CompanyId == companyId
+                && sale.CreatedAt >= from
+                && sale.CreatedAt <= to
+                && sale.SaleStatus != SaleStatus.Cancel);
+
+        if (branchId.HasValue)
+        {
+            var bId = new BranchId(branchId.Value);
+            query = query.Where(sale => sale.BranchId == bId);
+        }
+
+        if (allowedBranchIds is not null && allowedBranchIds.Count > 0)
+        {
+            var allowed = allowedBranchIds.Select(id => new BranchId(id)).ToList();
+            query = query.Where(sale => allowed.Contains(sale.BranchId));
+        }
+
+        return await query
+            .OrderByDescending(sale => sale.CreatedAt)
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task<bool> HasOnHoldSalesByCashDrawerAsync(
         CompanyId companyId,
         CashDrawerId cashDrawerId,

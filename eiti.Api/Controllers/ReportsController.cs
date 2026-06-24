@@ -3,6 +3,7 @@ using eiti.Application.Features.Reports.Queries.CashMovementsReport;
 using eiti.Application.Features.Reports.Queries.CustomerDebtors;
 using eiti.Application.Features.Reports.Queries.DailySalesControl;
 using eiti.Application.Features.Reports.Queries.ListAuditLog;
+using eiti.Application.Features.Reports.Queries.PaymentMethodsReport;
 using eiti.Application.Features.Reports.Queries.SalesReport;
 using eiti.Application.Features.Reports.Queries.StockMatrix;
 using MediatR;
@@ -83,6 +84,19 @@ public sealed class ReportsController : ControllerBase
     public async Task<IActionResult> StockMatrix(CancellationToken cancellationToken)
     {
         var result = await _sender.Send(new StockMatrixQuery(), cancellationToken);
+        return result.ToActionResult();
+    }
+
+    [HttpGet("payments")]
+    public async Task<IActionResult> PaymentMethods(
+        [FromQuery] DateTime dateFrom,
+        [FromQuery] DateTime dateTo,
+        [FromQuery] Guid? branchId,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await _sender.Send(
+            new PaymentMethodsReportQuery(dateFrom, dateTo, branchId),
+            cancellationToken);
         return result.ToActionResult();
     }
 

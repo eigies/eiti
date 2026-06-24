@@ -44,6 +44,7 @@ public static class PermissionCatalog
         PermissionCodes.ReportsDebtors,
         PermissionCodes.ReportsCash,
         PermissionCodes.ReportsStock,
+        PermissionCodes.ReportsPayments,
         PermissionCodes.SalesCancelHistorical,
         PermissionCodes.SuppliersManage,
         PermissionCodes.PurchasesAccess,

@@ -57,6 +57,7 @@ public static class PermissionCodes
     public const string ReportsDebtors = "reports.debtors";
     public const string ReportsCash = "reports.cash";
     public const string ReportsStock = "reports.stock";
+    public const string ReportsPayments = "reports.payments";
 
     public const string SalesCancelHistorical = "sales.cancel.historical";
 
