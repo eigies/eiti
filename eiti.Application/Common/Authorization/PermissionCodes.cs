@@ -89,4 +89,7 @@ public static class PermissionCodes
     public const string PayrollLiquidationsGenerate = "payroll.liquidations.generate";
     public const string PayrollLiquidationsPay = "payroll.liquidations.pay";
     public const string PayrollAdvancesManage = "payroll.advances.manage";
+
+    // AI Assistant (agente LLM analizador/recomendador — servicio externo)
+    public const string AssistantUse = "assistant.use";
 }
