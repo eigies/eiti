@@ -65,9 +65,11 @@ public sealed class SalesController : ControllerBase
     [HttpPost("{id:guid}/cancel")]
     public async Task<IActionResult> CancelSale(
         Guid id,
+        [FromQuery] int? refundMode,
         CancellationToken cancellationToken)
     {
-        var result = await _sender.Send(new CancelSaleCommand(id), cancellationToken);
+        var mode = refundMode.HasValue ? (CcCancellationRefundMode?)refundMode.Value : null;
+        var result = await _sender.Send(new CancelSaleCommand(id, mode), cancellationToken);
         return result.ToActionResult();
     }
 

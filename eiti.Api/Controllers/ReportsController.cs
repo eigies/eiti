@@ -5,6 +5,7 @@ using eiti.Application.Features.Reports.Queries.DailySalesControl;
 using eiti.Application.Features.Reports.Queries.ListAuditLog;
 using eiti.Application.Features.Reports.Queries.PaymentMethodsReport;
 using eiti.Application.Features.Reports.Queries.SalesReport;
+using eiti.Application.Features.Reports.Queries.StockMovementsReport;
 using eiti.Application.Features.Reports.Queries.StockMatrix;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -87,15 +88,31 @@ public sealed class ReportsController : ControllerBase
         return result.ToActionResult();
     }
 
+    [HttpGet("stock-movements")]
+    public async Task<IActionResult> StockMovements(
+        [FromQuery] DateTime dateFrom,
+        [FromQuery] DateTime dateTo,
+        [FromQuery] Guid? productId,
+        [FromQuery] Guid? branchId,
+        [FromQuery] int? type,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await _sender.Send(
+            new StockMovementsReportQuery(dateFrom, dateTo, productId, branchId, type),
+            cancellationToken);
+        return result.ToActionResult();
+    }
+
     [HttpGet("payments")]
     public async Task<IActionResult> PaymentMethods(
         [FromQuery] DateTime dateFrom,
         [FromQuery] DateTime dateTo,
         [FromQuery] Guid? branchId,
+        [FromQuery] string? saleType,
         CancellationToken cancellationToken = default)
     {
         var result = await _sender.Send(
-            new PaymentMethodsReportQuery(dateFrom, dateTo, branchId),
+            new PaymentMethodsReportQuery(dateFrom, dateTo, branchId, saleType),
             cancellationToken);
         return result.ToActionResult();
     }

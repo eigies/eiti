@@ -156,7 +156,9 @@ public sealed class GetSupplierAccountHandler
                 pay.Method.ToString(),
                 chequeNumero,
                 imputaciones,
-                sobrante));
+                sobrante,
+                pay.Reference,
+                pay.Notes));
         }
 
         var ordered = movements

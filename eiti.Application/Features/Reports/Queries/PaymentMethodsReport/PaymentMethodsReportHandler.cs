@@ -43,6 +43,17 @@ public sealed class PaymentMethodsReportHandler
         var sales = await _saleRepository.ListWithPaymentsForReportAsync(
             companyId, from, to, request.BranchId, allowedBranchIds, cancellationToken);
 
+        // Mayorista = ventas por Cuenta Corriente; Minorista = ventas normales.
+        if (!string.IsNullOrWhiteSpace(request.SaleType))
+        {
+            sales = request.SaleType.ToLowerInvariant() switch
+            {
+                "wholesale" => sales.Where(s => s.IsCuentaCorriente).ToList(),
+                "retail" => sales.Where(s => !s.IsCuentaCorriente).ToList(),
+                _ => sales
+            };
+        }
+
         // Agrega por medio de pago: cantidad de pagos y monto total.
         var groups = new Dictionary<int, (int Count, decimal Total)>();
         // Desglose de Tarjeta por (banco, cuotas).

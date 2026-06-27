@@ -36,4 +36,6 @@ public sealed record CustomerAccountMovement(
     string? ChequeNumero,
     IReadOnlyList<CustomerPaymentImputacion>? Imputaciones,  // qué ventas cubrió este cobro
     decimal? Sobrante,                                      // excedente del cobro a saldo a favor
+    string? Reference,                                      // referencia ingresada al registrar el cobro
+    string? Notes,                                          // nota ingresada al registrar el cobro
     DateTime SortDate);

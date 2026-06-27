@@ -4,8 +4,11 @@ using eiti.Application.Abstractions.Services;
 using eiti.Application.Common;
 using eiti.Application.Common.Authorization;
 using eiti.Domain.Cash;
+using eiti.Domain.Companies;
+using eiti.Domain.Customers;
 using eiti.Domain.Products;
 using eiti.Domain.Sales;
+using eiti.Domain.Users;
 using eiti.Domain.Stock;
 using eiti.Domain.Transport;
 using MediatR;
@@ -21,6 +24,9 @@ public sealed class CancelSaleHandler : IRequestHandler<CancelSaleCommand, Resul
     private readonly ICashDrawerRepository _cashDrawerRepository;
     private readonly ICashSessionRepository _cashSessionRepository;
     private readonly ISaleTransportAssignmentRepository _saleTransportAssignmentRepository;
+    private readonly ICustomerRepository _customerRepository;
+    private readonly ICustomerPaymentRepository _customerPaymentRepository;
+    private readonly IChequeRepository _chequeRepository;
     private readonly IUnitOfWork _unitOfWork;
 
     public CancelSaleHandler(
@@ -31,6 +37,9 @@ public sealed class CancelSaleHandler : IRequestHandler<CancelSaleCommand, Resul
         ICashDrawerRepository cashDrawerRepository,
         ICashSessionRepository cashSessionRepository,
         ISaleTransportAssignmentRepository saleTransportAssignmentRepository,
+        ICustomerRepository customerRepository,
+        ICustomerPaymentRepository customerPaymentRepository,
+        IChequeRepository chequeRepository,
         IUnitOfWork unitOfWork)
     {
         _currentUserService = currentUserService;
@@ -40,6 +49,9 @@ public sealed class CancelSaleHandler : IRequestHandler<CancelSaleCommand, Resul
         _cashDrawerRepository = cashDrawerRepository;
         _cashSessionRepository = cashSessionRepository;
         _saleTransportAssignmentRepository = saleTransportAssignmentRepository;
+        _customerRepository = customerRepository;
+        _customerPaymentRepository = customerPaymentRepository;
+        _chequeRepository = chequeRepository;
         _unitOfWork = unitOfWork;
     }
 
@@ -64,6 +76,26 @@ public sealed class CancelSaleHandler : IRequestHandler<CancelSaleCommand, Resul
         }
 
         var existingTransportAssignmentId = sale.TransportAssignmentId;
+
+        // Cobros de cuenta corriente imputados a esta venta (antes de cancelarlos).
+        var ccCancelledLines = CaptureActiveCcLines(sale);
+        var ccTotal = ccCancelledLines.Sum(line => line.Amount);
+        var hasCcPayments = sale.IsCuentaCorriente && ccTotal > 0;
+
+        // Con cobros imputados hay que decidir qué hacer con esa plata.
+        if (hasCcPayments && command.RefundMode is null)
+        {
+            return Result.Failure(CancelSaleErrors.RefundModeRequired);
+        }
+
+        // "Anular los pagos": se revierten los cobros vinculados PRIMERO (vuelven la venta a pendiente y el
+        // stock a reservado), y luego se cancela la venta como pendiente. Así el stock no se maneja dos veces.
+        if (hasCcPayments && command.RefundMode == CcCancellationRefundMode.ReversePayments)
+        {
+            var reversal = await ReverseLinkedCobrosAsync(sale, companyId, _currentUserService.UserId!, cancellationToken);
+            if (reversal.IsFailure)
+                return reversal;
+        }
 
         if (sale.SaleStatus == SaleStatus.OnHold)
         {
@@ -112,11 +144,6 @@ public sealed class CancelSaleHandler : IRequestHandler<CancelSaleCommand, Resul
                         _currentUserService.UserId),
                     cancellationToken);
             }
-
-            var ccCancelledLinesOnHold = CaptureActiveCcLines(sale);
-            sale.Cancel();
-            CancelActiveCcPayments(sale);
-            await RegisterCcCancellationIfNeeded(sale, ccCancelledLinesOnHold, cancellationToken);
         }
         else if (sale.SaleStatus == SaleStatus.Paid)
         {
@@ -217,11 +244,23 @@ public sealed class CancelSaleHandler : IRequestHandler<CancelSaleCommand, Resul
             {
                 openSessionForPaid.RegisterSaleCancellation(sale.Payments, sale.Id.Value, _currentUserService.UserId!, originalCashSessionId);
             }
+        }
 
-            var ccCancelledLinesOnPaid = CaptureActiveCcLines(sale);
-            sale.Cancel();
-            CancelActiveCcPayments(sale);
-            await RegisterCcCancellationIfNeeded(sale, ccCancelledLinesOnPaid, cancellationToken);
+        sale.Cancel();
+        CancelActiveCcPayments(sale);
+
+        // "Saldo a favor": el cliente recupera lo cobrado como crédito (no toca caja). El stock ya se devolvió
+        // arriba según el estado de la venta. ("Anular los pagos" ya se resolvió revirtiendo los cobros antes).
+        if (hasCcPayments && command.RefundMode == CcCancellationRefundMode.Credit)
+        {
+            if (sale.CustomerId is null)
+                return Result.Failure(CancelSaleErrors.CustomerNotFound);
+
+            var customer = await _customerRepository.GetByIdAsync(sale.CustomerId, companyId, cancellationToken);
+            if (customer is null)
+                return Result.Failure(CancelSaleErrors.CustomerNotFound);
+
+            customer.AddCredit(ccTotal);
         }
 
         if (existingTransportAssignmentId is not null)
@@ -259,39 +298,55 @@ public sealed class CancelSaleHandler : IRequestHandler<CancelSaleCommand, Resul
             .ToList();
     }
 
-    private async Task RegisterCcCancellationIfNeeded(
-        Sale sale,
-        IReadOnlyList<(SalePaymentMethod Method, decimal Amount, Guid? SaleCcPaymentId)> cancelledLines,
-        CancellationToken cancellationToken)
+    // "Anular los pagos": revierte cada cobro vinculado a la venta (efectivo a caja, crédito y cheque),
+    // reusando la misma lógica que "anular cobro". Requiere caja abierta para cobros en efectivo.
+    private async Task<Result> ReverseLinkedCobrosAsync(Sale sale, CompanyId companyId, UserId userId, CancellationToken cancellationToken)
     {
-        if (!sale.IsCuentaCorriente || cancelledLines.All(line => line.Amount <= 0) || _currentUserService.UserId is null)
-            return;
-
-        CashSession? originalSession = null;
-        var firstCancelledGroupId = sale.CcPayments
-            .Where(p => p.Status == SaleCcPaymentStatus.Cancelled && p.GroupId.HasValue)
-            .Select(p => p.GroupId!.Value)
+        var paymentIds = sale.CcPayments
+            .Where(p => p.Status == SaleCcPaymentStatus.Active && p.CustomerPaymentId.HasValue)
+            .Select(p => p.CustomerPaymentId!.Value)
             .Distinct()
-            .FirstOrDefault();
+            .ToList();
 
-        if (firstCancelledGroupId != Guid.Empty)
+        foreach (var paymentId in paymentIds)
         {
-            originalSession = await _cashSessionRepository.GetByCcPaymentGroupIdAsync(
-                firstCancelledGroupId,
-                sale.CompanyId,
+            var payment = await _customerPaymentRepository.GetByIdAsync(paymentId, companyId.Value, cancellationToken);
+            if (payment is null || payment.Status == SaleCcPaymentStatus.Cancelled)
+                continue;
+
+            var customer = await _customerRepository.GetByIdAsync(new CustomerId(payment.CustomerId), companyId, cancellationToken);
+            if (customer is null)
+                return Result.Failure(CancelSaleErrors.CustomerNotFound);
+
+            CashSession? session;
+            if (payment.Method == SalePaymentMethod.Cash)
+            {
+                var resolve = await CashSessionResolver.ResolveOpenSessionAsync(
+                    _currentUserService, _cashDrawerRepository, _cashSessionRepository, userId, companyId, cancellationToken);
+                if (resolve.Status != CashSessionResolveStatus.Resolved)
+                    return Result.Failure(CancelSaleErrors.NoOpenSessionForRefund);
+                session = resolve.Session;
+            }
+            else
+            {
+                session = await CashSessionResolver.ResolveOpenSessionBestEffortAsync(
+                    _currentUserService, _cashDrawerRepository, _cashSessionRepository, userId, companyId, cancellationToken);
+            }
+
+            await CustomerPaymentReversal.ReverseAsync(
+                payment,
+                customer,
+                session,
+                _saleRepository,
+                _branchProductStockRepository,
+                _stockMovementRepository,
+                _customerRepository,
+                _chequeRepository,
+                companyId,
+                userId,
                 cancellationToken);
         }
 
-        var session = await CashSessionResolutionPolicy.ResolveOpenSessionAsync(
-            _currentUserService,
-            _cashDrawerRepository,
-            _cashSessionRepository,
-            sale.CompanyId,
-            sale.BranchId,
-            originalSession,
-            cancellationToken);
-
-        if (session is not null)
-            session.RegisterCcPaymentCancellation(cancelledLines, sale.Id.Value, _currentUserService.UserId);
+        return Result.Success();
     }
 }

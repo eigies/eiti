@@ -50,6 +50,9 @@ public sealed class CancelSaleHandlerTests
         var cashDrawerRepository = new Mock<ICashDrawerRepository>();
         var cashSessionRepository = new Mock<ICashSessionRepository>();
         var saleTransportAssignmentRepository = new Mock<ISaleTransportAssignmentRepository>();
+        var customerRepository = new Mock<ICustomerRepository>();
+        var customerPaymentRepository = new Mock<ICustomerPaymentRepository>();
+        var chequeRepository = new Mock<IChequeRepository>();
         var unitOfWork = new Mock<IUnitOfWork>();
 
         currentUserService.SetupGet(x => x.IsAuthenticated).Returns(true);
@@ -76,6 +79,9 @@ public sealed class CancelSaleHandlerTests
             cashDrawerRepository.Object,
             cashSessionRepository.Object,
             saleTransportAssignmentRepository.Object,
+            customerRepository.Object,
+            customerPaymentRepository.Object,
+            chequeRepository.Object,
             unitOfWork.Object);
 
         var result = await handler.Handle(new CancelSaleCommand(sale.Id.Value), CancellationToken.None);

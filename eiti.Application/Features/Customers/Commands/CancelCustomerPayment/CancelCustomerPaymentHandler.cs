@@ -88,65 +88,20 @@ public sealed class CancelCustomerPaymentHandler : IRequestHandler<CancelCustome
                 _currentUserService, _cashDrawerRepository, _cashSessionRepository, userId, companyId, cancellationToken);
         }
 
-        // Revertir las imputaciones FIFO que generó este cobro (sus ventas vuelven a pendiente).
-        var sales = await _saleRepository.ListByCustomerPaymentIdAsync(companyId, payment.Id, cancellationToken);
-        var imputedTotal = 0m;
-        foreach (var sale in sales)
-        {
-            imputedTotal += sale.CcPayments
-                .Where(p => p.CustomerPaymentId == payment.Id && p.Status == SaleCcPaymentStatus.Active)
-                .Sum(p => p.Amount);
-
-            var revertedFromPaid = sale.RevertCustomerCredit(payment.Id);
-
-            if (revertedFromPaid)
-            {
-                foreach (var detail in sale.Details)
-                {
-                    var stock = await _branchProductStockRepository.GetOrCreateAsync(
-                        sale.BranchId,
-                        detail.ProductId,
-                        companyId,
-                        cancellationToken);
-
-                    stock.RevertSaleOut(detail.Quantity);
-                    await _stockMovementRepository.AddAsync(
-                        StockMovement.Create(
-                            companyId,
-                            sale.BranchId,
-                            stock.ProductId,
-                            stock.Id,
-                            StockMovementType.Reserve,
-                            detail.Quantity,
-                            "Sale",
-                            sale.Id.Value,
-                            "Stock reverted to reserved (customer payment cancelled).",
-                            userId),
-                        cancellationToken);
-                }
-            }
-        }
-
-        // Si el cobro generó saldo a favor, la anulación lo revierte.
-        var creditGeneratedByPayment = Math.Max(0m, payment.Amount - imputedTotal);
-        if (creditGeneratedByPayment > 0m)
-        {
-            customer.ConsumeCredit(creditGeneratedByPayment);
-        }
-        _customerRepository.Update(customer);
-
-        // Reversa de caja: el efectivo sale del cajón (Out); el resto reversa neutra (None) para trazabilidad.
-        session?.RegisterCustomerPaymentCancellation(payment.Method, payment.Amount, payment.Id, userId);
-
-        // El cheque recibido sale de cartera (Anulado).
-        if (payment.Method == SalePaymentMethod.Check && payment.ChequeId.HasValue)
-        {
-            var cheque = await _chequeRepository.GetByIdAsync(payment.ChequeId.Value, companyId, cancellationToken);
-            if (cheque is not null && cheque.Estado == ChequeStatus.EnCartera)
-                cheque.TransitionTo(ChequeStatus.Anulado);
-        }
-
-        payment.Cancel();
+        // Reversa completa del cobro (des-imputa ventas, revierte crédito, caja y cheque). Lógica compartida
+        // con "anular venta (anular pagos)".
+        await CustomerPaymentReversal.ReverseAsync(
+            payment,
+            customer,
+            session,
+            _saleRepository,
+            _branchProductStockRepository,
+            _stockMovementRepository,
+            _customerRepository,
+            _chequeRepository,
+            companyId,
+            userId,
+            cancellationToken);
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 

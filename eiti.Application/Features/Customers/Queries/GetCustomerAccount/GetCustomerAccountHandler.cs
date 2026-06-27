@@ -106,6 +106,8 @@ public sealed class GetCustomerAccountHandler
                 null,
                 null,
                 null,
+                null,
+                null,
                 s.CreatedAt));
 
             // Cobros legacy por-venta (SaleCcPayment con CustomerPaymentId null y método != CustomerCredit):
@@ -129,6 +131,8 @@ public sealed class GetCustomerAccountHandler
                     null,
                     null,
                     null,
+                    null,
+                    legacy.Notes,
                     legacy.CreatedAt));
             }
         }
@@ -169,6 +173,8 @@ public sealed class GetCustomerAccountHandler
                 chequeNumero,
                 imputaciones,
                 sobrante,
+                pay.Reference,
+                pay.Notes,
                 pay.CreatedAt));
         }
 

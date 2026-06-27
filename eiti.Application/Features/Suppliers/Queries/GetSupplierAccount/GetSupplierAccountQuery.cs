@@ -35,4 +35,6 @@ public sealed record SupplierAccountMovement(
     string? Method,
     string? ChequeNumero,
     IReadOnlyList<SupplierPaymentImputacion>? Imputaciones,  // qué facturas cubrió este pago
-    decimal? Sobrante);                                      // excedente del pago a saldo a favor
+    decimal? Sobrante,                                      // excedente del pago a saldo a favor
+    string? Reference = null,                               // referencia ingresada al registrar el pago
+    string? Notes = null);                                  // nota ingresada al registrar el pago

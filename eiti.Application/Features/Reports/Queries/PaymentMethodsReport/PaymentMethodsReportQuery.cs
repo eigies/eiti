@@ -7,7 +7,8 @@ namespace eiti.Application.Features.Reports.Queries.PaymentMethodsReport;
 public sealed record PaymentMethodsReportQuery(
     DateTime DateFrom,
     DateTime DateTo,
-    Guid? BranchId = null
+    Guid? BranchId = null,
+    string? SaleType = null
 ) : IRequest<Result<PaymentMethodsReportResponse>>, IRequirePermissions
 {
     public IReadOnlyCollection<string> RequiredPermissions => [PermissionCodes.ReportsPayments];
