@@ -3,6 +3,7 @@ using eiti.Application.Abstractions.Repositories;
 using eiti.Application.Abstractions.Services;
 using eiti.Application.Common;
 using eiti.Application.Common.Authorization;
+using eiti.Application.Features.Customers.Common;
 using eiti.Domain.Cash;
 using eiti.Domain.Companies;
 using eiti.Domain.Customers;
@@ -261,6 +262,37 @@ public sealed class CancelSaleHandler : IRequestHandler<CancelSaleCommand, Resul
                 return Result.Failure(CancelSaleErrors.CustomerNotFound);
 
             customer.AddCredit(ccTotal);
+
+            // Aplicar el saldo a favor liberado a las ventas CC pendientes (FIFO), igual que un cobro:
+            // así no queda crédito "suelto" conviviendo con deuda pendiente.
+            var application = await CustomerCreditApplicator.ApplyToPendingCcSalesAsync(
+                customer, companyId, _saleRepository, cancellationToken);
+            _customerRepository.Update(customer);
+
+            // Confirmar stock (reservado -> vendido) de las ventas que pasaron a pagadas con ese crédito.
+            foreach (var paidSale in application.SalesNowPaidEntities)
+            {
+                foreach (var detail in paidSale.Details)
+                {
+                    var paidStock = await _branchProductStockRepository.GetOrCreateAsync(
+                        paidSale.BranchId, detail.ProductId, companyId, cancellationToken);
+
+                    paidStock.ConfirmSaleOut(detail.Quantity);
+                    await _stockMovementRepository.AddAsync(
+                        StockMovement.Create(
+                            companyId,
+                            paidSale.BranchId,
+                            paidStock.ProductId,
+                            paidStock.Id,
+                            StockMovementType.SaleOut,
+                            detail.Quantity,
+                            "Sale",
+                            paidSale.Id.Value,
+                            "Stock confirmado vendido (CC pagada con saldo a favor liberado al anular).",
+                            _currentUserService.UserId),
+                        cancellationToken);
+                }
+            }
         }
 
         if (existingTransportAssignmentId is not null)
