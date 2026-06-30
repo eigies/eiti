@@ -14,5 +14,11 @@ public sealed class StockMovementsReportValidator : AbstractValidator<StockMovem
             .LessThanOrEqualTo(x => x.DateTo)
             .When(x => x.DateFrom != default && x.DateTo != default)
             .WithMessage("La fecha desde no puede ser posterior a la fecha hasta.");
+
+        RuleFor(x => x.Page)
+            .GreaterThanOrEqualTo(1).WithMessage("La página debe ser mayor o igual a 1.");
+
+        RuleFor(x => x.PageSize)
+            .InclusiveBetween(1, 5000).WithMessage("El tamaño de página debe estar entre 1 y 5000.");
     }
 }

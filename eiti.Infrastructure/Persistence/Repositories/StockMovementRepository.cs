@@ -61,6 +61,58 @@ public sealed class StockMovementRepository : IStockMovementRepository
         IReadOnlyCollection<Guid>? allowedBranchIds,
         CancellationToken cancellationToken = default)
     {
+        return await BuildReportQuery(companyId, from, to, productId, branchId, type, allowedBranchIds)
+            .OrderByDescending(movement => movement.CreatedAt)
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<StockMovement>> ListForReportPagedAsync(
+        CompanyId companyId,
+        DateTime from,
+        DateTime to,
+        Guid? productId,
+        Guid? branchId,
+        int? type,
+        IReadOnlyCollection<Guid>? allowedBranchIds,
+        int skip,
+        int take,
+        CancellationToken cancellationToken = default)
+    {
+        return await BuildReportQuery(companyId, from, to, productId, branchId, type, allowedBranchIds)
+            .OrderByDescending(movement => movement.CreatedAt)
+            .Skip(skip)
+            .Take(take)
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<StockMovementTypeAggregate>> GetReportAggregatesAsync(
+        CompanyId companyId,
+        DateTime from,
+        DateTime to,
+        Guid? productId,
+        Guid? branchId,
+        int? type,
+        IReadOnlyCollection<Guid>? allowedBranchIds,
+        CancellationToken cancellationToken = default)
+    {
+        return await BuildReportQuery(companyId, from, to, productId, branchId, type, allowedBranchIds)
+            .GroupBy(movement => movement.Type)
+            .Select(g => new StockMovementTypeAggregate(
+                (int)g.Key,
+                g.Sum(m => m.Quantity),
+                g.Count()))
+            .ToListAsync(cancellationToken);
+    }
+
+    private IQueryable<StockMovement> BuildReportQuery(
+        CompanyId companyId,
+        DateTime from,
+        DateTime to,
+        Guid? productId,
+        Guid? branchId,
+        int? type,
+        IReadOnlyCollection<Guid>? allowedBranchIds)
+    {
         var query = _context.StockMovements
             .AsNoTracking()
             .Where(movement =>
@@ -92,8 +144,6 @@ public sealed class StockMovementRepository : IStockMovementRepository
             query = query.Where(movement => allowed.Contains(movement.BranchId));
         }
 
-        return await query
-            .OrderByDescending(movement => movement.CreatedAt)
-            .ToListAsync(cancellationToken);
+        return query;
     }
 }

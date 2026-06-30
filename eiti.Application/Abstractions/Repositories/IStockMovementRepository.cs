@@ -33,4 +33,31 @@ public interface IStockMovementRepository
         int? type,
         IReadOnlyCollection<Guid>? allowedBranchIds,
         CancellationToken cancellationToken = default);
+
+    // Página de movimientos del reporte (mismos filtros, orden fecha desc).
+    Task<IReadOnlyList<StockMovement>> ListForReportPagedAsync(
+        CompanyId companyId,
+        DateTime from,
+        DateTime to,
+        Guid? productId,
+        Guid? branchId,
+        int? type,
+        IReadOnlyCollection<Guid>? allowedBranchIds,
+        int skip,
+        int take,
+        CancellationToken cancellationToken = default);
+
+    // Totales agregados del set completo (sin materializar filas): cantidad por tipo + count total.
+    Task<IReadOnlyList<StockMovementTypeAggregate>> GetReportAggregatesAsync(
+        CompanyId companyId,
+        DateTime from,
+        DateTime to,
+        Guid? productId,
+        Guid? branchId,
+        int? type,
+        IReadOnlyCollection<Guid>? allowedBranchIds,
+        CancellationToken cancellationToken = default);
 }
+
+// Agregado por tipo de movimiento para calcular entradas/salidas/neto sin traer todas las filas.
+public sealed record StockMovementTypeAggregate(int Type, int Quantity, int Count);

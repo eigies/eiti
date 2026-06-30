@@ -2,7 +2,11 @@ namespace eiti.Application.Features.Reports.Queries.StockMovementsReport;
 
 public sealed record StockMovementsReportResponse(
     IReadOnlyList<StockMovementsReportRow> Rows,
-    StockMovementsReportTotals Totals);
+    StockMovementsReportTotals Totals,
+    int Page,
+    int PageSize,
+    int TotalCount,
+    int TotalPages);
 
 public sealed record StockMovementsReportRow(
     DateTime Date,

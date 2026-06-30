@@ -95,10 +95,12 @@ public sealed class ReportsController : ControllerBase
         [FromQuery] Guid? productId,
         [FromQuery] Guid? branchId,
         [FromQuery] int? type,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 50,
         CancellationToken cancellationToken = default)
     {
         var result = await _sender.Send(
-            new StockMovementsReportQuery(dateFrom, dateTo, productId, branchId, type),
+            new StockMovementsReportQuery(dateFrom, dateTo, productId, branchId, type, page, pageSize),
             cancellationToken);
         return result.ToActionResult();
     }

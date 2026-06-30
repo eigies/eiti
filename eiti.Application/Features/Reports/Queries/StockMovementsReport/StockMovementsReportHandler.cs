@@ -49,15 +49,41 @@ public sealed class StockMovementsReportHandler
             ? null
             : _currentUserService.AllowedBranchIds;
 
-        var movements = await _stockMovementRepository.ListForReportAsync(
+        var page = request.Page < 1 ? 1 : request.Page;
+        var pageSize = request.PageSize < 1 ? 50 : request.PageSize;
+
+        // Totales y count sobre el set COMPLETO, agregados en la DB (sin materializar todas las filas).
+        var aggregates = await _stockMovementRepository.GetReportAggregatesAsync(
             companyId, from, to, request.ProductId, request.BranchId, request.Type, allowedBranchIds, cancellationToken);
 
-        // Diccionarios de apoyo (nombres) y códigos de documento (batch, sin N+1).
-        var products = (await _productRepository.GetByCompanyIdAsync(companyId, cancellationToken))
-            .ToDictionary(p => p.Id.Value, p => (p.Code, p.Brand, p.Name));
+        var entradas = 0;
+        var salidas = 0;
+        var totalCount = 0;
+        foreach (var agg in aggregates)
+        {
+            totalCount += agg.Count;
+            var direction = Direction((StockMovementType)agg.Type);
+            if (direction > 0) entradas += agg.Quantity;
+            else if (direction < 0) salidas += agg.Quantity;
+        }
+
+        var totalPages = totalCount == 0 ? 0 : (int)Math.Ceiling(totalCount / (double)pageSize);
+
+        // Solo la página pedida.
+        var movements = await _stockMovementRepository.ListForReportPagedAsync(
+            companyId, from, to, request.ProductId, request.BranchId, request.Type, allowedBranchIds,
+            (page - 1) * pageSize, pageSize, cancellationToken);
+
+        // Nombres SOLO de los productos presentes en la página (evita cargar todo el catálogo).
+        var pageProductIds = movements.Select(m => m.ProductId).Distinct().ToList();
+        var products = pageProductIds.Count > 0
+            ? (await _productRepository.GetByIdsAsync(pageProductIds, companyId, cancellationToken))
+                .ToDictionary(p => p.Id.Value, p => (p.Code, p.Brand, p.Name))
+            : new Dictionary<Guid, (string Code, string Brand, string Name)>();
         var branches = (await _branchRepository.ListByCompanyAsync(companyId, cancellationToken) ?? [])
             .ToDictionary(b => b.Id.Value, b => b.Name);
 
+        // Códigos de documento (batch, sin N+1) solo para la página.
         var saleIds = movements.Where(m => m.ReferenceType == "Sale" && m.ReferenceId.HasValue)
             .Select(m => m.ReferenceId!.Value).Distinct().ToList();
         var purchaseIds = movements.Where(m => m.ReferenceType == "Purchase" && m.ReferenceId.HasValue)
@@ -77,15 +103,9 @@ public sealed class StockMovementsReportHandler
         };
 
         var rows = new List<StockMovementsReportRow>(movements.Count);
-        var entradas = 0;
-        var salidas = 0;
         foreach (var m in movements)
         {
             products.TryGetValue(m.ProductId.Value, out var prod);
-            var direction = Direction(m.Type);
-            if (direction > 0) entradas += m.Quantity;
-            else if (direction < 0) salidas += m.Quantity;
-
             rows.Add(new StockMovementsReportRow(
                 m.CreatedAt,
                 m.BranchId.Value,
@@ -96,7 +116,7 @@ public sealed class StockMovementsReportHandler
                 prod.Name ?? "(Producto)",
                 (int)m.Type,
                 TypeLabel(m.Type),
-                direction,
+                Direction(m.Type),
                 m.Quantity,
                 m.ReferenceType,
                 m.ReferenceId,
@@ -104,8 +124,9 @@ public sealed class StockMovementsReportHandler
                 m.Description));
         }
 
-        var totals = new StockMovementsReportTotals(entradas, salidas, entradas - salidas, movements.Count);
-        return Result<StockMovementsReportResponse>.Success(new StockMovementsReportResponse(rows, totals));
+        var totals = new StockMovementsReportTotals(entradas, salidas, entradas - salidas, totalCount);
+        return Result<StockMovementsReportResponse>.Success(
+            new StockMovementsReportResponse(rows, totals, page, pageSize, totalCount, totalPages));
     }
 
     private static int Direction(StockMovementType type) => type switch
