@@ -1,3 +1,4 @@
+using eiti.Domain.Sales;
 using FluentValidation;
 
 namespace eiti.Application.Features.Sales.Commands.CreateSale;
@@ -8,6 +9,12 @@ public sealed class CreateSaleValidator : AbstractValidator<CreateSaleCommand>
     {
         RuleFor(x => x.BranchId)
             .NotEmpty().WithMessage("Branch id is required.");
+
+        RuleFor(x => x.SourceChannel)
+            .NotNull().WithMessage("El canal de origen es obligatorio.")
+            .Must(channel => Enum.IsDefined(typeof(SaleSourceChannel), channel!.Value))
+            .When(x => x.SourceChannel.HasValue)
+            .WithMessage("El canal de origen no es válido.");
 
         RuleFor(x => x.IdSaleStatus)
             .InclusiveBetween(1, 3).WithMessage("A valid sale status is required.");
