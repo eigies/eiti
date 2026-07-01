@@ -24,5 +24,19 @@ public sealed class CreateCcSaleValidator : AbstractValidator<CreateCcSaleComman
                 detail.RuleFor(x => x.Quantity)
                     .GreaterThan(0).WithMessage("Quantity must be greater than zero.");
             });
+
+        RuleForEach(x => x.TradeIns)
+            .ChildRules(tradeIn =>
+            {
+                tradeIn.RuleFor(x => x.ProductId)
+                    .NotEmpty().WithMessage("Trade-in product id is required.");
+
+                tradeIn.RuleFor(x => x.Quantity)
+                    .GreaterThan(0).WithMessage("Trade-in quantity must be greater than zero.");
+
+                tradeIn.RuleFor(x => x.Amount)
+                    .GreaterThanOrEqualTo(0m).WithMessage("Trade-in amount cannot be negative.");
+            })
+            .When(x => x.TradeIns is not null);
     }
 }

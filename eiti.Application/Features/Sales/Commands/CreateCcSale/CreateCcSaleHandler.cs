@@ -122,6 +122,46 @@ public sealed class CreateCcSaleHandler : IRequestHandler<CreateCcSaleCommand, R
             saleDetails.Add(SaleDetail.Create(product.Id, detail.Quantity, unitPrice, detail.DiscountPercent, BranchPricing.ResolveCost(stock, product)));
         }
 
+        // Canjes: mismas reglas que la venta normal (el producto debe permitir valor manual). El valor del
+        // canje saldará parte de la deuda CC; el ingreso de stock (TradeInIn) se registra más abajo.
+        var groupedTradeIns = (request.TradeIns ?? [])
+            .GroupBy(tradeIn => tradeIn.ProductId)
+            .Select(group => new
+            {
+                ProductId = group.Key,
+                Quantity = group.Sum(item => item.Quantity),
+                Amount = group.Sum(item => item.Amount)
+            })
+            .ToList();
+
+        var saleTradeIns = new List<SaleTradeIn>();
+        foreach (var tradeIn in groupedTradeIns)
+        {
+            if (!productMap.TryGetValue(tradeIn.ProductId, out var tradeInProduct))
+            {
+                tradeInProduct = await _productRepository.GetByIdAsync(
+                    new ProductId(tradeIn.ProductId), companyId, cancellationToken);
+
+                if (tradeInProduct is null)
+                {
+                    return Result<CreateCcSaleResponse>.Failure(
+                        Error.NotFound("Sales.CreateCc.TradeInProductNotFound", $"The trade-in product '{tradeIn.ProductId}' was not found."));
+                }
+
+                productMap[tradeInProduct.Id.Value] = tradeInProduct;
+            }
+
+            if (!tradeInProduct.AllowsManualValueInSale)
+            {
+                return Result<CreateCcSaleResponse>.Failure(
+                    Error.Validation(
+                        "Sales.CreateCc.TradeInManualValueNotAllowed",
+                        $"The product '{tradeInProduct.Name}' does not allow manual value in sale and cannot be used as a trade-in."));
+            }
+
+            saleTradeIns.Add(SaleTradeIn.Create(tradeInProduct.Id, tradeIn.Quantity, tradeIn.Amount));
+        }
+
         foreach (var detail in groupedDetails)
         {
             var stock = stockMap[detail.ProductId];
@@ -157,6 +197,7 @@ public sealed class CreateCcSaleHandler : IRequestHandler<CreateCcSaleCommand, R
                 branch.Id,
                 customer.Id,
                 saleDetails,
+                tradeIns: saleTradeIns,
                 code: saleCode,
                 generalDiscountPercent: request.GeneralDiscountPercent);
         }
@@ -190,12 +231,35 @@ public sealed class CreateCcSaleHandler : IRequestHandler<CreateCcSaleCommand, R
                 cancellationToken);
         }
 
+        // Ingreso de stock por canje: la batería usada entra al inventario al momento de la venta,
+        // igual que en la venta normal (movimiento TradeInIn).
+        foreach (var tradeIn in sale.TradeIns)
+        {
+            var tradeInStock = await _branchProductStockRepository.GetOrCreateAsync(
+                branch.Id, tradeIn.ProductId, companyId, cancellationToken);
+
+            tradeInStock.ApplyManualEntry(tradeIn.Quantity);
+            await _stockMovementRepository.AddAsync(
+                StockMovement.Create(
+                    companyId,
+                    branch.Id,
+                    tradeInStock.ProductId,
+                    tradeInStock.Id,
+                    StockMovementType.TradeInIn,
+                    tradeIn.Quantity,
+                    "Sale",
+                    sale.Id.Value,
+                    "Stock received from product trade-in (CC sale).",
+                    _currentUserService.UserId),
+                cancellationToken);
+        }
+
         await _saleRepository.AddAsync(sale, cancellationToken);
 
         decimal creditApplied = 0m;
-        if (customer.CreditBalance > 0)
+        if (customer.CreditBalance > 0 && sale.CcPendingAmount > 0)
         {
-            creditApplied = Math.Min(customer.CreditBalance, sale.TotalAmount);
+            creditApplied = Math.Min(customer.CreditBalance, sale.CcPendingAmount);
             customer.ConsumeCredit(creditApplied);
             sale.AddCcPayment(
                 SalePaymentMethod.CustomerCredit,
@@ -232,7 +296,15 @@ public sealed class CreateCcSaleHandler : IRequestHandler<CreateCcSaleCommand, R
                     detail.Quantity,
                     detail.UnitPrice,
                     detail.DiscountPercent,
-                    detail.TotalAmount)).ToList()));
+                    detail.TotalAmount)).ToList(),
+                sale.TradeInAmount,
+                sale.CcPendingAmount,
+                sale.TradeIns.Select(tradeIn => new CreateCcSaleTradeInItemResponse(
+                    tradeIn.ProductId.Value,
+                    GetProductName(productMap, tradeIn.ProductId.Value),
+                    GetProductBrand(productMap, tradeIn.ProductId.Value),
+                    tradeIn.Quantity,
+                    tradeIn.Amount)).ToList()));
     }
 
     private static string GetProductName(IDictionary<Guid, Product> productMap, Guid productId)

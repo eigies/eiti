@@ -9,6 +9,7 @@ public sealed record CreateCcSaleCommand(
     Guid BranchId,
     Guid CustomerId,
     IReadOnlyList<CreateSaleDetailItemRequest> Details,
+    IReadOnlyList<CreateSaleTradeInItemRequest>? TradeIns = null,
     decimal GeneralDiscountPercent = 0,
     decimal? ManualOverridePrice = null
 ) : IRequest<Result<CreateCcSaleResponse>>, IRequirePermissions

@@ -31,7 +31,15 @@ public sealed record GetSaleByIdResponse(
     DateTime? UpdatedAt,
     IReadOnlyList<GetSaleByIdDetailResponse> Details,
     IReadOnlyList<GetSaleByIdPaymentResponse> Payments,
-    IReadOnlyList<GetSaleByIdCcPaymentResponse> CcPayments);
+    IReadOnlyList<GetSaleByIdCcPaymentResponse> CcPayments,
+    IReadOnlyList<GetSaleByIdTradeInResponse> TradeIns);
+
+public sealed record GetSaleByIdTradeInResponse(
+    Guid ProductId,
+    string ProductName,
+    string ProductBrand,
+    int Quantity,
+    decimal Amount);
 
 public sealed record GetSaleByIdDetailResponse(
     Guid ProductId,

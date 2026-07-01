@@ -48,7 +48,10 @@ public sealed class Sale : AggregateRoot<SaleId>
     public decimal CcPaidTotal => _ccPayments
         .Where(p => p.Status == SaleCcPaymentStatus.Active)
         .Sum(p => p.Amount);
-    public decimal CcPendingAmount => NormalizeAmount(TotalAmount - CcPaidTotal);
+    // En CC el canje (TradeInAmount) salda parte de la deuda al igual que en la venta normal:
+    // lo saldado es lo cobrado a cuenta + el valor del canje entregado al momento de la venta.
+    public decimal CcSettledTotal => CcPaidTotal + TradeInAmount;
+    public decimal CcPendingAmount => NormalizeAmount(TotalAmount - CcSettledTotal);
     public decimal EffectiveTotal => TotalAmount + CardSurchargeTotal;
     public decimal PendingAmount => NormalizeAmount(EffectiveTotal - SettledAmount);
     public decimal ChangeAmount => NormalizeAmount(Math.Max(0m, SettledAmount - EffectiveTotal));
@@ -162,6 +165,7 @@ public sealed class Sale : AggregateRoot<SaleId>
         BranchId branchId,
         CustomerId customerId,
         IEnumerable<SaleDetail> details,
+        IEnumerable<SaleTradeIn>? tradeIns = null,
         decimal noDeliverySurchargeTotal = 0,
         string? code = null,
         decimal generalDiscountPercent = 0,
@@ -203,7 +207,41 @@ public sealed class Sale : AggregateRoot<SaleId>
             sale.SetManualOverride(manualOverridePrice.Value, overriddenByUserId);
         }
 
+        // El canje se adjunta después de fijar el total (incluido override) para validar contra él.
+        sale.AttachCcTradeIns(tradeIns);
+
         return sale;
+    }
+
+    // Adjunta los canjes de una venta CC. El valor del canje salda parte de la deuda (vía CcSettledTotal),
+    // reduciendo CcPendingAmount, pero NO cambia el estado por sí mismo: la venta queda OnHold. El paso a
+    // Pagada ocurre solo con pagos CC reales (que ya contemplan el canje al comparar contra CcSettledTotal).
+    // Así, si el canje cubre el total, la venta queda OnHold con saldo 0 y la anulación libera la reserva
+    // correctamente (las ventas CC mantienen el stock reservado; nunca hacen ConfirmSaleOut).
+    // El ingreso de stock (TradeInIn) lo registra el handler.
+    private void AttachCcTradeIns(IEnumerable<SaleTradeIn>? tradeIns)
+    {
+        var tradeInList = (tradeIns ?? []).ToList();
+        if (tradeInList.Count == 0)
+        {
+            return;
+        }
+
+        if (tradeInList.GroupBy(tradeIn => tradeIn.ProductId).Any(group => group.Count() > 1))
+        {
+            throw new ArgumentException("Duplicated trade-in products are not allowed.", nameof(tradeIns));
+        }
+
+        foreach (var tradeIn in tradeInList)
+        {
+            tradeIn.AttachToSale(Id);
+            _tradeIns.Add(tradeIn);
+        }
+
+        if (NormalizeAmount(TradeInAmount) > NormalizeAmount(TotalAmount))
+        {
+            throw new InvalidOperationException("El canje no puede superar el total de la venta.");
+        }
     }
 
     public void SetManualOverride(decimal price, Guid? userId)
@@ -250,7 +288,7 @@ public sealed class Sale : AggregateRoot<SaleId>
         var payment = SaleCcPayment.Create(Id, method, amount, date, notes);
         _ccPayments.Add(payment);
 
-        if (NormalizeAmount(CcPaidTotal) >= NormalizeAmount(TotalAmount))
+        if (NormalizeAmount(CcSettledTotal) >= NormalizeAmount(TotalAmount))
         {
             TransitionToPaidFromCc();
         }
@@ -286,7 +324,7 @@ public sealed class Sale : AggregateRoot<SaleId>
             customerPaymentId: customerPaymentId);
         _ccPayments.Add(payment);
 
-        if (!wasPaid && NormalizeAmount(CcPaidTotal) >= NormalizeAmount(TotalAmount))
+        if (!wasPaid && NormalizeAmount(CcSettledTotal) >= NormalizeAmount(TotalAmount))
         {
             TransitionToPaidFromCc();
             return true;
@@ -321,7 +359,7 @@ public sealed class Sale : AggregateRoot<SaleId>
             row.Cancel();
         }
 
-        if (wasPaid && NormalizeAmount(CcPaidTotal) < NormalizeAmount(TotalAmount))
+        if (wasPaid && NormalizeAmount(CcSettledTotal) < NormalizeAmount(TotalAmount))
         {
             RevertToOnHoldFromCc();
             return true;
@@ -372,7 +410,7 @@ public sealed class Sale : AggregateRoot<SaleId>
             created.Add(payment);
         }
 
-        if (NormalizeAmount(CcPaidTotal) >= NormalizeAmount(TotalAmount))
+        if (NormalizeAmount(CcSettledTotal) >= NormalizeAmount(TotalAmount))
         {
             TransitionToPaidFromCc();
         }
@@ -405,7 +443,7 @@ public sealed class Sale : AggregateRoot<SaleId>
             payment.Cancel();
         }
 
-        if (wasPaid && NormalizeAmount(CcPaidTotal) < NormalizeAmount(TotalAmount))
+        if (wasPaid && NormalizeAmount(CcSettledTotal) < NormalizeAmount(TotalAmount))
         {
             RevertToOnHoldFromCc();
         }
@@ -445,7 +483,7 @@ public sealed class Sale : AggregateRoot<SaleId>
             payment.Cancel();
         }
 
-        if (wasPaid && NormalizeAmount(CcPaidTotal) < NormalizeAmount(TotalAmount))
+        if (wasPaid && NormalizeAmount(CcSettledTotal) < NormalizeAmount(TotalAmount))
         {
             RevertToOnHoldFromCc();
         }

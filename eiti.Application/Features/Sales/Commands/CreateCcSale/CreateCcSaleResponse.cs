@@ -16,7 +16,10 @@ public sealed record CreateCcSaleResponse(
     DateTime CreatedAt,
     decimal CreditApplied,
     decimal RemainingCustomerCredit,
-    IReadOnlyList<CreateCcSaleDetailItemResponse> Details);
+    IReadOnlyList<CreateCcSaleDetailItemResponse> Details,
+    decimal TradeInAmount,
+    decimal CcPendingAmount,
+    IReadOnlyList<CreateCcSaleTradeInItemResponse> TradeIns);
 
 public sealed record CreateCcSaleDetailItemResponse(
     Guid ProductId,
@@ -26,3 +29,10 @@ public sealed record CreateCcSaleDetailItemResponse(
     decimal UnitPrice,
     decimal DiscountPercent,
     decimal TotalAmount);
+
+public sealed record CreateCcSaleTradeInItemResponse(
+    Guid ProductId,
+    string ProductName,
+    string ProductBrand,
+    int Quantity,
+    decimal Amount);

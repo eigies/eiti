@@ -57,7 +57,9 @@ public sealed class GetSaleByIdHandler : IRequestHandler<GetSaleByIdQuery, Resul
             customer = await _customerRepository.GetByIdAsync(sale.CustomerId, companyId, cancellationToken);
         }
 
-        var productIds = sale.Details.Select(d => d.ProductId).Distinct().ToList();
+        var productIds = sale.Details.Select(d => d.ProductId)
+            .Concat(sale.TradeIns.Select(t => t.ProductId))
+            .Distinct().ToList();
         var productMap = productIds.Count == 0
             ? new Dictionary<Guid, Product>()
             : (await _productRepository.GetByIdsAsync(productIds, companyId, cancellationToken))
@@ -124,7 +126,13 @@ public sealed class GetSaleByIdHandler : IRequestHandler<GetSaleByIdQuery, Resul
                     payment.Status.ToString(),
                     payment.CreatedAt,
                     payment.CancelledAt,
-                    payment.GroupId)).ToList()));
+                    payment.GroupId)).ToList(),
+                sale.TradeIns.Select(tradeIn => new GetSaleByIdTradeInResponse(
+                    tradeIn.ProductId.Value,
+                    GetProductName(productMap, tradeIn.ProductId.Value),
+                    GetProductBrand(productMap, tradeIn.ProductId.Value),
+                    tradeIn.Quantity,
+                    tradeIn.Amount)).ToList()));
     }
 
     private static string GetProductName(IDictionary<Guid, Product> productMap, Guid productId)
