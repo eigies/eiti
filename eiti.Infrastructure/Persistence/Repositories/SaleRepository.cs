@@ -289,8 +289,12 @@ public sealed class SaleRepository : ISaleRepository
             .OrderBy(sale => sale.CreatedAt)
             .ToListAsync(cancellationToken);
 
+        // El filtro de estado se re-chequea en memoria: el SQL evalúa SaleStatus contra el valor persistido,
+        // pero un handler puede haber cancelado una venta (aún sin SaveChanges) cuyos cobros CC quedaron inactivos,
+        // reinflando su CcPendingAmount. Sin este re-chequeo, esa venta recién cancelada se reprocesaría como
+        // pendiente y ApplyCustomerCredit lanzaría "Cannot add payments to a cancelled sale."
         return sales
-            .Where(sale => sale.CcPendingAmount > 0)
+            .Where(sale => sale.SaleStatus != SaleStatus.Cancel && sale.CcPendingAmount > 0)
             .ToList();
     }
 
