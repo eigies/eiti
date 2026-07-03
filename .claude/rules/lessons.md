@@ -316,3 +316,23 @@ When a layout doesn't match expectations (e.g., items stacking instead of side-b
 - **getDisplayRows return type**: The spec required referenceId for the CC popup click handler. Added `referenceId: string | null` to the return type so the template can access it.
 - **Inline template import()**: Used a dynamic import type annotation `import('...').CcPaymentResponse[]` for the ccPopupPayments field to avoid adding a top-level import for a type already implicitly available — alternatively could have relied on the existing SaleByIdResponse import which already imports CcPaymentResponse.
 - **No btn--sm in this project**: Per PaymentShared agent lessons, btn--sm wasn't in the global styles. Added it in the component-level CSS for Banks and Cheques.
+
+## Lentitud severa en Railway — el fix es `redeploy --from-source`, no restart ni región - 2026-07-01
+
+**Síntoma:** usuarios reportan lentitud. `railway metrics --service eiti-api` mostraba **p50=p90=p99=30000ms** (todo clavado en el timeout del edge). Requests colgaban 8-30s.
+
+**Diagnóstico (qué NO era, con evidencia):**
+- **Base de datos:** sana. Conectando por el proxy público (`thomas.proxy.rlwy.net`, credenciales en `.claude/settings.local.json`): sin queries lentas, sin locks, 99.99% cache hit, 10/100 conexiones, 26 MB. Descartada.
+- **CPU/RAM:** `railway metrics` → CPU **~0%** (0.01 de 8 vCPU), RAM 420MB/8GB. Sobran recursos → escalar no servía.
+- **GC ("los hilos", fix del 23/06 en `eiti.Api.csproj` L11-12 `ServerGarbageCollection=false`):** seguía puesto, sin override de env `DOTNET_gcServer`. Además el GC consumiría CPU y estaba en 0%. Descartado.
+- **Código de la app:** el pipeline es trivial — `GlobalExceptionHandlingMiddleware` es solo try/catch, JWT simétrico (sin fetch OIDC), sin llamadas de red por request. **Un 404 sin DB también colgaba ~8s**, así que no era ningún handler.
+- **Cruce de regiones API↔DB:** el API estaba en `sfo` y Postgres en `us-west2`. Lo co-loqué (`railway scale --service eiti-api us-west2=1 sfo=0`) → **NO cambió el p50**. El ~8s ya existía en sfo. NO era la causa (aunque co-locar es correcto igual; dejarlos juntos).
+- **Réplicas stale:** un solo deployment RUNNING, los viejos REMOVED. Descartado.
+
+**La pista definitiva:** desglose de `curl -w`: `DNS 0.02s · TCP 0.22s · TLS-al-edge 0.6s · [~8s de nada] · primer byte 9s`. Todo el retraso está **entre el edge de Railway y el contenedor**, para un 404, con CPU en 0%. = estado degradado del deployment/proxy de Railway, no la app.
+
+**Lo que NO lo arregló:** `railway restart` (no limpió; un 404 solo seguía en 8s). Cambio de región (ver arriba).
+
+**Lo que SÍ lo arregló:** `railway redeploy --service eiti-api --from-source -y` (rebuild fresco desde el último commit, zero-downtime). **p50 pasó de 30000ms → 6ms** al instante.
+
+**Patrón a recordar:** si CPU=0% + hasta los 404s cuelgan + el código está exonerado (pipeline trivial) → es estado pegado del deployment de Railway. **Ir directo a `redeploy --from-source`**; no perder tiempo con restart ni con región. Si tras el redeploy sigue → ticket a soporte de Railway con el desglose de tiempos. (Nota: mover Postgres de región no es trivial — tiene volumen `postgres-volume` regional, requiere dump/restore.)

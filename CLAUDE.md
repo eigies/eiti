@@ -15,13 +15,13 @@
 
 **Flujo:** `feature/* → develop → (cuando está OK) → main → tag vX.Y.Z → deploy`.
 
-**Deploy (todo por CLI; scope Vercel `agustin-testa-s-projects1`):**
-- **Back (API):** `railway up --service eiti-api` (Docker via `eiti.Api/Dockerfile`, config en `railway.json`). Las migraciones EF se aplican solas al arranque (`Database.Migrate()`).
+**Deploy (scope Vercel `agustin-testa-s-projects1`):**
+- **Back (API):** **auto-deploy por git integration** — `git push origin main` dispara build + deploy del servicio `eiti-api` en Railway (Docker via `eiti.Api/Dockerfile`, config en `railway.json`). Las migraciones EF se aplican solas al arranque (`Database.Migrate()`). **No usar `railway up`** (sería un segundo deploy que se pisa con la integración).
 - **App (front):** desde `C:/EiTeFront/eiti-front` → `vercel deploy --prod --scope agustin-testa-s-projects1` (ese dir está linkeado al proyecto `eiti-front` → `app.eiticloud.com`).
 - **Landing:** desde `C:/eiti-landing` → `vercel deploy --prod --scope agustin-testa-s-projects1` (dir linkeado a `eiti-landing` → `eiticloud.com`).
 - **CORS:** la API permite los orígenes en Railway env `Cors__AllowedOrigins__0..N` (hoy: `eiticloud.com`, `www.eiticloud.com`, `app.eiticloud.com`, `eiti-front.vercel.app`). Origen nuevo = sumarlo ahí y la API redeploya sola.
 - **Dominios (Vercel):** `eiticloud.com`+`www` → `eiti-landing`; `app.eiticloud.com` → `eiti-front`. Para mover un dominio entre proyectos hay que **quitarlo del proyecto viejo** (Settings→Domains→Remove) y **agregarlo al nuevo** (el `--force` del CLI no alcanza, da `alias_conflict`). DNS en Hostinger: apex `@`→A `76.76.21.21`; `www` y `app`→CNAME `cname.vercel-dns.com`.
-- Push-to-deploy automático (git integration `main`→prod en Railway/Vercel): pendiente; hoy todo es por CLI.
+- Push-to-deploy automático: **backend ya configurado** (Railway git integration, rama `main`). Front (Vercel) sigue por CLI (`vercel deploy --prod`) salvo que también se configure git integration.
 - Secrets / connection string: SIEMPRE por **env vars** en Railway (`ConnectionStrings__DefaultConnection`, `JwtSettings__Secret`, `EmailSettings__*`), nunca hardcodeados en `appsettings.json`.
 
 ## Workflow Orchestration
