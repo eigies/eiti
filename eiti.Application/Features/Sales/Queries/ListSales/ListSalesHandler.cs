@@ -134,6 +134,7 @@ public sealed class ListSalesHandler : IRequestHandler<ListSalesQuery, Result<IR
                         customerAddress,
                         string.IsNullOrWhiteSpace(customer?.Phone) ? null : customer.Phone,
                         sale.DeliveryAddress,
+                        sale.ContactPhone,
                         sale.CashDrawerId?.Value,
                         sale.CashSessionId?.Value,
                         sale.HasDelivery,

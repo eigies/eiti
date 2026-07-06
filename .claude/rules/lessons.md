@@ -1,5 +1,22 @@
 # Lessons Learned
 
+## ChunkLoadError / "no anda el menú" tras deploy del front - 2026-07-05
+
+**Síntoma:** después de `vercel deploy --prod` del front, un usuario que tenía la app abierta reporta que "no anda el menú, no puedo navegar". Consola: `ChunkLoadError: Loading chunk NNN failed` + `Failed to load module script: Expected a JavaScript-or-Wasm module script but the server responded with a MIME type of "text/html"`.
+
+**Causa raíz:** el navegador tenía cargado en memoria el `index.html` + `main.<hashViejo>.js` de la versión previa. El deploy nuevo reemplaza los chunks lazy con hashes nuevos y borra los viejos. Al tocar el menú, Angular hace lazy-load del chunk viejo (`NNN.<hashViejo>.js`) que **ya no existe** → Vercel devuelve el `index.html` (SPA fallback) con `HTTP 200 text/html` → el navegador esperaba JS → ChunkLoadError. **No es un deploy roto**: `index.html` sirve bien (`cache-control: max-age=0, must-revalidate`), sólo que la pestaña vieja seguía viva.
+
+**Diagnóstico rápido (confirmar que es esto y no un deploy corrupto):**
+- `curl -s https://app.eiticloud.com/ | grep -oE "main\.[a-f0-9]+\.js"` → hash del deploy actual.
+- Comparar con el `main.<hash>` que muestra el stack de la consola del usuario. Si **difieren** → es caché de sesión vieja, no deploy roto.
+- `curl -sI` al chunk que falla: si devuelve `content-type: text/html` con 200 → el chunk no existe (fue reemplazado), confirma el fallback SPA.
+
+**Fix inmediato (usuario):** recargar la página (F5). Como `index.html` es `must-revalidate`, el reload trae el `main` nuevo y anda.
+
+**Fix de fondo (implementado v1.7.1):** `ErrorHandler` global `src/app/core/handlers/chunk-error.handler.ts`, registrado en `app.config.ts` (`{ provide: ErrorHandler, useClass: ChunkErrorHandler }`). Detecta el ChunkLoadError por regex del mensaje y hace `window.location.reload()` **una sola vez** (guard por timestamp en `sessionStorage`, cooldown 10s) para no entrar en loop si el chunk está realmente roto. Con esto, futuros deploys no rompen sesiones abiertas: se recargan solas.
+
+**Patrón a recordar:** en cualquier SPA con chunks hasheados, todo usuario con la pestaña abierta al momento del deploy va a chocar ChunkLoadError al navegar. Siempre tener el auto-reload handler. Si aparece el error igual, es (a) caché de sesión previa al deploy del handler → recargar una vez, o (b) deploy realmente corrupto → comparar hashes como arriba.
+
 ## Adding a new permission — THREE backend places, not two - 2026-06-02
 
 **Bug:** Added `stock.manage` + `products.delete`. Updated `PermissionCodes.cs` (constants) and `RoleCatalog.cs` (role→permission assignment), but assigning the new permission to an access profile failed with `detail: "One or more selected permissions are invalid."`

@@ -281,7 +281,8 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
                 code: saleCode,
                 deliveryAddress: request.DeliveryAddress,
                 generalDiscountPercent: request.GeneralDiscountPercent,
-                cardSurchargeTotal: cardSurchargeTotal);
+                cardSurchargeTotal: cardSurchargeTotal,
+                contactPhone: request.ContactPhone);
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
         {

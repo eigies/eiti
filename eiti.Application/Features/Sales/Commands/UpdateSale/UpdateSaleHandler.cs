@@ -347,7 +347,7 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
                         cancellationToken);
                 }
 
-                sale.Update(customer?.Id, SaleStatus.OnHold, request.HasDelivery, saleDetails, salePayments, saleTradeIns, allowOverpayment: true, noDeliverySurchargeTotal: request.NoDeliverySurchargeTotal ?? 0, deliveryAddress: request.DeliveryAddress, generalDiscountPercent: request.GeneralDiscountPercent, cardSurchargeTotal: cardSurchargeTotal);
+                sale.Update(customer?.Id, SaleStatus.OnHold, request.HasDelivery, saleDetails, salePayments, saleTradeIns, allowOverpayment: true, noDeliverySurchargeTotal: request.NoDeliverySurchargeTotal ?? 0, deliveryAddress: request.DeliveryAddress, generalDiscountPercent: request.GeneralDiscountPercent, cardSurchargeTotal: cardSurchargeTotal, contactPhone: request.ContactPhone);
 
                 var cashAmount = sale.GetPaymentAmount(SalePaymentMethod.Cash);
                 var transferAmount = sale.GetPaymentAmount(SalePaymentMethod.Transfer);
@@ -453,7 +453,8 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
                     currentDetailsSnapshot,
                     sale.Payments.ToList(),
                     sale.TradeIns.ToList(),
-                    deliveryAddress: request.DeliveryAddress);
+                    deliveryAddress: request.DeliveryAddress,
+                    contactPhone: request.ContactPhone);
             }
             else
             {
@@ -476,7 +477,7 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
                         cancellationToken);
                 }
 
-                sale.Update(customer?.Id, requestedStatus, request.HasDelivery, saleDetails, salePayments, saleTradeIns, noDeliverySurchargeTotal: request.NoDeliverySurchargeTotal ?? 0, deliveryAddress: request.DeliveryAddress, generalDiscountPercent: request.GeneralDiscountPercent, cardSurchargeTotal: cardSurchargeTotal);
+                sale.Update(customer?.Id, requestedStatus, request.HasDelivery, saleDetails, salePayments, saleTradeIns, noDeliverySurchargeTotal: request.NoDeliverySurchargeTotal ?? 0, deliveryAddress: request.DeliveryAddress, generalDiscountPercent: request.GeneralDiscountPercent, cardSurchargeTotal: cardSurchargeTotal, contactPhone: request.ContactPhone);
                 sale.SetCashDrawer(resolvedCashDrawerId.HasValue ? new CashDrawerId(resolvedCashDrawerId.Value) : null);
             }
 

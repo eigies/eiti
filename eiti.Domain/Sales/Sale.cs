@@ -34,6 +34,7 @@ public sealed class Sale : AggregateRoot<SaleId>
     public SaleSourceChannel? SourceChannel { get; private set; }
     public string? Code { get; private set; }
     public string? DeliveryAddress { get; private set; }
+    public string? ContactPhone { get; private set; }
     private readonly List<SaleDetail> _details = [];
     private readonly List<SalePayment> _payments = [];
     private readonly List<SaleTradeIn> _tradeIns = [];
@@ -73,7 +74,8 @@ public sealed class Sale : AggregateRoot<SaleId>
         DateTime createdAt,
         List<SaleDetail> details,
         string? code = null,
-        string? deliveryAddress = null)
+        string? deliveryAddress = null,
+        string? contactPhone = null)
         : base(id)
     {
         CompanyId = companyId;
@@ -88,6 +90,7 @@ public sealed class Sale : AggregateRoot<SaleId>
         _details = details;
         Code = code;
         DeliveryAddress = deliveryAddress;
+        ContactPhone = contactPhone;
 
         foreach (var detail in _details)
         {
@@ -111,7 +114,8 @@ public sealed class Sale : AggregateRoot<SaleId>
         string? code = null,
         string? deliveryAddress = null,
         decimal generalDiscountPercent = 0,
-        decimal cardSurchargeTotal = 0)
+        decimal cardSurchargeTotal = 0,
+        string? contactPhone = null)
     {
         if (saleStatus == SaleStatus.Cancel)
         {
@@ -150,7 +154,8 @@ public sealed class Sale : AggregateRoot<SaleId>
             DateTime.UtcNow,
             detailList,
             code,
-            deliveryAddress);
+            deliveryAddress,
+            contactPhone);
 
         sale.SetSettlement(
             payments,
@@ -516,7 +521,8 @@ public sealed class Sale : AggregateRoot<SaleId>
         decimal noDeliverySurchargeTotal = 0,
         string? deliveryAddress = null,
         decimal generalDiscountPercent = 0,
-        decimal cardSurchargeTotal = 0)
+        decimal cardSurchargeTotal = 0,
+        string? contactPhone = null)
     {
         if (SaleStatus != SaleStatus.OnHold)
         {
@@ -562,6 +568,7 @@ public sealed class Sale : AggregateRoot<SaleId>
         CardSurchargeTotal = cardSurchargeTotal;
         GeneralDiscountPercent = NormalizeAmount(generalDiscountPercent);
         DeliveryAddress = deliveryAddress;
+        ContactPhone = contactPhone;
         RecalculateTotal();
         SetSettlement(payments, tradeIns, allowOverpayment);
         UpdatedAt = DateTime.UtcNow;
@@ -652,6 +659,8 @@ public sealed class Sale : AggregateRoot<SaleId>
     public void SetSourceChannel(SaleSourceChannel? channel) => SourceChannel = channel;
 
     public void SetDeliveryAddress(string? address) => DeliveryAddress = address;
+
+    public void SetContactPhone(string? phone) => ContactPhone = phone;
 
     private void RecalculateTotal()
     {

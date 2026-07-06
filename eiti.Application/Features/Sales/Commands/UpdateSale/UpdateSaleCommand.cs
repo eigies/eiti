@@ -17,7 +17,8 @@ public sealed record UpdateSaleCommand(
     decimal? NoDeliverySurchargeTotal = null,
     SaleSourceChannel? SourceChannel = null,
     string? DeliveryAddress = null,
-    decimal GeneralDiscountPercent = 0
+    decimal GeneralDiscountPercent = 0,
+    string? ContactPhone = null
 ) : IRequest<Result<UpdateSaleResponse>>, IRequirePermissions
 {
     public IReadOnlyCollection<string> RequiredPermissions => [PermissionCodes.SalesUpdate];

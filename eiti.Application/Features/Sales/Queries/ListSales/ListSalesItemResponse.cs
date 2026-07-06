@@ -13,6 +13,7 @@ public sealed record ListSalesItemResponse(
     string? CustomerAddress,
     string? CustomerPhone,
     string? DeliveryAddress,
+    string? ContactPhone,
     Guid? CashDrawerId,
     Guid? CashSessionId,
     bool HasDelivery,

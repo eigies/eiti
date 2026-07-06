@@ -19,6 +19,9 @@ public sealed class CreateSaleValidator : AbstractValidator<CreateSaleCommand>
         RuleFor(x => x.IdSaleStatus)
             .InclusiveBetween(1, 3).WithMessage("A valid sale status is required.");
 
+        RuleFor(x => x.ContactPhone)
+            .MaximumLength(30).WithMessage("El teléfono de contacto no puede superar los 30 caracteres.");
+
         RuleFor(x => x.Details)
             .NotEmpty().WithMessage("At least one sale detail is required.");
 

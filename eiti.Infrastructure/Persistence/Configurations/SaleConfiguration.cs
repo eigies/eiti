@@ -84,6 +84,7 @@ public sealed class SaleConfiguration : IEntityTypeConfiguration<Sale>
         builder.Property(sale => sale.IsCuentaCorriente).HasDefaultValue(false).IsRequired();
         builder.Property(sale => sale.Code).HasMaxLength(20).IsRequired(false);
         builder.Property(sale => sale.DeliveryAddress).HasMaxLength(500).IsRequired(false);
+        builder.Property(sale => sale.ContactPhone).HasMaxLength(30).IsRequired(false);
 
         builder.HasIndex(sale => new { sale.CompanyId, sale.CreatedAt });
 
