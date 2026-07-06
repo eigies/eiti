@@ -53,6 +53,11 @@ public interface ISaleRepository
         CashDrawerId cashDrawerId,
         CancellationToken cancellationToken = default);
 
+    Task<bool> HasInTransitSalesByCashDrawerAsync(
+        CompanyId companyId,
+        CashDrawerId cashDrawerId,
+        CancellationToken cancellationToken = default);
+
     Task<IReadOnlyList<SalePayment>> GetPaymentsBySaleIdsAsync(
         IEnumerable<Guid> saleIds,
         CancellationToken cancellationToken = default);

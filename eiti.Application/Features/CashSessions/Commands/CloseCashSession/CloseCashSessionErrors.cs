@@ -16,6 +16,10 @@ public static class CloseCashSessionErrors
         "CashSessions.Close.PendingOnHoldSales",
         "The cash session cannot be closed while it still has sales in OnHold status.");
 
+    public static readonly Error SalesInTransit = Error.Conflict(
+        "CashSessions.Close.SalesInTransit",
+        "The cash session cannot be closed while it has sales in transit (dispatched, not yet delivered).");
+
     public static readonly Error InvalidOperation = Error.Conflict(
         "CashSessions.Close.InvalidOperation",
         "The cash session cannot be closed due to an invalid operation.");

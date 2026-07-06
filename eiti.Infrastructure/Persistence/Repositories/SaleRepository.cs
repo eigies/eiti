@@ -5,6 +5,7 @@ using eiti.Domain.Companies;
 using eiti.Domain.Customers;
 using eiti.Domain.Products;
 using eiti.Domain.Sales;
+using eiti.Domain.Transport;
 using Microsoft.EntityFrameworkCore;
 
 namespace eiti.Infrastructure.Persistence.Repositories;
@@ -161,6 +162,22 @@ public sealed class SaleRepository : ISaleRepository
                 && !sale.IsCuentaCorriente
                 && sale.CashDrawerId == cashDrawerId
                 && sale.SaleStatus == SaleStatus.OnHold,
+            cancellationToken);
+    }
+
+    public async Task<bool> HasInTransitSalesByCashDrawerAsync(
+        CompanyId companyId,
+        CashDrawerId cashDrawerId,
+        CancellationToken cancellationToken = default)
+    {
+        // Ventas de esta caja con transporte despachado y aún no entregado (InTransit).
+        var drawerSaleIds = _context.Sales
+            .Where(sale => sale.CompanyId == companyId && sale.CashDrawerId == cashDrawerId)
+            .Select(sale => sale.Id);
+
+        return await _context.SaleTransportAssignments.AnyAsync(
+            assignment => assignment.Status == SaleTransportStatus.InTransit
+                && drawerSaleIds.Contains(assignment.SaleId),
             cancellationToken);
     }
 

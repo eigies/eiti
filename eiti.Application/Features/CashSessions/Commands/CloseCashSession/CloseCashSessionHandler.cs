@@ -59,6 +59,13 @@ public sealed class CloseCashSessionHandler : IRequestHandler<CloseCashSessionCo
         if (hasPendingOnHoldSales)
             return Result<CashSessionResponse>.Failure(CloseCashSessionErrors.PendingOnHoldSales);
 
+        var hasInTransitSales = await _saleRepository.HasInTransitSalesByCashDrawerAsync(
+            _currentUserService.CompanyId,
+            session.CashDrawerId,
+            cancellationToken);
+        if (hasInTransitSales)
+            return Result<CashSessionResponse>.Failure(CloseCashSessionErrors.SalesInTransit);
+
         try
         {
             session.Close(request.ActualClosingAmount, _currentUserService.UserId, request.Notes);
