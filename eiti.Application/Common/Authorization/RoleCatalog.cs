@@ -56,7 +56,11 @@ public static class RoleCatalog
                 PermissionCodes.PurchasesCreate,
                 PermissionCodes.PurchasesUpdate,
                 PermissionCodes.PurchasesPay,
-                PermissionCodes.PurchasesCancel
+                PermissionCodes.PurchasesCancel,
+                PermissionCodes.PayrollManage,
+                PermissionCodes.PayrollLiquidationsGenerate,
+                PermissionCodes.PayrollLiquidationsPay,
+                PermissionCodes.PayrollAdvancesManage
             }),
         new RoleDefinition(
             SystemRoles.Admin,
@@ -110,7 +114,11 @@ public static class RoleCatalog
                 PermissionCodes.PurchasesCreate,
                 PermissionCodes.PurchasesUpdate,
                 PermissionCodes.PurchasesPay,
-                PermissionCodes.PurchasesCancel
+                PermissionCodes.PurchasesCancel,
+                PermissionCodes.PayrollManage,
+                PermissionCodes.PayrollLiquidationsGenerate,
+                PermissionCodes.PayrollLiquidationsPay,
+                PermissionCodes.PayrollAdvancesManage
             }),
         new RoleDefinition(
             SystemRoles.Seller,

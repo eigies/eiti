@@ -72,4 +72,9 @@ public static class PermissionCodes
     public const string PurchasesCancel = "purchases.cancel";
 
     public const string ProductsCostPriceAlert = "products.cost_price_alert";
+
+    public const string PayrollManage = "payroll.manage";
+    public const string PayrollLiquidationsGenerate = "payroll.liquidations.generate";
+    public const string PayrollLiquidationsPay = "payroll.liquidations.pay";
+    public const string PayrollAdvancesManage = "payroll.advances.manage";
 }

@@ -53,6 +53,10 @@ public static class PermissionCatalog
         PermissionCodes.PurchasesPay,
         PermissionCodes.PurchasesCancel,
         PermissionCodes.ProductsCostPriceAlert,
+        PermissionCodes.PayrollManage,
+        PermissionCodes.PayrollLiquidationsGenerate,
+        PermissionCodes.PayrollLiquidationsPay,
+        PermissionCodes.PayrollAdvancesManage,
     };
 
     public static bool IsValid(string permissionCode) =>
