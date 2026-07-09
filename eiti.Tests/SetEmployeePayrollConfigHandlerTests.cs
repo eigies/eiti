@@ -82,4 +82,20 @@ public sealed class SetEmployeePayrollConfigHandlerTests
 
         result.IsFailure.Should().BeTrue();
     }
+
+    [Fact]
+    public async Task Handle_ShouldFail_WhenCompanyIdIsNull()
+    {
+        var user = new Mock<ICurrentUserService>();
+        user.SetupGet(u => u.IsAuthenticated).Returns(true);
+        user.SetupGet(u => u.CompanyId).Returns((CompanyId?)null);
+
+        var handler = new SetEmployeePayrollConfigHandler(user.Object, new Mock<IEmployeeRepository>().Object, new Mock<IUnitOfWork>().Object);
+
+        var result = await handler.Handle(
+            new SetEmployeePayrollConfigCommand(Guid.NewGuid(), 500000m, (int)PayrollPeriodicity.Monthly),
+            CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+    }
 }

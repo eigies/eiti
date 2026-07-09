@@ -29,7 +29,10 @@ public sealed class SetEmployeePayrollConfigHandler : IRequestHandler<SetEmploye
         if (authCheck.IsFailure)
             return Result<SetEmployeePayrollConfigResponse>.Failure(authCheck.Error);
 
-        var employee = await _employeeRepository.GetByIdAsync(new EmployeeId(request.EmployeeId), _currentUserService.CompanyId!, cancellationToken);
+        if (_currentUserService.CompanyId is null)
+            return Result<SetEmployeePayrollConfigResponse>.Failure(SetEmployeePayrollConfigErrors.Unauthorized);
+
+        var employee = await _employeeRepository.GetByIdAsync(new EmployeeId(request.EmployeeId), _currentUserService.CompanyId, cancellationToken);
         if (employee is null)
             return Result<SetEmployeePayrollConfigResponse>.Failure(SetEmployeePayrollConfigErrors.NotFound);
 
