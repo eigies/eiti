@@ -3,7 +3,7 @@ namespace eiti.Domain.Payroll;
 public sealed class PayrollLiquidationDeductionLine
 {
     public Guid Id { get; private set; }
-    public Guid PayrollLiquidationId { get; private set; }
+    public PayrollLiquidationId PayrollLiquidationId { get; private set; } = null!;
     public string ConceptName { get; private set; } = string.Empty;
     public decimal Percentage { get; private set; }
     public decimal Amount { get; private set; }
@@ -25,7 +25,7 @@ public sealed class PayrollLiquidationDeductionLine
         return new PayrollLiquidationDeductionLine(Guid.NewGuid(), conceptName, percentage, amount);
     }
 
-    internal void AttachToLiquidation(Guid liquidationId)
+    internal void AttachToLiquidation(PayrollLiquidationId liquidationId)
     {
         PayrollLiquidationId = liquidationId;
     }

@@ -25,6 +25,8 @@ public sealed class EmployeeConfiguration : IEntityTypeConfiguration<Employee>
         builder.Property(x => x.IsActive).IsRequired();
         builder.Property(x => x.CreatedAt).IsRequired();
         builder.Property(x => x.UpdatedAt).IsRequired(false);
+        builder.Property(x => x.BaseSalary).HasColumnType("decimal(18,2)").IsRequired(false);
+        builder.Property(x => x.PayrollPeriodicity).HasConversion<int>().IsRequired(false);
 
         builder.HasIndex(x => new { x.CompanyId, x.EmployeeRole, x.IsActive });
         builder.HasIndex(x => new { x.CompanyId, x.LastName, x.FirstName });

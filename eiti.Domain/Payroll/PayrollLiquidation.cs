@@ -66,13 +66,13 @@ public sealed class PayrollLiquidation : AggregateRoot<PayrollLiquidationId>
 
         foreach (var line in deductionLines)
         {
-            line.AttachToLiquidation(Id.Value);
+            line.AttachToLiquidation(Id);
             _deductionLines.Add(line);
         }
 
         foreach (var line in advanceLines)
         {
-            line.AttachToLiquidation(Id.Value);
+            line.AttachToLiquidation(Id);
             _advanceLines.Add(line);
         }
     }

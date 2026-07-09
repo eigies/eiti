@@ -8,6 +8,7 @@ using eiti.Domain.Companies;
 using eiti.Domain.Customers;
 using eiti.Domain.Employees;
 using eiti.Domain.Fleet;
+using eiti.Domain.Payroll;
 using eiti.Domain.Products;
 using eiti.Domain.Purchases;
 using eiti.Domain.Sales;
@@ -66,6 +67,9 @@ public sealed class ApplicationDbContext : DbContext
     public DbSet<PurchaseDetail> PurchaseDetails => Set<PurchaseDetail>();
     public DbSet<PurchasePayment> PurchasePayments => Set<PurchasePayment>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
+    public DbSet<PayrollDeductionConcept> PayrollDeductionConcepts => Set<PayrollDeductionConcept>();
+    public DbSet<PayrollAdvance> PayrollAdvances => Set<PayrollAdvance>();
+    public DbSet<PayrollLiquidation> PayrollLiquidations => Set<PayrollLiquidation>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

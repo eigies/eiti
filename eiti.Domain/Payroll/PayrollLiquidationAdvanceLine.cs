@@ -3,7 +3,7 @@ namespace eiti.Domain.Payroll;
 public sealed class PayrollLiquidationAdvanceLine
 {
     public Guid Id { get; private set; }
-    public Guid PayrollLiquidationId { get; private set; }
+    public PayrollLiquidationId PayrollLiquidationId { get; private set; } = null!;
     public Guid PayrollAdvanceId { get; private set; }
     public decimal Amount { get; private set; }
 
@@ -23,7 +23,7 @@ public sealed class PayrollLiquidationAdvanceLine
         return new PayrollLiquidationAdvanceLine(Guid.NewGuid(), payrollAdvanceId, amount);
     }
 
-    internal void AttachToLiquidation(Guid liquidationId)
+    internal void AttachToLiquidation(PayrollLiquidationId liquidationId)
     {
         PayrollLiquidationId = liquidationId;
     }
