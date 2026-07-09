@@ -418,6 +418,76 @@ public sealed class CashSession : AggregateRoot<CashSessionId>
             supplierPaymentId: supplierPaymentId);
     }
 
+    public void RegisterPayrollExpense(decimal amount, Guid payrollLiquidationId, UserId createdByUserId)
+    {
+        EnsureOpen();
+
+        if (ExpectedClosingAmount - amount < 0)
+        {
+            throw new InvalidOperationException("Payroll payment cannot leave a negative expected balance.");
+        }
+
+        AddMovement(
+            CashMovementType.PayrollExpense,
+            CashMovementDirection.Out,
+            amount,
+            CashReferenceTypes.PayrollLiquidation,
+            payrollLiquidationId,
+            "Pago de sueldo",
+            createdByUserId,
+            payrollLiquidationId: payrollLiquidationId);
+    }
+
+    public void RegisterPayrollExpenseCancel(decimal amount, Guid payrollLiquidationId, UserId createdByUserId)
+    {
+        EnsureOpen();
+
+        AddMovement(
+            CashMovementType.PayrollExpenseCancellation,
+            CashMovementDirection.In,
+            amount,
+            CashReferenceTypes.PayrollLiquidation,
+            payrollLiquidationId,
+            "Pago de sueldo anulado",
+            createdByUserId,
+            payrollLiquidationId: payrollLiquidationId);
+    }
+
+    public void RegisterPayrollAdvanceExpense(decimal amount, Guid payrollAdvanceId, UserId createdByUserId)
+    {
+        EnsureOpen();
+
+        if (ExpectedClosingAmount - amount < 0)
+        {
+            throw new InvalidOperationException("Payroll advance cannot leave a negative expected balance.");
+        }
+
+        AddMovement(
+            CashMovementType.PayrollAdvanceExpense,
+            CashMovementDirection.Out,
+            amount,
+            CashReferenceTypes.PayrollAdvance,
+            payrollAdvanceId,
+            "Adelanto de sueldo",
+            createdByUserId,
+            payrollAdvanceId: payrollAdvanceId);
+    }
+
+    public void RegisterPayrollAdvanceExpenseCancel(decimal amount, Guid payrollAdvanceId, UserId createdByUserId)
+    {
+        EnsureOpen();
+
+        AddMovement(
+            CashMovementType.PayrollAdvanceExpenseCancellation,
+            CashMovementDirection.In,
+            amount,
+            CashReferenceTypes.PayrollAdvance,
+            payrollAdvanceId,
+            "Adelanto de sueldo anulado",
+            createdByUserId,
+            payrollAdvanceId: payrollAdvanceId);
+    }
+
     public void RegisterWithdrawal(
         decimal amount,
         string description,
@@ -547,7 +617,9 @@ public sealed class CashSession : AggregateRoot<CashSessionId>
         int? paymentMethod = null,
         Guid? saleCcPaymentId = null,
         Guid? supplierPaymentId = null,
-        Guid? customerPaymentId = null)
+        Guid? customerPaymentId = null,
+        Guid? payrollLiquidationId = null,
+        Guid? payrollAdvanceId = null)
     {
         _movements.Add(CashMovement.Create(
             Id,
@@ -563,7 +635,9 @@ public sealed class CashSession : AggregateRoot<CashSessionId>
             paymentMethod: paymentMethod,
             saleCcPaymentId: saleCcPaymentId,
             supplierPaymentId: supplierPaymentId,
-            customerPaymentId: customerPaymentId));
+            customerPaymentId: customerPaymentId,
+            payrollLiquidationId: payrollLiquidationId,
+            payrollAdvanceId: payrollAdvanceId));
     }
 
     private void EnsureOpen()

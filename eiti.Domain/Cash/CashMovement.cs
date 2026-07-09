@@ -21,6 +21,8 @@ public sealed class CashMovement : Entity<CashMovementId>
     public Guid? SaleCcPaymentId { get; private set; }
     public Guid? SupplierPaymentId { get; private set; }
     public Guid? CustomerPaymentId { get; private set; }
+    public Guid? PayrollLiquidationId { get; private set; }
+    public Guid? PayrollAdvanceId { get; private set; }
 
     private CashMovement()
     {
@@ -42,7 +44,9 @@ public sealed class CashMovement : Entity<CashMovementId>
         int? paymentMethod = null,
         Guid? saleCcPaymentId = null,
         Guid? supplierPaymentId = null,
-        Guid? customerPaymentId = null)
+        Guid? customerPaymentId = null,
+        Guid? payrollLiquidationId = null,
+        Guid? payrollAdvanceId = null)
         : base(id)
     {
         if (amount <= 0)
@@ -66,6 +70,8 @@ public sealed class CashMovement : Entity<CashMovementId>
         SaleCcPaymentId = saleCcPaymentId;
         SupplierPaymentId = supplierPaymentId;
         CustomerPaymentId = customerPaymentId;
+        PayrollLiquidationId = payrollLiquidationId;
+        PayrollAdvanceId = payrollAdvanceId;
     }
 
     public static CashMovement Create(
@@ -83,7 +89,9 @@ public sealed class CashMovement : Entity<CashMovementId>
         int? paymentMethod = null,
         Guid? saleCcPaymentId = null,
         Guid? supplierPaymentId = null,
-        Guid? customerPaymentId = null)
+        Guid? customerPaymentId = null,
+        Guid? payrollLiquidationId = null,
+        Guid? payrollAdvanceId = null)
     {
         return new CashMovement(
             CashMovementId.New(),
@@ -101,7 +109,9 @@ public sealed class CashMovement : Entity<CashMovementId>
             paymentMethod,
             saleCcPaymentId,
             supplierPaymentId,
-            customerPaymentId);
+            customerPaymentId,
+            payrollLiquidationId,
+            payrollAdvanceId);
     }
 
     private static string NormalizeRequired(string value, int maxLength, string field)

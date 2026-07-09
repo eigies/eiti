@@ -15,5 +15,9 @@ public enum CashMovementType
     CardIncome = 11,
     PurchaseExpense = 12,
     CashDeposit = 13,
-    PurchasePaymentCancellation = 14
+    PurchasePaymentCancellation = 14,
+    PayrollExpense = 15,
+    PayrollExpenseCancellation = 16,
+    PayrollAdvanceExpense = 17,
+    PayrollAdvanceExpenseCancellation = 18
 }

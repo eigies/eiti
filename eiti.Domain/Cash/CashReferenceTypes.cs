@@ -11,4 +11,6 @@ public static class CashReferenceTypes
     public const string SupplierPayment = "SupplierPayment";
     public const string CustomerPayment = "CustomerPayment";
     public const string Deposit = "Deposit";
+    public const string PayrollLiquidation = "PayrollLiquidation";
+    public const string PayrollAdvance = "PayrollAdvance";
 }
