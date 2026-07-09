@@ -56,3 +56,6 @@ DOCUMENTATION_EXAMPLES.md
 
 # build artifacts de tools
 tools/DbCopy/publish/
+
+# Graphify (grafo de conocimiento del repo, regenerable via `graphify --update .`)
+graphify-out/
