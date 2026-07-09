@@ -75,6 +75,9 @@ public static class DependencyInjection
         services.AddScoped<ISupplierRepository, SupplierRepository>();
         services.AddScoped<ISupplierPaymentRepository, SupplierPaymentRepository>();
         services.AddScoped<IPurchaseRepository, PurchaseRepository>();
+        services.AddScoped<IPayrollDeductionConceptRepository, PayrollDeductionConceptRepository>();
+        services.AddScoped<IPayrollAdvanceRepository, PayrollAdvanceRepository>();
+        services.AddScoped<IPayrollLiquidationRepository, PayrollLiquidationRepository>();
         services.AddScoped<IAuditLogRepository, AuditLogRepository>();
         services.AddScoped<IAuditLogWriter, AuditLogWriter>();
         services.AddScoped<IAuditSnapshotService, AuditSnapshotService>();
