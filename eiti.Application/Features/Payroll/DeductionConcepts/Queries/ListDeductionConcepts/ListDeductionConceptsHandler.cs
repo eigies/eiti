@@ -23,7 +23,10 @@ public sealed class ListDeductionConceptsHandler : IRequestHandler<ListDeduction
         if (authCheck.IsFailure)
             return Result<IReadOnlyList<DeductionConceptResponse>>.Failure(authCheck.Error);
 
-        var concepts = await _repository.ListByCompanyAsync(_currentUserService.CompanyId!, request.ActiveOnly, cancellationToken);
+        if (_currentUserService.CompanyId is null)
+            return Result<IReadOnlyList<DeductionConceptResponse>>.Failure(ListDeductionConceptsErrors.Unauthorized);
+
+        var concepts = await _repository.ListByCompanyAsync(_currentUserService.CompanyId, request.ActiveOnly, cancellationToken);
 
         IReadOnlyList<DeductionConceptResponse> items = concepts
             .Select(c => new DeductionConceptResponse(c.Id.Value, c.Name, c.Percentage, c.IsActive))

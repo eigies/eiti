@@ -33,7 +33,7 @@ public sealed class CreateDeductionConceptHandler : IRequestHandler<CreateDeduct
         if (_currentUserService.CompanyId is null)
             return Result<DeductionConceptResponse>.Failure(CreateDeductionConceptErrors.Unauthorized);
 
-        var concept = PayrollDeductionConcept.Create(_currentUserService.CompanyId!, request.Name, request.Percentage);
+        var concept = PayrollDeductionConcept.Create(_currentUserService.CompanyId, request.Name, request.Percentage);
 
         await _repository.AddAsync(concept, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);

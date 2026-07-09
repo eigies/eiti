@@ -30,7 +30,10 @@ public sealed class UpdateDeductionConceptHandler : IRequestHandler<UpdateDeduct
         if (authCheck.IsFailure)
             return Result<DeductionConceptResponse>.Failure(authCheck.Error);
 
-        var concept = await _repository.GetByIdAsync(new PayrollDeductionConceptId(request.Id), _currentUserService.CompanyId!, cancellationToken);
+        if (_currentUserService.CompanyId is null)
+            return Result<DeductionConceptResponse>.Failure(UpdateDeductionConceptErrors.Unauthorized);
+
+        var concept = await _repository.GetByIdAsync(new PayrollDeductionConceptId(request.Id), _currentUserService.CompanyId, cancellationToken);
         if (concept is null)
             return Result<DeductionConceptResponse>.Failure(UpdateDeductionConceptErrors.NotFound);
 

@@ -99,4 +99,46 @@ public sealed class DeductionConceptHandlersTests
         result.IsSuccess.Should().BeTrue();
         result.Value.Should().ContainSingle(x => x.Name == "Obra social");
     }
+
+    [Fact]
+    public async Task UpdateHandler_ShouldFail_WhenCompanyIdIsNull()
+    {
+        var user = new Mock<ICurrentUserService>();
+        user.SetupGet(u => u.IsAuthenticated).Returns(true);
+        user.SetupGet(u => u.CompanyId).Returns((CompanyId?)null);
+
+        var handler = new UpdateDeductionConceptHandler(user.Object, new Mock<IPayrollDeductionConceptRepository>().Object, new Mock<IUnitOfWork>().Object);
+
+        var result = await handler.Handle(new UpdateDeductionConceptCommand(Guid.NewGuid(), "Nombre", 5m), CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task SetActiveHandler_ShouldFail_WhenCompanyIdIsNull()
+    {
+        var user = new Mock<ICurrentUserService>();
+        user.SetupGet(u => u.IsAuthenticated).Returns(true);
+        user.SetupGet(u => u.CompanyId).Returns((CompanyId?)null);
+
+        var handler = new SetDeductionConceptActiveHandler(user.Object, new Mock<IPayrollDeductionConceptRepository>().Object, new Mock<IUnitOfWork>().Object);
+
+        var result = await handler.Handle(new SetDeductionConceptActiveCommand(Guid.NewGuid(), true), CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task ListHandler_ShouldFail_WhenCompanyIdIsNull()
+    {
+        var user = new Mock<ICurrentUserService>();
+        user.SetupGet(u => u.IsAuthenticated).Returns(true);
+        user.SetupGet(u => u.CompanyId).Returns((CompanyId?)null);
+
+        var handler = new ListDeductionConceptsHandler(user.Object, new Mock<IPayrollDeductionConceptRepository>().Object);
+
+        var result = await handler.Handle(new ListDeductionConceptsQuery(true), CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+    }
 }
