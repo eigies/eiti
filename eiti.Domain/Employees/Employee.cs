@@ -14,6 +14,8 @@ public sealed class Employee : AggregateRoot<EmployeeId>
     public string? Phone { get; private set; }
     public string? Email { get; private set; }
     public EmployeeRole EmployeeRole { get; private set; }
+    public decimal? BaseSalary { get; private set; }
+    public PayrollPeriodicity? PayrollPeriodicity { get; private set; }
     public bool IsActive { get; private set; }
     public DateTime CreatedAt { get; private set; }
     public DateTime? UpdatedAt { get; private set; }
@@ -89,6 +91,23 @@ public sealed class Employee : AggregateRoot<EmployeeId>
         Phone = NormalizeOptional(phone, 40, nameof(phone));
         Email = NormalizeOptional(email, 160, nameof(email));
         EmployeeRole = employeeRole;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    public void SetPayrollConfig(decimal? baseSalary, PayrollPeriodicity? periodicity)
+    {
+        if (baseSalary.HasValue && baseSalary.Value < 0)
+        {
+            throw new ArgumentException("Base salary cannot be negative.", nameof(baseSalary));
+        }
+
+        if (baseSalary.HasValue && !periodicity.HasValue)
+        {
+            throw new ArgumentException("Payroll periodicity is required when a base salary is set.", nameof(periodicity));
+        }
+
+        BaseSalary = baseSalary.HasValue ? decimal.Round(baseSalary.Value, 2, MidpointRounding.AwayFromZero) : null;
+        PayrollPeriodicity = baseSalary.HasValue ? periodicity : null;
         UpdatedAt = DateTime.UtcNow;
     }
 
