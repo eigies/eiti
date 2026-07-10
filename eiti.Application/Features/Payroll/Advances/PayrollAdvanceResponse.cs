@@ -7,4 +7,5 @@ public sealed record PayrollAdvanceResponse(
     DateTime Date,
     string? Notes,
     int Status,
-    Guid? AppliedToLiquidationId);
+    Guid? AppliedToLiquidationId,
+    Guid? CashSessionId);

@@ -90,4 +90,24 @@ public sealed class PayrollAdvanceTests
 
         act.Should().Throw<InvalidOperationException>();
     }
+
+    [Fact]
+    public void Create_ShouldSetCashSessionId_WhenProvided()
+    {
+        var cashSessionId = Guid.NewGuid();
+
+        var advance = PayrollAdvance.Create(
+            CompanyId.New(), EmployeeId.New(), 10000m, DateTime.UtcNow, null, UserId.New(), cashSessionId);
+
+        advance.CashSessionId.Should().Be(cashSessionId);
+    }
+
+    [Fact]
+    public void Create_ShouldLeaveCashSessionIdNull_WhenNotProvided()
+    {
+        var advance = PayrollAdvance.Create(
+            CompanyId.New(), EmployeeId.New(), 10000m, DateTime.UtcNow, null, UserId.New());
+
+        advance.CashSessionId.Should().BeNull();
+    }
 }

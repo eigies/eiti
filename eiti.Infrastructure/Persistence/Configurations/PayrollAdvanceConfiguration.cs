@@ -26,6 +26,7 @@ public sealed class PayrollAdvanceConfiguration : IEntityTypeConfiguration<Payro
             .IsRequired(false);
         builder.Property(x => x.CreatedByUserId).HasConversion(id => id.Value, value => new UserId(value)).IsRequired();
         builder.Property(x => x.CreatedAt).IsRequired();
+        builder.Property(x => x.CashSessionId).IsRequired(false);
 
         builder.HasIndex(x => new { x.CompanyId, x.EmployeeId, x.Status });
     }

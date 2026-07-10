@@ -16,6 +16,7 @@ public sealed class PayrollAdvance : AggregateRoot<PayrollAdvanceId>
     public PayrollLiquidationId? AppliedToLiquidationId { get; private set; }
     public UserId CreatedByUserId { get; private set; } = null!;
     public DateTime CreatedAt { get; private set; }
+    public Guid? CashSessionId { get; private set; }
 
     private PayrollAdvance()
     {
@@ -28,7 +29,8 @@ public sealed class PayrollAdvance : AggregateRoot<PayrollAdvanceId>
         decimal amount,
         DateTime date,
         string? notes,
-        UserId createdByUserId)
+        UserId createdByUserId,
+        Guid? cashSessionId = null)
         : base(id)
     {
         if (amount <= 0)
@@ -44,6 +46,7 @@ public sealed class PayrollAdvance : AggregateRoot<PayrollAdvanceId>
         Status = PayrollAdvanceStatus.Pending;
         CreatedByUserId = createdByUserId;
         CreatedAt = DateTime.UtcNow;
+        CashSessionId = cashSessionId;
     }
 
     public static PayrollAdvance Create(
@@ -52,9 +55,10 @@ public sealed class PayrollAdvance : AggregateRoot<PayrollAdvanceId>
         decimal amount,
         DateTime date,
         string? notes,
-        UserId createdByUserId)
+        UserId createdByUserId,
+        Guid? cashSessionId = null)
     {
-        return new PayrollAdvance(PayrollAdvanceId.New(), companyId, employeeId, amount, date, notes, createdByUserId);
+        return new PayrollAdvance(PayrollAdvanceId.New(), companyId, employeeId, amount, date, notes, createdByUserId, cashSessionId);
     }
 
     public void Cancel()

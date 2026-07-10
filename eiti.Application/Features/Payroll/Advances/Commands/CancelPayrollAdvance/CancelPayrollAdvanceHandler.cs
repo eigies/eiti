@@ -43,6 +43,15 @@ public sealed class CancelPayrollAdvanceHandler : IRequestHandler<CancelPayrollA
 
         try
         {
+            if (advance.CashSessionId.HasValue)
+            {
+                var session = await _cashSessionRepository.GetByIdAsync(new CashSessionId(advance.CashSessionId.Value), companyId, cancellationToken);
+                if (session is null)
+                    return Result<PayrollAdvanceResponse>.Failure(CancelPayrollAdvanceErrors.CashSessionNotFound);
+
+                session.RegisterPayrollAdvanceExpenseCancel(advance.Amount, advance.Id.Value, userId);
+            }
+
             advance.Cancel();
         }
         catch (InvalidOperationException ex)
@@ -53,6 +62,6 @@ public sealed class CancelPayrollAdvanceHandler : IRequestHandler<CancelPayrollA
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return Result<PayrollAdvanceResponse>.Success(
-            new PayrollAdvanceResponse(advance.Id.Value, advance.EmployeeId.Value, advance.Amount, advance.Date, advance.Notes, (int)advance.Status, advance.AppliedToLiquidationId?.Value));
+            new PayrollAdvanceResponse(advance.Id.Value, advance.EmployeeId.Value, advance.Amount, advance.Date, advance.Notes, (int)advance.Status, advance.AppliedToLiquidationId?.Value, advance.CashSessionId));
     }
 }

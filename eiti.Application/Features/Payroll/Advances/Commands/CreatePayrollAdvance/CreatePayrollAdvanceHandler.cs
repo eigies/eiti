@@ -67,7 +67,9 @@ public sealed class CreatePayrollAdvanceHandler : IRequestHandler<CreatePayrollA
                 return Result<PayrollAdvanceResponse>.Failure(accessCheck.Error!);
         }
 
-        var advance = PayrollAdvance.Create(companyId, employee.Id, request.Amount, request.Date, request.Notes, userId);
+        var advance = PayrollAdvance.Create(
+            companyId, employee.Id, request.Amount, request.Date, request.Notes, userId,
+            method == PayrollPaymentMethod.Cash ? session!.Id.Value : null);
 
         if (method == PayrollPaymentMethod.Cash)
         {
@@ -85,6 +87,6 @@ public sealed class CreatePayrollAdvanceHandler : IRequestHandler<CreatePayrollA
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return Result<PayrollAdvanceResponse>.Success(
-            new PayrollAdvanceResponse(advance.Id.Value, advance.EmployeeId.Value, advance.Amount, advance.Date, advance.Notes, (int)advance.Status, advance.AppliedToLiquidationId?.Value));
+            new PayrollAdvanceResponse(advance.Id.Value, advance.EmployeeId.Value, advance.Amount, advance.Date, advance.Notes, (int)advance.Status, advance.AppliedToLiquidationId?.Value, advance.CashSessionId));
     }
 }

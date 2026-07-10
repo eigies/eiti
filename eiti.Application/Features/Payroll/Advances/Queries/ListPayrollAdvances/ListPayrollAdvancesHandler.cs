@@ -34,7 +34,7 @@ public sealed class ListPayrollAdvancesHandler : IRequestHandler<ListPayrollAdva
         var advances = await _repository.ListByCompanyAsync(_currentUserService.CompanyId, employeeId, status, cancellationToken);
 
         IReadOnlyList<PayrollAdvanceResponse> items = advances
-            .Select(a => new PayrollAdvanceResponse(a.Id.Value, a.EmployeeId.Value, a.Amount, a.Date, a.Notes, (int)a.Status, a.AppliedToLiquidationId?.Value))
+            .Select(a => new PayrollAdvanceResponse(a.Id.Value, a.EmployeeId.Value, a.Amount, a.Date, a.Notes, (int)a.Status, a.AppliedToLiquidationId?.Value, a.CashSessionId))
             .ToList();
 
         return Result<IReadOnlyList<PayrollAdvanceResponse>>.Success(items);
