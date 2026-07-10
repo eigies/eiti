@@ -154,6 +154,15 @@ public sealed class CreateUserHandler : IRequestHandler<CreateUserCommand, Resul
             return Result<UserResponse>.Failure(Error.NotFound("Users.Create.EmployeeNotFound", "The selected employee was not found."));
         }
 
+        // Todo usuario nuevo debe estar disponible como empleado (para poder configurarle sueldo, etc.),
+        // salvo que ya se haya vinculado uno existente via request.EmployeeId.
+        if (employee is null)
+        {
+            var (firstName, lastName) = SplitUsername(request.Username);
+            employee = Employee.Create(_currentUserService.CompanyId, null, firstName, lastName, null, null, request.Email, EmployeeRole.Staff);
+            await _employeeRepository.AddAsync(employee, cancellationToken);
+        }
+
         var branchResult = await ResolveBranchAccessAsync(request.BranchIds, cancellationToken);
         if (branchResult.IsFailure)
             return Result<UserResponse>.Failure(branchResult.Error);
@@ -174,6 +183,23 @@ public sealed class CreateUserHandler : IRequestHandler<CreateUserCommand, Resul
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return Result<UserResponse>.Success(UserMappings.Map(user, employee, accessProfile));
+    }
+
+    // El username de este sistema suele ser un nombre visible ("agustin testa"), no un handle.
+    // Lo partimos en nombre/apellido para el Employee auto-creado; sin espacio, se duplica
+    // como apellido ya que Employee.Create exige ambos campos no vacios.
+    private static (string FirstName, string LastName) SplitUsername(string username)
+    {
+        var trimmed = username.Trim();
+        var spaceIndex = trimmed.IndexOf(' ');
+        if (spaceIndex <= 0)
+        {
+            return (trimmed, trimmed);
+        }
+
+        var firstName = trimmed[..spaceIndex];
+        var lastName = trimmed[(spaceIndex + 1)..].Trim();
+        return (firstName, string.IsNullOrWhiteSpace(lastName) ? firstName : lastName);
     }
 
     private async Task<Employee?> ResolveEmployeeAsync(Guid? employeeId, CancellationToken cancellationToken)
