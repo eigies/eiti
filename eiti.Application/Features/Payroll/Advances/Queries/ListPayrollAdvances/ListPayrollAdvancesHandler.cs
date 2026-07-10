@@ -25,10 +25,13 @@ public sealed class ListPayrollAdvancesHandler : IRequestHandler<ListPayrollAdva
         if (authCheck.IsFailure)
             return Result<IReadOnlyList<PayrollAdvanceResponse>>.Failure(authCheck.Error);
 
+        if (_currentUserService.CompanyId is null)
+            return Result<IReadOnlyList<PayrollAdvanceResponse>>.Failure(ListPayrollAdvancesErrors.Unauthorized);
+
         var employeeId = request.EmployeeId.HasValue ? new EmployeeId(request.EmployeeId.Value) : null;
         var status = request.Status.HasValue ? (PayrollAdvanceStatus)request.Status.Value : (PayrollAdvanceStatus?)null;
 
-        var advances = await _repository.ListByCompanyAsync(_currentUserService.CompanyId!, employeeId, status, cancellationToken);
+        var advances = await _repository.ListByCompanyAsync(_currentUserService.CompanyId, employeeId, status, cancellationToken);
 
         IReadOnlyList<PayrollAdvanceResponse> items = advances
             .Select(a => new PayrollAdvanceResponse(a.Id.Value, a.EmployeeId.Value, a.Amount, a.Date, a.Notes, (int)a.Status, a.AppliedToLiquidationId?.Value))
