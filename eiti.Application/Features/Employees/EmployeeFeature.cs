@@ -21,7 +21,9 @@ public sealed record EmployeeResponse(
     string EmployeeRoleName,
     bool IsActive,
     DateTime CreatedAt,
-    DateTime? UpdatedAt);
+    DateTime? UpdatedAt,
+    decimal? BaseSalary,
+    int? PayrollPeriodicity);
 
 public sealed record CreateEmployeeCommand(
     Guid? BranchId,
@@ -291,5 +293,7 @@ internal static class EmployeeMappings
             employee.EmployeeRole.ToString(),
             employee.IsActive,
             employee.CreatedAt,
-            employee.UpdatedAt);
+            employee.UpdatedAt,
+            employee.BaseSalary,
+            (int?)employee.PayrollPeriodicity);
 }
