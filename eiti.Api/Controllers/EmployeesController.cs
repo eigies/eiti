@@ -1,5 +1,6 @@
 using eiti.Api.Extensions;
 using eiti.Application.Features.Employees;
+using eiti.Application.Features.Payroll.Employees.Commands.SetEmployeePayrollConfig;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -59,4 +60,13 @@ public sealed class EmployeesController : ControllerBase
         var result = await _sender.Send(new DeactivateEmployeeCommand(id), cancellationToken);
         return result.ToActionResult();
     }
+
+    [HttpPut("{id:guid}/payroll-config")]
+    public async Task<IActionResult> SetPayrollConfig(Guid id, [FromBody] SetEmployeePayrollConfigRequest request, CancellationToken cancellationToken)
+    {
+        var result = await _sender.Send(new SetEmployeePayrollConfigCommand(id, request.BaseSalary, request.PayrollPeriodicity), cancellationToken);
+        return result.ToActionResult();
+    }
 }
+
+public sealed record SetEmployeePayrollConfigRequest(decimal? BaseSalary, int? PayrollPeriodicity);
