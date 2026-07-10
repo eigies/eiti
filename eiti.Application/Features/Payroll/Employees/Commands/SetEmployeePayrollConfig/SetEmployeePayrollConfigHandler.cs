@@ -40,7 +40,7 @@ public sealed class SetEmployeePayrollConfigHandler : IRequestHandler<SetEmploye
         if (request.PayrollPeriodicity.HasValue)
         {
             if (!Enum.IsDefined(typeof(PayrollPeriodicity), request.PayrollPeriodicity.Value))
-                return Result<SetEmployeePayrollConfigResponse>.Failure(Error.Validation("Payroll.Employees.SetPayrollConfig.InvalidPeriodicity", "The selected payroll periodicity is invalid."));
+                return Result<SetEmployeePayrollConfigResponse>.Failure(SetEmployeePayrollConfigErrors.InvalidPeriodicity);
 
             periodicity = (PayrollPeriodicity)request.PayrollPeriodicity.Value;
         }
