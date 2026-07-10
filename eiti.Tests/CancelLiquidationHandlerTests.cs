@@ -2,6 +2,8 @@ using eiti.Application.Abstractions.Data;
 using eiti.Application.Abstractions.Repositories;
 using eiti.Application.Abstractions.Services;
 using eiti.Application.Features.Payroll.Liquidations.CancelLiquidation;
+using eiti.Domain.Branches;
+using eiti.Domain.Cash;
 using eiti.Domain.Companies;
 using eiti.Domain.Employees;
 using eiti.Domain.Payroll;
@@ -78,5 +80,42 @@ public sealed class CancelLiquidationHandlerTests
         var result = await handler.Handle(new CancelLiquidationCommand(Guid.NewGuid()), CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Handle_ShouldReturnConflict_WhenOriginalCashSessionIsClosed()
+    {
+        var companyId = CompanyId.New();
+        var employeeId = EmployeeId.New();
+        var liquidation = PayrollLiquidation.Create(companyId, employeeId, null, "2026-07", new DateTime(2026, 7, 1), new DateTime(2026, 7, 31), 500000m, [], []);
+
+        var userId = eiti.Domain.Users.UserId.New();
+        var session = CashSession.Open(companyId, BranchId.New(), CashDrawerId.New(), userId, 500000m, null);
+        session.RegisterPayrollExpense(500000m, liquidation.Id.Value, userId);
+        liquidation.MarkAsPaid(PayrollPaymentMethod.Cash, session.Id.Value);
+        session.Close(session.ExpectedClosingAmount, userId, null);
+
+        var user = MockUser(companyId);
+        var liquidationRepository = new Mock<IPayrollLiquidationRepository>();
+        liquidationRepository
+            .Setup(r => r.GetByIdAsync(liquidation.Id, companyId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(liquidation);
+
+        var cashSessionRepository = new Mock<ICashSessionRepository>();
+        cashSessionRepository
+            .Setup(r => r.GetByIdAsync(session.Id, companyId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(session);
+
+        var handler = new CancelLiquidationHandler(
+            user.Object,
+            liquidationRepository.Object,
+            new Mock<IPayrollAdvanceRepository>().Object,
+            cashSessionRepository.Object,
+            new Mock<IUnitOfWork>().Object);
+
+        var result = await handler.Handle(new CancelLiquidationCommand(liquidation.Id.Value), CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        liquidation.Status.Should().Be(PayrollLiquidationStatus.Paid);
     }
 }
