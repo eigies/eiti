@@ -66,6 +66,15 @@ public sealed class UsersController : ControllerBase
         var result = await _sender.Send(new ListUserProfileAuditsQuery(userId, take), cancellationToken);
         return result.ToActionResult();
     }
+
+    // Backfill puntual: crea y vincula un Employee para cada usuario existente que todavia
+    // no tiene uno (los nuevos ya lo hacen solos desde CreateUserHandler). Idempotente.
+    [HttpPost("backfill-employees")]
+    public async Task<IActionResult> BackfillEmployees(CancellationToken cancellationToken)
+    {
+        var result = await _sender.Send(new BackfillEmployeesForUsersCommand(), cancellationToken);
+        return result.ToActionResult();
+    }
 }
 
 public sealed record SetUserStatusRequest(bool IsActive);

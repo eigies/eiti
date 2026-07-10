@@ -11,6 +11,26 @@ using MediatR;
 
 namespace eiti.Application.Features.Users;
 
+internal static class UserEmployeeLinking
+{
+    // El username de este sistema suele ser un nombre visible ("agustin testa"), no un handle.
+    // Lo partimos en nombre/apellido para el Employee auto-creado; sin espacio, se duplica
+    // como apellido ya que Employee.Create exige ambos campos no vacios.
+    public static (string FirstName, string LastName) SplitUsername(string username)
+    {
+        var trimmed = username.Trim();
+        var spaceIndex = trimmed.IndexOf(' ');
+        if (spaceIndex <= 0)
+        {
+            return (trimmed, trimmed);
+        }
+
+        var firstName = trimmed[..spaceIndex];
+        var lastName = trimmed[(spaceIndex + 1)..].Trim();
+        return (firstName, string.IsNullOrWhiteSpace(lastName) ? firstName : lastName);
+    }
+}
+
 public sealed record UserResponse(
     Guid Id,
     string Username,
@@ -158,7 +178,7 @@ public sealed class CreateUserHandler : IRequestHandler<CreateUserCommand, Resul
         // salvo que ya se haya vinculado uno existente via request.EmployeeId.
         if (employee is null)
         {
-            var (firstName, lastName) = SplitUsername(request.Username);
+            var (firstName, lastName) = UserEmployeeLinking.SplitUsername(request.Username);
             employee = Employee.Create(_currentUserService.CompanyId, null, firstName, lastName, null, null, request.Email, EmployeeRole.Staff);
             await _employeeRepository.AddAsync(employee, cancellationToken);
         }
@@ -183,23 +203,6 @@ public sealed class CreateUserHandler : IRequestHandler<CreateUserCommand, Resul
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return Result<UserResponse>.Success(UserMappings.Map(user, employee, accessProfile));
-    }
-
-    // El username de este sistema suele ser un nombre visible ("agustin testa"), no un handle.
-    // Lo partimos en nombre/apellido para el Employee auto-creado; sin espacio, se duplica
-    // como apellido ya que Employee.Create exige ambos campos no vacios.
-    private static (string FirstName, string LastName) SplitUsername(string username)
-    {
-        var trimmed = username.Trim();
-        var spaceIndex = trimmed.IndexOf(' ');
-        if (spaceIndex <= 0)
-        {
-            return (trimmed, trimmed);
-        }
-
-        var firstName = trimmed[..spaceIndex];
-        var lastName = trimmed[(spaceIndex + 1)..].Trim();
-        return (firstName, string.IsNullOrWhiteSpace(lastName) ? firstName : lastName);
     }
 
     private async Task<Employee?> ResolveEmployeeAsync(Guid? employeeId, CancellationToken cancellationToken)
@@ -623,4 +626,64 @@ internal static class UserMappings
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(value => value)
             .ToArray();
+}
+
+// Backfill puntual para usuarios que ya existian antes de que CreateUser empezara a
+// auto-crear el Employee vinculado. Idempotente: solo procesa usuarios con EmployeeId nulo,
+// asi que correrlo de nuevo no duplica nada.
+public sealed record BackfillEmployeesForUsersCommand() : IRequest<Result<BackfillEmployeesForUsersResponse>>, IRequirePermissions
+{
+    public IReadOnlyCollection<string> RequiredPermissions => [PermissionCodes.UsersManage];
+}
+
+public sealed record BackfillEmployeesForUsersResponse(int CreatedCount, IReadOnlyList<Guid> UserIds);
+
+public sealed class BackfillEmployeesForUsersHandler : IRequestHandler<BackfillEmployeesForUsersCommand, Result<BackfillEmployeesForUsersResponse>>
+{
+    private readonly ICurrentUserService _currentUserService;
+    private readonly IUserRepository _userRepository;
+    private readonly IEmployeeRepository _employeeRepository;
+    private readonly IUnitOfWork _unitOfWork;
+
+    public BackfillEmployeesForUsersHandler(
+        ICurrentUserService currentUserService,
+        IUserRepository userRepository,
+        IEmployeeRepository employeeRepository,
+        IUnitOfWork unitOfWork)
+    {
+        _currentUserService = currentUserService;
+        _userRepository = userRepository;
+        _employeeRepository = employeeRepository;
+        _unitOfWork = unitOfWork;
+    }
+
+    public async Task<Result<BackfillEmployeesForUsersResponse>> Handle(BackfillEmployeesForUsersCommand request, CancellationToken cancellationToken)
+    {
+        var authCheck = _currentUserService.EnsureAuthenticated();
+        if (authCheck.IsFailure)
+            return Result<BackfillEmployeesForUsersResponse>.Failure(authCheck.Error);
+
+        if (_currentUserService.CompanyId is null)
+            return Result<BackfillEmployeesForUsersResponse>.Failure(
+                Error.Unauthorized("Users.Backfill.Unauthorized", "Authentication is required."));
+
+        var companyId = _currentUserService.CompanyId;
+        var users = await _userRepository.ListByCompanyAsync(companyId, cancellationToken);
+        var updatedUserIds = new List<Guid>();
+
+        foreach (var user in users.Where(u => u.EmployeeId is null))
+        {
+            var (firstName, lastName) = UserEmployeeLinking.SplitUsername(user.Username.Value);
+            var employee = Employee.Create(companyId, null, firstName, lastName, null, null, user.Email.Value, EmployeeRole.Staff);
+            await _employeeRepository.AddAsync(employee, cancellationToken);
+            user.LinkEmployee(employee.Id);
+            updatedUserIds.Add(user.Id.Value);
+        }
+
+        if (updatedUserIds.Count > 0)
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        return Result<BackfillEmployeesForUsersResponse>.Success(
+            new BackfillEmployeesForUsersResponse(updatedUserIds.Count, updatedUserIds));
+    }
 }
