@@ -86,7 +86,7 @@ public sealed class RegisterHandler
 
         var ownerProfile = accessProfiles.First(profile => profile.SystemKey == SystemRoles.Owner);
 
-        var user = User.Create(username, email, passwordHash, company.Id, ownerProfile);
+        var user = User.Create(username, request.FirstName, request.LastName, email, passwordHash, company.Id, ownerProfile);
 
         var token = _jwtTokenGenerator.GenerateToken(user);
         var refreshToken = _jwtTokenGenerator.GenerateRefreshToken();

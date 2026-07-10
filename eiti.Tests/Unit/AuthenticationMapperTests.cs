@@ -15,6 +15,8 @@ public sealed class AuthenticationMapperTests
 
         return User.Create(
             Username.Create("testuser"),
+            "Test",
+            "User",
             eiti.Domain.Customers.Email.Create("test@example.com"),
             PasswordHash.Create("hashed"),
             companyId,
@@ -44,6 +46,8 @@ public sealed class AuthenticationMapperTests
         ]);
         var user = User.Create(
             Username.Create("seller"),
+            "Seller",
+            "User",
             eiti.Domain.Customers.Email.Create("seller@example.com"),
             PasswordHash.Create("hashed"),
             companyId,
@@ -65,6 +69,8 @@ public sealed class AuthenticationMapperTests
         ]);
         var user = User.Create(
             Username.Create("multirole"),
+            "Multi",
+            "Role",
             eiti.Domain.Customers.Email.Create("multi@example.com"),
             PasswordHash.Create("hashed"),
             companyId,

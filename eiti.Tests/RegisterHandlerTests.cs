@@ -54,6 +54,8 @@ public sealed class RegisterHandlerTests
 
         var command = new RegisterCommand(
             "usuario",
+            "Nombre",
+            "Apellido",
             "user@acme.com",
             "password123",
             "Acme");
@@ -127,6 +129,8 @@ public sealed class RegisterHandlerTests
 
         var command = new RegisterCommand(
             "usuario2",
+            "Nombre",
+            "Apellido",
             "otheruser@gmail.com",
             "password123",
             "Ohana");

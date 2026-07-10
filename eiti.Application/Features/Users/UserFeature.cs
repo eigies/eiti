@@ -34,6 +34,9 @@ internal static class UserEmployeeLinking
 public sealed record UserResponse(
     Guid Id,
     string Username,
+    string FirstName,
+    string LastName,
+    string FullName,
     string Email,
     bool IsActive,
     Guid? EmployeeId,
@@ -61,10 +64,13 @@ public sealed record UserProfileAuditResponse(
 
 public sealed record CreateUserCommand(
     string Username,
+    string FirstName,
+    string LastName,
     string Email,
     string Password,
     Guid ProfileId,
     Guid? EmployeeId,
+    bool IsEmployee = false,
     IReadOnlyList<Guid>? BranchIds = null) : IRequest<Result<UserResponse>>, IRequirePermissions
 {
     public IReadOnlyCollection<string> RequiredPermissions => [PermissionCodes.UsersManage];
@@ -84,8 +90,11 @@ public sealed record ListUsersQuery() : IRequest<Result<IReadOnlyList<UserRespon
 
 public sealed record UpdateUserProfileCommand(
     Guid Id,
+    string FirstName,
+    string LastName,
     Guid ProfileId,
     Guid? EmployeeId,
+    bool IsEmployee = false,
     IReadOnlyList<Guid>? BranchIds = null) : IRequest<Result<UserResponse>>, IRequirePermissions
 {
     public IReadOnlyCollection<string> RequiredPermissions => [PermissionCodes.UsersManage];
@@ -174,12 +183,12 @@ public sealed class CreateUserHandler : IRequestHandler<CreateUserCommand, Resul
             return Result<UserResponse>.Failure(Error.NotFound("Users.Create.EmployeeNotFound", "The selected employee was not found."));
         }
 
-        // Todo usuario nuevo debe estar disponible como empleado (para poder configurarle sueldo, etc.),
-        // salvo que ya se haya vinculado uno existente via request.EmployeeId.
-        if (employee is null)
+        // El alta de Employee es opt-in via el toggle "Es empleado": no todo usuario del sistema
+        // es necesariamente parte de la nomina. El nombre/apellido del Employee sale del propio
+        // User (no se re-tipea ni se deriva del username), evitando duplicar ese dato de dominio.
+        if (employee is null && request.IsEmployee)
         {
-            var (firstName, lastName) = UserEmployeeLinking.SplitUsername(request.Username);
-            employee = Employee.Create(_currentUserService.CompanyId, null, firstName, lastName, null, null, request.Email, EmployeeRole.Staff);
+            employee = Employee.Create(_currentUserService.CompanyId, null, request.FirstName, request.LastName, null, null, request.Email, EmployeeRole.Staff);
             await _employeeRepository.AddAsync(employee, cancellationToken);
         }
 
@@ -188,7 +197,17 @@ public sealed class CreateUserHandler : IRequestHandler<CreateUserCommand, Resul
             return Result<UserResponse>.Failure(branchResult.Error);
 
         var passwordHash = PasswordHash.Create(_passwordHasher.HashPassword(request.Password));
-        var user = User.Create(username, email, passwordHash, _currentUserService.CompanyId, accessProfile, employee?.Id);
+
+        User user;
+        try
+        {
+            user = User.Create(username, request.FirstName, request.LastName, email, passwordHash, _currentUserService.CompanyId, accessProfile, employee?.Id);
+        }
+        catch (ArgumentException ex)
+        {
+            return Result<UserResponse>.Failure(Error.Validation("Users.Create.InvalidInput", ex.Message));
+        }
+
         user.SetBranchAccess(branchResult.Value);
 
         await _userRepository.AddAsync(user, cancellationToken);
@@ -402,8 +421,45 @@ public sealed class UpdateUserProfileHandler : IRequestHandler<UpdateUserProfile
         var previousProfile = user.AccessProfile;
         var hasProfileChanged = previousProfile.Id != accessProfile.Id;
 
+        try
+        {
+            user.UpdateName(request.FirstName, request.LastName);
+        }
+        catch (ArgumentException ex)
+        {
+            return Result<UserResponse>.Failure(Error.Validation("Users.Update.InvalidInput", ex.Message));
+        }
+
         user.AssignProfile(accessProfile);
-        user.LinkEmployee(employee?.Id);
+
+        if (request.EmployeeId.HasValue)
+        {
+            // Vinculacion explicita a un empleado existente.
+            user.LinkEmployee(employee!.Id);
+        }
+        else if (request.IsEmployee)
+        {
+            if (user.EmployeeId is null)
+            {
+                // Toggle "Es empleado" activado sin empleado previo: se crea uno con el nombre actual.
+                employee = Employee.Create(_currentUserService.CompanyId, null, request.FirstName, request.LastName, null, null, user.Email.Value, EmployeeRole.Staff);
+                await _employeeRepository.AddAsync(employee, cancellationToken);
+                user.LinkEmployee(employee.Id);
+            }
+            else
+            {
+                // Ya tenia uno vinculado: se sincroniza el nombre (fuente de verdad = User),
+                // sin tocar el resto de sus datos propios de Employee.
+                employee = await _employeeRepository.GetByIdAsync(user.EmployeeId, _currentUserService.CompanyId, cancellationToken);
+                employee?.Update(employee.BranchId, request.FirstName, request.LastName, employee.DocumentNumber, employee.Phone, employee.Email, employee.EmployeeRole);
+            }
+        }
+        else
+        {
+            // Toggle apagado: se desvincula, sin borrar el registro de Employee (puede tener
+            // historial de payroll asociado).
+            user.LinkEmployee(null);
+        }
 
         // BranchIds null = no se toca; no-null (incl. vacío) = reemplaza el set.
         if (request.BranchIds is not null)
@@ -584,6 +640,9 @@ internal static class UserMappings
         return new UserResponse(
             user.Id.Value,
             user.Username.Value,
+            user.FirstName,
+            user.LastName,
+            user.FullName,
             user.Email.Value,
             user.IsActive,
             user.EmployeeId?.Value,

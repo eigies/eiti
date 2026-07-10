@@ -30,6 +30,10 @@ public sealed class UserConfiguration : IEntityTypeConfiguration<User>
 
         builder.HasIndex(u => u.Username).IsUnique();
 
+        builder.Property(u => u.FirstName).HasMaxLength(80).IsRequired();
+        builder.Property(u => u.LastName).HasMaxLength(80).IsRequired();
+        builder.Ignore(u => u.FullName);
+
         builder.Property(u => u.Email)
             .HasConversion(
                 email => email.Value,

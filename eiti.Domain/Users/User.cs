@@ -9,6 +9,9 @@ namespace eiti.Domain.Users;
 public sealed class User : AggregateRoot<UserId>
 {
     public Username Username { get; private set; } = null!;
+    public string FirstName { get; private set; } = string.Empty;
+    public string LastName { get; private set; } = string.Empty;
+    public string FullName => $"{FirstName} {LastName}".Trim();
     public Email Email { get; private set; } = null!;
     public PasswordHash PasswordHash { get; private set; } = null!;
     public CompanyId CompanyId { get; private set; } = null!;
@@ -32,6 +35,8 @@ public sealed class User : AggregateRoot<UserId>
     private User(
         UserId id,
         Username username,
+        string firstName,
+        string lastName,
         Email email,
         PasswordHash passwordHash,
         CompanyId companyId,
@@ -41,6 +46,8 @@ public sealed class User : AggregateRoot<UserId>
         : base(id)
     {
         Username = username;
+        FirstName = NormalizeRequired(firstName, 80, nameof(firstName));
+        LastName = NormalizeRequired(lastName, 80, nameof(lastName));
         Email = email;
         PasswordHash = passwordHash;
         CompanyId = companyId;
@@ -52,6 +59,8 @@ public sealed class User : AggregateRoot<UserId>
 
     public static User Create(
         Username username,
+        string firstName,
+        string lastName,
         Email email,
         PasswordHash passwordHash,
         CompanyId companyId,
@@ -61,6 +70,8 @@ public sealed class User : AggregateRoot<UserId>
         var user = new User(
             UserId.New(),
             username,
+            firstName,
+            lastName,
             email,
             passwordHash,
             companyId,
@@ -70,6 +81,29 @@ public sealed class User : AggregateRoot<UserId>
 
         user.AccessProfile = accessProfile;
         return user;
+    }
+
+    public void UpdateName(string firstName, string lastName)
+    {
+        FirstName = NormalizeRequired(firstName, 80, nameof(firstName));
+        LastName = NormalizeRequired(lastName, 80, nameof(lastName));
+    }
+
+    private static string NormalizeRequired(string value, int maxLength, string field)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            throw new ArgumentException($"{field} cannot be empty.", field);
+        }
+
+        var normalized = value.Trim();
+
+        if (normalized.Length > maxLength)
+        {
+            throw new ArgumentException($"{field} cannot exceed {maxLength} characters.", field);
+        }
+
+        return normalized;
     }
 
     public void UpdateLastLogin()

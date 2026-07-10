@@ -28,6 +28,8 @@ public sealed class LoginHandlerTests
         var profile = AccessProfile.Create(companyId, "Owner", "Owner", [PermissionCodes.UsersManage]);
         return User.Create(
             Username.Create("john"),
+            "John",
+            "Doe",
             Email.Create("john@example.com"),
             PasswordHash.Create("hashed"),
             companyId,
