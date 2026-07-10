@@ -17,9 +17,30 @@
 - Reactive Forms only (`FormBuilder`/`FormGroup`/`Validators`), no template-driven forms.
 - All models/interfaces live in `core/models/payroll.models.ts` — no inline types in services or components.
 - New permission codes (already defined and assigned to Owner/Admin on the backend): `payroll.manage`, `payroll.liquidations.generate`, `payroll.liquidations.pay`, `payroll.advances.manage`. Add these to the frontend's `PermissionCodes` map in `core/models/permission.models.ts` (read that file first — find the existing map, e.g. `banksManage: 'banks.manage'`, and add the payroll ones in the same style) and to `PermissionCatalog` array if one exists in that file.
-- CSS: use existing custom properties (`--bg-panel`, `--border-2`, `--text-dim`, `--text`, etc. — read `src/styles.css` or any existing feature's `.css` file for the exact variable names in use, they must match, do not invent new ones).
 - Errors surfaced via the existing `ToastService`, never `console.error` alone.
 - Money formatting: use `| currency:'USD':'symbol':'1.2-2'` pipe, matching the pattern already used in `sales-page.component.html` (search that file for `currency:'USD'` to see exact usage).
+- **No `/frontend-design` skill for this plan.** That skill is for inventing a novel, bold aesthetic direction for greenfield UI — the opposite of what this module needs, which is to blend into the existing app's established look. Do not invoke it (and it's a Claude-Code-specific skill mechanism that may not even be available to whatever agent executes this plan). Instead, follow the "Design system" section below exactly — it was extracted from this app's actual CSS, not invented.
+
+### Design system (extracted from `src/app/features/banks/banks.component.css` — the closest existing ABM screen)
+
+This codebase has **no shared/central stylesheet** for components — every feature defines its own `.css` file, but all of them reuse the same custom properties and the same class-naming convention (copied screen to screen). For every new component's `.css` file in this plan, start by copying `banks.component.css` in full and trim/rename the entity-specific classes (`.bank-item` → `.concept-item`, etc.) — do not invent new class names or new visual language.
+
+**Fonts:** `'DM Mono', monospace` for labels, mono numeric fields, eyebrows, uppercase micro-text. `'Crimson Pro', serif` for body copy/descriptions. Never use a third font family.
+
+**Custom properties in use (do not invent others):** `--bg`, `--bg-elevated`, `--bg-panel`, `--page-radial`, `--border`, `--border-2`, `--text`, `--text-dim`, `--text-soft`, `--amber` (primary accent), `--success`, `--danger`. Colors are almost always composed via `color-mix(in srgb, var(--x) N%, transparent|var(--y) M%)`, not used raw — follow that pattern for anything new (e.g. a "Cancelado" chip should be `color-mix(in srgb, var(--danger) 16%, transparent)` background with `var(--danger)` text, exactly mirroring `.badge--out`).
+
+**Canonical building blocks to reuse verbatim (class names and rules), copied from `banks.component.css`:**
+- `.page` — page shell (`radial-gradient(circle at top right, var(--page-radial), transparent 32%), linear-gradient(180deg, var(--bg) 0%, var(--bg-elevated) 100%)`, `max-width: 1120px`, centered).
+- `.hero` / `.hero h1` / `.hero p` / `.eyebrow` — page header block with the amber eyebrow label + DM Mono title + Crimson Pro subtitle, `hero-in` keyframe fade-up on load.
+- `.panel` / `.panel--create` / `.panel__header` / `.panel__count` — the card container pattern, `card-in` keyframe fade-up, staggered via `animation-delay`.
+- `.field` / `.field__label` — label-above-input grid pattern for every form field.
+- `.control` / `.control--sm` — text/number/select input styling (border, focus ring via `box-shadow` using `--amber`).
+- `.btn` / `.btn--primary` / `.btn--ghost` / `.btn--sm` — buttons; `--primary` for the main create/confirm action, `--ghost` for secondary/cancel actions.
+- `.badge` / `.badge--in` / `.badge--out` / `.badge--toggle` — status pills; reuse this exact pattern for every status chip in this plan (advance status, liquidation status, active/inactive) — pick `--in` (green/success) for positive states (Active, Paid, Applied) and `--out` (red/danger) for negative/terminal ones (Inactive, Cancelled), and add a neutral third variant (`--pending`, same shape, `color-mix(in srgb, var(--text-dim) 16%, transparent)` background) for Pending states if `--in`/`--out` don't fit.
+- List-item / row pattern (`.bank-item`, `.bank-row`, `.bank-row__info`, `.bank-expand`, `.chevron`/`.chevron--open`) — the expandable-row pattern to reuse for the liquidations table's "Ver detalle" (Task 5) instead of inventing a modal, matching how Banks expands to show installment plans.
+- The `@media (max-width: 720px)` block at the bottom of every such `.css` file, switching flex rows to `flex-direction: column` — copy this responsive behavior into every new component too, don't skip it.
+
+Any component in this plan needing a dropdown that isn't the existing `SearchableSelectComponent` should use a plain `<select class="control">` (see `.control` above) — this app does not have a separate custom dropdown component beyond `SearchableSelectComponent`; use that one when the list can be long/searched (e.g. employee picker), plain `<select class="control">` for short fixed enums (periodicidad, medio de pago, estado filters).
 
 ---
 
