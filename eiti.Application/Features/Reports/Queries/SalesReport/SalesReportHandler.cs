@@ -231,6 +231,7 @@ public sealed class SalesReportHandler : IRequestHandler<SalesReportQuery, Resul
         SaleSourceChannel.MercadoLibre => "MercadoLibre",
         SaleSourceChannel.Google => "Google",
         SaleSourceChannel.NoChannel => "Sin canal",
+        SaleSourceChannel.NoAnswer => "No contesta",
         _ => "Sin canal"
     };
 
