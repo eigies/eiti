@@ -70,6 +70,8 @@ public sealed class ApplicationDbContext : DbContext
     public DbSet<PayrollDeductionConcept> PayrollDeductionConcepts => Set<PayrollDeductionConcept>();
     public DbSet<PayrollAdvance> PayrollAdvances => Set<PayrollAdvance>();
     public DbSet<PayrollLiquidation> PayrollLiquidations => Set<PayrollLiquidation>();
+    public DbSet<PayrollBonusConcept> PayrollBonusConcepts => Set<PayrollBonusConcept>();
+    public DbSet<PayrollBonus> PayrollBonuses => Set<PayrollBonus>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

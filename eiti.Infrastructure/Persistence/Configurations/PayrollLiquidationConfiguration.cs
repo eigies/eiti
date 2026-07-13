@@ -46,8 +46,14 @@ public sealed class PayrollLiquidationConfiguration : IEntityTypeConfiguration<P
             .HasForeignKey(l => l.PayrollLiquidationId)
             .OnDelete(DeleteBehavior.Cascade);
 
+        builder.HasMany(x => x.BonusLines)
+            .WithOne()
+            .HasForeignKey(l => l.PayrollLiquidationId)
+            .OnDelete(DeleteBehavior.Cascade);
+
         builder.Navigation(x => x.DeductionLines).UsePropertyAccessMode(PropertyAccessMode.Field);
         builder.Navigation(x => x.AdvanceLines).UsePropertyAccessMode(PropertyAccessMode.Field);
+        builder.Navigation(x => x.BonusLines).UsePropertyAccessMode(PropertyAccessMode.Field);
     }
 }
 
