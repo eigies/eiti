@@ -414,6 +414,37 @@ public sealed class SaleRepository : ISaleRepository
             .ToDictionaryAsync(x => x.Id, x => x.SaleId, cancellationToken);
     }
 
+    public async Task<Dictionary<Guid, string?>> GetCodesByCustomerPaymentIdsAsync(
+        IEnumerable<Guid> customerPaymentIds,
+        CancellationToken cancellationToken = default)
+    {
+        var ids = customerPaymentIds.Distinct().ToList();
+        if (ids.Count == 0)
+            return new Dictionary<Guid, string?>();
+
+        var rows = await (
+                from payment in _context.SaleCcPayments
+                join sale in _context.Sales on payment.SaleId equals sale.Id
+                where payment.CustomerPaymentId.HasValue
+                    && ids.Contains(payment.CustomerPaymentId.Value)
+                orderby sale.CreatedAt
+                select new
+                {
+                    CustomerPaymentId = payment.CustomerPaymentId!.Value,
+                    sale.Code
+                })
+            .ToListAsync(cancellationToken);
+
+        return rows
+            .GroupBy(row => row.CustomerPaymentId)
+            .ToDictionary(
+                group => group.Key,
+                group => (string?)string.Join(", ", group
+                    .Select(row => row.Code)
+                    .Where(code => !string.IsNullOrWhiteSpace(code))
+                    .Distinct()));
+    }
+
     public async Task<Dictionary<Guid, string?>> GetCodesBySaleIdsAsync(
         IEnumerable<Guid> saleIds,
         CancellationToken cancellationToken = default)

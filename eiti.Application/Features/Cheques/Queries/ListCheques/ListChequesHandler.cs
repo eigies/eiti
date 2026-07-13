@@ -35,25 +35,21 @@ public sealed class ListChequesHandler : IRequestHandler<ListChequesQuery, Resul
         var filters = new ChequeFilters(request.Estado, request.BankId, request.FechaVencFrom, request.FechaVencTo, request.Numero);
         var cheques = await _chequeRepository.ListAsync(filters, companyId, cancellationToken);
 
-        // Fetch all banks once for name lookup
         var allBanks = await _bankRepository.ListAsync(false, companyId, cancellationToken);
         var bankNameById = allBanks.ToDictionary(b => b.Id, b => b.Name);
 
-        // Collect unique sale IDs for regular payments
         var regularSaleIds = cheques
             .Where(c => c.SalePaymentSaleId.HasValue)
             .Select(c => c.SalePaymentSaleId!.Value)
             .Distinct()
             .ToList();
 
-        // Collect unique CC payment IDs to resolve their sale IDs
-        var ccPaymentIds = cheques
+        var customerPaymentIds = cheques
             .Where(c => c.SaleCcPaymentId.HasValue)
             .Select(c => c.SaleCcPaymentId!.Value)
             .Distinct()
             .ToList();
 
-        // Build saleId → saleCode dictionary
         var saleCodes = new Dictionary<Guid, string?>();
 
         if (regularSaleIds.Count > 0)
@@ -65,24 +61,12 @@ public sealed class ListChequesHandler : IRequestHandler<ListChequesQuery, Resul
             }
         }
 
-        if (ccPaymentIds.Count > 0)
+        if (customerPaymentIds.Count > 0)
         {
-            var ccPaymentSaleIds = await _saleRepository.GetSaleIdsByCcPaymentIdsAsync(ccPaymentIds, cancellationToken);
-            var ccSaleIds = ccPaymentSaleIds.Values.Distinct().ToList();
-            if (ccSaleIds.Count > 0)
+            var customerPaymentSaleCodes = await _saleRepository.GetCodesByCustomerPaymentIdsAsync(customerPaymentIds, cancellationToken);
+            foreach (var (customerPaymentId, code) in customerPaymentSaleCodes)
             {
-                var ccSales = await _saleRepository.GetByIdsAsync(ccSaleIds, cancellationToken);
-                foreach (var sale in ccSales)
-                {
-                    saleCodes[sale.Id.Value] = sale.Code;
-                }
-            }
-
-            // Map ccPaymentId → saleCode via ccPaymentId → saleId → saleCode
-            foreach (var (ccPaymentId, saleId) in ccPaymentSaleIds)
-            {
-                saleCodes.TryGetValue(saleId, out var code);
-                saleCodes[ccPaymentId] = code; // keyed by ccPaymentId for easy lookup below
+                saleCodes[customerPaymentId] = code;
             }
         }
 
