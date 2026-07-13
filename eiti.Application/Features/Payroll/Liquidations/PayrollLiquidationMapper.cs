@@ -14,6 +14,7 @@ internal static class PayrollLiquidationMapper
             (int?)liquidation.PaymentMethod,
             liquidation.PaidAt,
             liquidation.DeductionLines.Select(l => new PayrollLiquidationLineResponse(l.ConceptName, l.Amount)).ToList(),
-            liquidation.AdvanceLines.Select(l => new PayrollLiquidationLineResponse("Adelanto", l.Amount)).ToList());
+            liquidation.AdvanceLines.Select(l => new PayrollLiquidationLineResponse("Adelanto", l.Amount)).ToList(),
+            liquidation.BonusLines.Select(l => new PayrollLiquidationLineResponse(l.ConceptName, l.Amount)).ToList());
     }
 }

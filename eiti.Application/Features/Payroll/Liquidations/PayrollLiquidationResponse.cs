@@ -12,4 +12,5 @@ public sealed record PayrollLiquidationResponse(
     int? PaymentMethod,
     DateTime? PaidAt,
     IReadOnlyList<PayrollLiquidationLineResponse> DeductionLines,
-    IReadOnlyList<PayrollLiquidationLineResponse> AdvanceLines);
+    IReadOnlyList<PayrollLiquidationLineResponse> AdvanceLines,
+    IReadOnlyList<PayrollLiquidationLineResponse> BonusLines);

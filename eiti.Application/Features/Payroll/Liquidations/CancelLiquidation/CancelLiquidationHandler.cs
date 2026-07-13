@@ -14,6 +14,7 @@ public sealed class CancelLiquidationHandler : IRequestHandler<CancelLiquidation
     private readonly ICurrentUserService _currentUserService;
     private readonly IPayrollLiquidationRepository _liquidationRepository;
     private readonly IPayrollAdvanceRepository _advanceRepository;
+    private readonly IPayrollBonusRepository _bonusRepository;
     private readonly ICashSessionRepository _cashSessionRepository;
     private readonly IUnitOfWork _unitOfWork;
 
@@ -21,12 +22,14 @@ public sealed class CancelLiquidationHandler : IRequestHandler<CancelLiquidation
         ICurrentUserService currentUserService,
         IPayrollLiquidationRepository liquidationRepository,
         IPayrollAdvanceRepository advanceRepository,
+        IPayrollBonusRepository bonusRepository,
         ICashSessionRepository cashSessionRepository,
         IUnitOfWork unitOfWork)
     {
         _currentUserService = currentUserService;
         _liquidationRepository = liquidationRepository;
         _advanceRepository = advanceRepository;
+        _bonusRepository = bonusRepository;
         _cashSessionRepository = cashSessionRepository;
         _unitOfWork = unitOfWork;
     }
@@ -59,6 +62,12 @@ public sealed class CancelLiquidationHandler : IRequestHandler<CancelLiquidation
             {
                 var advance = await _advanceRepository.GetByIdAsync(new PayrollAdvanceId(advanceLine.PayrollAdvanceId), companyId, cancellationToken);
                 advance?.Revert();
+            }
+
+            foreach (var bonusLine in liquidation.BonusLines)
+            {
+                var bonus = await _bonusRepository.GetByIdAsync(new PayrollBonusId(bonusLine.PayrollBonusId), companyId, cancellationToken);
+                bonus?.RevertToPending();
             }
 
             liquidation.Cancel();

@@ -49,6 +49,7 @@ public sealed class CancelLiquidationHandlerTests
             user.Object,
             liquidationRepository.Object,
             advanceRepository.Object,
+            new Mock<IPayrollBonusRepository>().Object,
             new Mock<ICashSessionRepository>().Object,
             new Mock<IUnitOfWork>().Object);
 
@@ -74,6 +75,7 @@ public sealed class CancelLiquidationHandlerTests
             user.Object,
             liquidationRepository.Object,
             new Mock<IPayrollAdvanceRepository>().Object,
+            new Mock<IPayrollBonusRepository>().Object,
             new Mock<ICashSessionRepository>().Object,
             new Mock<IUnitOfWork>().Object);
 
@@ -110,6 +112,7 @@ public sealed class CancelLiquidationHandlerTests
             user.Object,
             liquidationRepository.Object,
             new Mock<IPayrollAdvanceRepository>().Object,
+            new Mock<IPayrollBonusRepository>().Object,
             cashSessionRepository.Object,
             new Mock<IUnitOfWork>().Object);
 
@@ -117,5 +120,44 @@ public sealed class CancelLiquidationHandlerTests
 
         result.IsFailure.Should().BeTrue();
         liquidation.Status.Should().Be(PayrollLiquidationStatus.Paid);
+    }
+
+    [Fact]
+    public async Task Handle_ShouldRevertAppliedBonuses_ToPending_WhenCancellingLiquidation()
+    {
+        var companyId = CompanyId.New();
+        var employeeId = EmployeeId.New();
+        var conceptId = PayrollBonusConceptId.New();
+        var bonus = PayrollBonus.Create(companyId, employeeId, conceptId, PayrollBonusAmountType.FixedAmount, 15000m, null);
+        var bonusLine = PayrollLiquidationBonusLine.Create(bonus.Id.Value, "Presentismo", PayrollBonusAmountType.FixedAmount, 15000m, 15000m);
+        var liquidation = PayrollLiquidation.Create(companyId, employeeId, null, "2026-07", new DateTime(2026, 7, 1), new DateTime(2026, 7, 31), 500000m, [], [], [bonusLine]);
+        bonus.Apply(liquidation.Id);
+        liquidation.MarkAsPaid(PayrollPaymentMethod.Transfer, null);
+
+        var user = MockUser(companyId);
+        var liquidationRepository = new Mock<IPayrollLiquidationRepository>();
+        liquidationRepository
+            .Setup(r => r.GetByIdAsync(liquidation.Id, companyId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(liquidation);
+
+        var bonusRepository = new Mock<IPayrollBonusRepository>();
+        bonusRepository
+            .Setup(r => r.GetByIdAsync(bonus.Id, companyId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(bonus);
+
+        var handler = new CancelLiquidationHandler(
+            user.Object,
+            liquidationRepository.Object,
+            new Mock<IPayrollAdvanceRepository>().Object,
+            bonusRepository.Object,
+            new Mock<ICashSessionRepository>().Object,
+            new Mock<IUnitOfWork>().Object);
+
+        var result = await handler.Handle(new CancelLiquidationCommand(liquidation.Id.Value), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        liquidation.Status.Should().Be(PayrollLiquidationStatus.Cancelled);
+        bonus.Status.Should().Be(PayrollBonusStatus.Pending);
+        bonus.PayrollLiquidationId.Should().BeNull();
     }
 }
