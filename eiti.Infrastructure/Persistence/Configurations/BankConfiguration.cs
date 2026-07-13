@@ -29,6 +29,18 @@ public sealed class BankConfiguration : IEntityTypeConfiguration<Bank>
             .HasDefaultValue(true)
             .IsRequired();
 
+        builder.Property(b => b.UseForCard)
+            .HasDefaultValue(true)
+            .IsRequired();
+
+        builder.Property(b => b.UseForTransfer)
+            .HasDefaultValue(true)
+            .IsRequired();
+
+        builder.Property(b => b.UseForCheque)
+            .HasDefaultValue(true)
+            .IsRequired();
+
         builder.Property(b => b.CreatedAt).IsRequired();
         builder.Property(b => b.UpdatedAt).IsRequired();
 

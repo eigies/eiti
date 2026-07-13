@@ -34,11 +34,18 @@ public sealed class CreateBankHandler : IRequestHandler<CreateBankCommand, Resul
             return Result<BankResponse>.Failure(CreateBankErrors.Unauthorized);
 
         var companyId = _currentUserService.CompanyId!;
-        var bank = Bank.Create(companyId, request.Name);
+        var bank = Bank.Create(companyId, request.Name, request.UseForCard, request.UseForTransfer, request.UseForCheque);
 
         await _bankRepository.AddAsync(bank, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-        return Result<BankResponse>.Success(new BankResponse(bank.Id, bank.Name, bank.Active, []));
+        return Result<BankResponse>.Success(new BankResponse(
+            bank.Id,
+            bank.Name,
+            bank.Active,
+            bank.UseForCard,
+            bank.UseForTransfer,
+            bank.UseForCheque,
+            []));
     }
 }

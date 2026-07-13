@@ -12,6 +12,9 @@ public sealed class Bank
     public CompanyId CompanyId { get; private set; } = null!;
     public string Name { get; private set; } = string.Empty;
     public bool Active { get; private set; }
+    public bool UseForCard { get; private set; }
+    public bool UseForTransfer { get; private set; }
+    public bool UseForCheque { get; private set; }
     public DateTime CreatedAt { get; private set; }
     public DateTime UpdatedAt { get; private set; }
     public IReadOnlyCollection<BankInstallmentPlan> InstallmentPlans => _installmentPlans.AsReadOnly();
@@ -20,7 +23,7 @@ public sealed class Bank
     {
     }
 
-    private Bank(CompanyId companyId, string name)
+    private Bank(CompanyId companyId, string name, bool useForCard, bool useForTransfer, bool useForCheque)
     {
         if (string.IsNullOrWhiteSpace(name))
         {
@@ -30,16 +33,24 @@ public sealed class Bank
         CompanyId = companyId;
         Name = name.Trim();
         Active = true;
+        UseForCard = useForCard;
+        UseForTransfer = useForTransfer;
+        UseForCheque = useForCheque;
         CreatedAt = DateTime.UtcNow;
         UpdatedAt = DateTime.UtcNow;
     }
 
-    public static Bank Create(CompanyId companyId, string name)
+    public static Bank Create(
+        CompanyId companyId,
+        string name,
+        bool useForCard = true,
+        bool useForTransfer = true,
+        bool useForCheque = true)
     {
-        return new Bank(companyId, name);
+        return new Bank(companyId, name, useForCard, useForTransfer, useForCheque);
     }
 
-    public void Update(string name, bool active)
+    public void Update(string name, bool active, bool useForCard, bool useForTransfer, bool useForCheque)
     {
         if (string.IsNullOrWhiteSpace(name))
         {
@@ -48,6 +59,9 @@ public sealed class Bank
 
         Name = name.Trim();
         Active = active;
+        UseForCard = useForCard;
+        UseForTransfer = useForTransfer;
+        UseForCheque = useForCheque;
         UpdatedAt = DateTime.UtcNow;
     }
 

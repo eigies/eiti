@@ -23,13 +23,16 @@ public sealed class ListBanksHandler : IRequestHandler<ListBanksQuery, Result<IR
             return Result<IReadOnlyList<BankResponse>>.Failure(authCheck.Error);
 
         var companyId = _currentUserService.CompanyId!;
-        var banks = await _bankRepository.ListAsync(request.ActiveOnly, companyId, cancellationToken);
+        var banks = await _bankRepository.ListAsync(request.ActiveOnly, companyId, cancellationToken, request.Usage);
 
         var response = banks
             .Select(b => new BankResponse(
                 b.Id,
                 b.Name,
                 b.Active,
+                b.UseForCard,
+                b.UseForTransfer,
+                b.UseForCheque,
                 b.InstallmentPlans
                     .Select(p => new BankInstallmentPlanResponse(p.Id, p.Cuotas, p.SurchargePct, p.Active))
                     .ToList()))

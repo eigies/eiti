@@ -37,13 +37,25 @@ public sealed class UpdateBankHandler : IRequestHandler<UpdateBankCommand, Resul
         if (bank is null)
             return Result<BankResponse>.Failure(UpdateBankErrors.NotFound);
 
-        bank.Update(request.Name, request.Active);
+        bank.Update(
+            request.Name,
+            request.Active,
+            request.UseForCard ?? bank.UseForCard,
+            request.UseForTransfer ?? bank.UseForTransfer,
+            request.UseForCheque ?? bank.UseForCheque);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         var plans = bank.InstallmentPlans
             .Select(p => new BankInstallmentPlanResponse(p.Id, p.Cuotas, p.SurchargePct, p.Active))
             .ToList();
 
-        return Result<BankResponse>.Success(new BankResponse(bank.Id, bank.Name, bank.Active, plans));
+        return Result<BankResponse>.Success(new BankResponse(
+            bank.Id,
+            bank.Name,
+            bank.Active,
+            bank.UseForCard,
+            bank.UseForTransfer,
+            bank.UseForCheque,
+            plans));
     }
 }
