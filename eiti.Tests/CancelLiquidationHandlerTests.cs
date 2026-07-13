@@ -30,7 +30,7 @@ public sealed class CancelLiquidationHandlerTests
         var employeeId = EmployeeId.New();
         var advance = PayrollAdvance.Create(companyId, employeeId, 20000m, DateTime.UtcNow, null, eiti.Domain.Users.UserId.New());
         var advanceLine = PayrollLiquidationAdvanceLine.Create(advance.Id.Value, 20000m);
-        var liquidation = PayrollLiquidation.Create(companyId, employeeId, null, "2026-07", new DateTime(2026, 7, 1), new DateTime(2026, 7, 31), 500000m, [], [advanceLine]);
+        var liquidation = PayrollLiquidation.Create(companyId, employeeId, null, "2026-07", new DateTime(2026, 7, 1), new DateTime(2026, 7, 31), 500000m, [], [advanceLine], []);
         advance.Apply(liquidation.Id);
         liquidation.MarkAsPaid(PayrollPaymentMethod.Transfer, null);
 
@@ -87,7 +87,7 @@ public sealed class CancelLiquidationHandlerTests
     {
         var companyId = CompanyId.New();
         var employeeId = EmployeeId.New();
-        var liquidation = PayrollLiquidation.Create(companyId, employeeId, null, "2026-07", new DateTime(2026, 7, 1), new DateTime(2026, 7, 31), 500000m, [], []);
+        var liquidation = PayrollLiquidation.Create(companyId, employeeId, null, "2026-07", new DateTime(2026, 7, 1), new DateTime(2026, 7, 31), 500000m, [], [], []);
 
         var userId = eiti.Domain.Users.UserId.New();
         var session = CashSession.Open(companyId, BranchId.New(), CashDrawerId.New(), userId, 500000m, null);

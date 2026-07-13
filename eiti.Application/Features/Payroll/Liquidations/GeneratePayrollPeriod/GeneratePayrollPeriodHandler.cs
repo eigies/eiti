@@ -86,7 +86,8 @@ public sealed class GeneratePayrollPeriodHandler : IRequestHandler<GeneratePayro
                 request.PeriodEnd,
                 employee.BaseSalary.Value,
                 deductionLines,
-                advanceLines);
+                advanceLines,
+                []);
 
             foreach (var advance in pendingAdvances)
             {

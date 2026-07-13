@@ -22,10 +22,16 @@ public sealed class PayrollLiquidation : AggregateRoot<PayrollLiquidationId>
 
     private readonly List<PayrollLiquidationDeductionLine> _deductionLines = [];
     private readonly List<PayrollLiquidationAdvanceLine> _advanceLines = [];
+    private readonly List<PayrollLiquidationBonusLine> _bonusLines = [];
     public IReadOnlyCollection<PayrollLiquidationDeductionLine> DeductionLines => _deductionLines;
     public IReadOnlyCollection<PayrollLiquidationAdvanceLine> AdvanceLines => _advanceLines;
+    public IReadOnlyCollection<PayrollLiquidationBonusLine> BonusLines => _bonusLines;
 
-    public decimal NetAmount => GrossAmount - _deductionLines.Sum(l => l.Amount) - _advanceLines.Sum(l => l.Amount);
+    public decimal NetAmount =>
+        GrossAmount
+        + _bonusLines.Sum(l => l.Amount)
+        - _deductionLines.Sum(l => l.Amount)
+        - _advanceLines.Sum(l => l.Amount);
 
     private PayrollLiquidation()
     {
@@ -41,7 +47,8 @@ public sealed class PayrollLiquidation : AggregateRoot<PayrollLiquidationId>
         DateTime periodEnd,
         decimal grossAmount,
         IReadOnlyList<PayrollLiquidationDeductionLine> deductionLines,
-        IReadOnlyList<PayrollLiquidationAdvanceLine> advanceLines)
+        IReadOnlyList<PayrollLiquidationAdvanceLine> advanceLines,
+        IReadOnlyList<PayrollLiquidationBonusLine> bonusLines)
         : base(id)
     {
         if (grossAmount <= 0)
@@ -75,6 +82,12 @@ public sealed class PayrollLiquidation : AggregateRoot<PayrollLiquidationId>
             line.AttachToLiquidation(Id);
             _advanceLines.Add(line);
         }
+
+        foreach (var line in bonusLines)
+        {
+            line.AttachToLiquidation(Id);
+            _bonusLines.Add(line);
+        }
     }
 
     public static PayrollLiquidation Create(
@@ -86,7 +99,8 @@ public sealed class PayrollLiquidation : AggregateRoot<PayrollLiquidationId>
         DateTime periodEnd,
         decimal grossAmount,
         IReadOnlyList<PayrollLiquidationDeductionLine> deductionLines,
-        IReadOnlyList<PayrollLiquidationAdvanceLine> advanceLines)
+        IReadOnlyList<PayrollLiquidationAdvanceLine> advanceLines,
+        IReadOnlyList<PayrollLiquidationBonusLine> bonusLines)
     {
         return new PayrollLiquidation(
             PayrollLiquidationId.New(),
@@ -98,7 +112,8 @@ public sealed class PayrollLiquidation : AggregateRoot<PayrollLiquidationId>
             periodEnd,
             grossAmount,
             deductionLines,
-            advanceLines);
+            advanceLines,
+            bonusLines);
     }
 
     public void MarkAsPaid(PayrollPaymentMethod method, Guid? cashSessionId)

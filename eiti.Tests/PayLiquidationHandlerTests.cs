@@ -23,7 +23,7 @@ public sealed class PayLiquidationHandlerTests
 
     private static PayrollLiquidation CreateLiquidation(CompanyId companyId, decimal grossAmount = 500000m)
     {
-        return PayrollLiquidation.Create(companyId, EmployeeId.New(), null, "2026-07", new DateTime(2026, 7, 1), new DateTime(2026, 7, 31), grossAmount, [], []);
+        return PayrollLiquidation.Create(companyId, EmployeeId.New(), null, "2026-07", new DateTime(2026, 7, 1), new DateTime(2026, 7, 31), grossAmount, [], [], []);
     }
 
     [Fact]

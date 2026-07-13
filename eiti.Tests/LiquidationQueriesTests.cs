@@ -32,7 +32,7 @@ public sealed class LiquidationQueriesTests
     public async Task ListHandler_ShouldReturnPagedItems()
     {
         var companyId = CompanyId.New();
-        var liquidation = PayrollLiquidation.Create(companyId, EmployeeId.New(), null, "2026-07", new DateTime(2026, 7, 1), new DateTime(2026, 7, 31), 500000m, [], []);
+        var liquidation = PayrollLiquidation.Create(companyId, EmployeeId.New(), null, "2026-07", new DateTime(2026, 7, 1), new DateTime(2026, 7, 31), 500000m, [], [], []);
         var user = MockUser(companyId);
 
         var repository = new Mock<IPayrollLiquidationRepository>();

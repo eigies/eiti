@@ -10,7 +10,8 @@ public sealed class PayrollLiquidationTests
     private static PayrollLiquidation CreateLiquidation(
         decimal grossAmount = 500000m,
         IReadOnlyList<PayrollLiquidationDeductionLine>? deductions = null,
-        IReadOnlyList<PayrollLiquidationAdvanceLine>? advances = null)
+        IReadOnlyList<PayrollLiquidationAdvanceLine>? advances = null,
+        IReadOnlyList<PayrollLiquidationBonusLine>? bonuses = null)
     {
         return PayrollLiquidation.Create(
             CompanyId.New(),
@@ -21,7 +22,8 @@ public sealed class PayrollLiquidationTests
             new DateTime(2026, 7, 31),
             grossAmount,
             deductions ?? [],
-            advances ?? []);
+            advances ?? [],
+            bonuses ?? []);
     }
 
     [Fact]
@@ -122,5 +124,28 @@ public sealed class PayrollLiquidationTests
         var act = () => liquidation.Cancel();
 
         act.Should().Throw<InvalidOperationException>();
+    }
+
+    [Fact]
+    public void NetAmount_ShouldAddBonusLines_ToGrossAmount()
+    {
+        var bonusLine = PayrollLiquidationBonusLine.Create(Guid.NewGuid(), "Presentismo", PayrollBonusAmountType.FixedAmount, 15000m, 15000m);
+
+        var liquidation = CreateLiquidation(300000m, bonuses: [bonusLine]);
+
+        liquidation.NetAmount.Should().Be(315000m);
+    }
+
+    [Fact]
+    public void NetAmount_ShouldCombineBonusesDeductionsAndAdvances()
+    {
+        var bonusLine = PayrollLiquidationBonusLine.Create(Guid.NewGuid(), "Presentismo", PayrollBonusAmountType.Percentage, 10m, 30000m);
+        var deductionLine = PayrollLiquidationDeductionLine.Create("Jubilacion", 11m, 33000m);
+        var advanceLine = PayrollLiquidationAdvanceLine.Create(Guid.NewGuid(), 20000m);
+
+        var liquidation = CreateLiquidation(300000m, deductions: [deductionLine], advances: [advanceLine], bonuses: [bonusLine]);
+
+        // 300000 + 30000 - 33000 - 20000
+        liquidation.NetAmount.Should().Be(277000m);
     }
 }
