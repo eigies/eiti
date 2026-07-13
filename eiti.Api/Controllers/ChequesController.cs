@@ -27,6 +27,7 @@ public sealed class ChequesController : ControllerBase
         [FromQuery] int? bankId,
         [FromQuery] DateTime? fechaVencFrom,
         [FromQuery] DateTime? fechaVencTo,
+        [FromQuery] string? numero,
         CancellationToken cancellationToken)
     {
         ChequeStatus? chequeStatus = estado.HasValue && Enum.IsDefined(typeof(ChequeStatus), estado.Value)
@@ -34,7 +35,7 @@ public sealed class ChequesController : ControllerBase
             : null;
 
         var result = await _sender.Send(
-            new ListChequesQuery(chequeStatus, bankId, fechaVencFrom, fechaVencTo),
+            new ListChequesQuery(chequeStatus, bankId, fechaVencFrom, fechaVencTo, numero),
             cancellationToken);
         return result.ToActionResult();
     }

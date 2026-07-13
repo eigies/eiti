@@ -68,12 +68,11 @@ public sealed class UpdateChequeStatusHandler : IRequestHandler<UpdateChequeStat
         if (cheque.SaleCcPaymentId.HasValue)
         {
             saleType = "CC";
-            var ccPaymentSaleIds = await _saleRepository.GetSaleIdsByCcPaymentIdsAsync(
+            var customerPaymentSaleCodes = await _saleRepository.GetCodesByCustomerPaymentIdsAsync(
                 [cheque.SaleCcPaymentId.Value], cancellationToken);
-            if (ccPaymentSaleIds.TryGetValue(cheque.SaleCcPaymentId.Value, out var saleId))
+            if (customerPaymentSaleCodes.TryGetValue(cheque.SaleCcPaymentId.Value, out var code))
             {
-                var sales = await _saleRepository.GetByIdsAsync([saleId], cancellationToken);
-                saleCode = sales.FirstOrDefault()?.Code;
+                saleCode = code;
             }
         }
         else if (cheque.SalePaymentSaleId.HasValue)

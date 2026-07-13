@@ -35,4 +35,12 @@ public static class UpdateSaleErrors
     public static readonly Error CashSessionRequired = Error.Conflict(
         "Sales.Update.CashSessionRequired",
         "An open cash session is required for the selected cash drawer.");
+
+    public static readonly Error CardBankInvalid = Error.Validation(
+        "Sales.Update.CardBankInvalid",
+        "El banco seleccionado no esta habilitado para tarjetas.");
+
+    public static readonly Error TransferBankInvalid = Error.Validation(
+        "Sales.Update.TransferBankInvalid",
+        "El banco seleccionado no esta habilitado para transferencias.");
 }

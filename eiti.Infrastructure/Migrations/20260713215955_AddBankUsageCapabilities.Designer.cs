@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using eiti.Infrastructure.Persistence;
@@ -11,9 +12,11 @@ using eiti.Infrastructure.Persistence;
 namespace eiti.Infrastructure.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260713215955_AddBankUsageCapabilities")]
+    partial class AddBankUsageCapabilities
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -338,12 +341,6 @@ namespace eiti.Infrastructure.Migrations
                     b.Property<int?>("PaymentMethod")
                         .HasColumnType("integer");
 
-                    b.Property<Guid?>("PayrollAdvanceId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid?>("PayrollLiquidationId")
-                        .HasColumnType("uuid");
-
                     b.Property<Guid?>("ReferenceId")
                         .HasColumnType("uuid");
 
@@ -368,10 +365,6 @@ namespace eiti.Infrastructure.Migrations
                     b.HasIndex("CcPaymentGroupId");
 
                     b.HasIndex("CustomerPaymentId");
-
-                    b.HasIndex("PayrollAdvanceId");
-
-                    b.HasIndex("PayrollLiquidationId");
 
                     b.HasIndex("SaleCcPaymentId");
 
@@ -778,9 +771,6 @@ namespace eiti.Infrastructure.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid");
 
-                    b.Property<decimal?>("BaseSalary")
-                        .HasColumnType("decimal(18,2)");
-
                     b.Property<Guid?>("BranchId")
                         .HasColumnType("uuid");
 
@@ -813,9 +803,6 @@ namespace eiti.Infrastructure.Migrations
                         .IsRequired()
                         .HasMaxLength(80)
                         .HasColumnType("character varying(80)");
-
-                    b.Property<int?>("PayrollPeriodicity")
-                        .HasColumnType("integer");
 
                     b.Property<string>("Phone")
                         .HasMaxLength(40)
@@ -888,275 +875,6 @@ namespace eiti.Infrastructure.Migrations
                     b.HasIndex("CompanyId", "Type", "OccurredAt");
 
                     b.ToTable("FleetLogs", (string)null);
-                });
-
-            modelBuilder.Entity("eiti.Domain.Payroll.PayrollAdvance", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("Amount")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<Guid?>("AppliedToLiquidationId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid?>("CashSessionId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("CompanyId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<Guid>("CreatedByUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("Date")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<Guid>("EmployeeId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Notes")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
-
-                    b.Property<int>("Status")
-                        .HasColumnType("integer");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CompanyId", "EmployeeId", "Status");
-
-                    b.ToTable("PayrollAdvances", (string)null);
-                });
-
-            modelBuilder.Entity("eiti.Domain.Payroll.PayrollBonus", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("AmountType")
-                        .HasColumnType("integer");
-
-                    b.Property<Guid>("CompanyId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("ConceptId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<Guid>("EmployeeId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Notes")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
-
-                    b.Property<Guid?>("PayrollLiquidationId")
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("Status")
-                        .HasColumnType("integer");
-
-                    b.Property<decimal>("Value")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CompanyId", "EmployeeId", "Status");
-
-                    b.ToTable("PayrollBonuses", (string)null);
-                });
-
-            modelBuilder.Entity("eiti.Domain.Payroll.PayrollBonusConcept", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("CompanyId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(150)
-                        .HasColumnType("character varying(150)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CompanyId", "IsActive");
-
-                    b.ToTable("PayrollBonusConcepts", (string)null);
-                });
-
-            modelBuilder.Entity("eiti.Domain.Payroll.PayrollDeductionConcept", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("CompanyId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(150)
-                        .HasColumnType("character varying(150)");
-
-                    b.Property<decimal>("Percentage")
-                        .HasColumnType("decimal(5,2)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CompanyId", "IsActive");
-
-                    b.ToTable("PayrollDeductionConcepts", (string)null);
-                });
-
-            modelBuilder.Entity("eiti.Domain.Payroll.PayrollLiquidation", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid?>("BranchId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid?>("CashSessionId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("CompanyId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<Guid>("EmployeeId")
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("GrossAmount")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<DateTime?>("PaidAt")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<int?>("PaymentMethod")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime>("PeriodEnd")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<string>("PeriodLabel")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
-
-                    b.Property<DateTime>("PeriodStart")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<int>("Status")
-                        .HasColumnType("integer");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CompanyId", "EmployeeId", "PeriodLabel")
-                        .IsUnique()
-                        .HasFilter("\"Status\" <> 3");
-
-                    b.ToTable("PayrollLiquidations", (string)null);
-                });
-
-            modelBuilder.Entity("eiti.Domain.Payroll.PayrollLiquidationAdvanceLine", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("Amount")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<Guid>("PayrollAdvanceId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("PayrollLiquidationId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("PayrollLiquidationId");
-
-                    b.ToTable("PayrollLiquidationAdvanceLines", (string)null);
-                });
-
-            modelBuilder.Entity("eiti.Domain.Payroll.PayrollLiquidationBonusLine", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("Amount")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<int>("AmountType")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("ConceptName")
-                        .IsRequired()
-                        .HasMaxLength(150)
-                        .HasColumnType("character varying(150)");
-
-                    b.Property<Guid>("PayrollBonusId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("PayrollLiquidationId")
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("Value")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("PayrollLiquidationId");
-
-                    b.ToTable("PayrollLiquidationBonusLines", (string)null);
-                });
-
-            modelBuilder.Entity("eiti.Domain.Payroll.PayrollLiquidationDeductionLine", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("Amount")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<string>("ConceptName")
-                        .IsRequired()
-                        .HasMaxLength(150)
-                        .HasColumnType("character varying(150)");
-
-                    b.Property<Guid>("PayrollLiquidationId")
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("Percentage")
-                        .HasColumnType("decimal(5,2)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("PayrollLiquidationId");
-
-                    b.ToTable("PayrollLiquidationDeductionLines", (string)null);
                 });
 
             modelBuilder.Entity("eiti.Domain.Products.Product", b =>
@@ -2011,21 +1729,11 @@ namespace eiti.Infrastructure.Migrations
                     b.Property<Guid?>("EmployeeId")
                         .HasColumnType("uuid");
 
-                    b.Property<string>("FirstName")
-                        .IsRequired()
-                        .HasMaxLength(80)
-                        .HasColumnType("character varying(80)");
-
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
                     b.Property<DateTime?>("LastLoginAt")
                         .HasColumnType("timestamp without time zone");
-
-                    b.Property<string>("LastName")
-                        .IsRequired()
-                        .HasMaxLength(80)
-                        .HasColumnType("character varying(80)");
 
                     b.Property<string>("PasswordHash")
                         .IsRequired()
@@ -2276,33 +1984,6 @@ namespace eiti.Infrastructure.Migrations
                         .IsRequired();
                 });
 
-            modelBuilder.Entity("eiti.Domain.Payroll.PayrollLiquidationAdvanceLine", b =>
-                {
-                    b.HasOne("eiti.Domain.Payroll.PayrollLiquidation", null)
-                        .WithMany("AdvanceLines")
-                        .HasForeignKey("PayrollLiquidationId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("eiti.Domain.Payroll.PayrollLiquidationBonusLine", b =>
-                {
-                    b.HasOne("eiti.Domain.Payroll.PayrollLiquidation", null)
-                        .WithMany("BonusLines")
-                        .HasForeignKey("PayrollLiquidationId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("eiti.Domain.Payroll.PayrollLiquidationDeductionLine", b =>
-                {
-                    b.HasOne("eiti.Domain.Payroll.PayrollLiquidation", null)
-                        .WithMany("DeductionLines")
-                        .HasForeignKey("PayrollLiquidationId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
             modelBuilder.Entity("eiti.Domain.Products.Product", b =>
                 {
                     b.HasOne("eiti.Domain.Products.ProductCategory", null)
@@ -2542,15 +2223,6 @@ namespace eiti.Infrastructure.Migrations
             modelBuilder.Entity("eiti.Domain.Cash.CashSession", b =>
                 {
                     b.Navigation("Movements");
-                });
-
-            modelBuilder.Entity("eiti.Domain.Payroll.PayrollLiquidation", b =>
-                {
-                    b.Navigation("AdvanceLines");
-
-                    b.Navigation("BonusLines");
-
-                    b.Navigation("DeductionLines");
                 });
 
             modelBuilder.Entity("eiti.Domain.Purchases.Purchase", b =>

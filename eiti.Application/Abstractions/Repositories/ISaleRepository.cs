@@ -126,6 +126,10 @@ public interface ISaleRepository
         IEnumerable<Guid> ccPaymentIds,
         CancellationToken cancellationToken = default);
 
+    Task<Dictionary<Guid, string?>> GetCodesByCustomerPaymentIdsAsync(
+        IEnumerable<Guid> customerPaymentIds,
+        CancellationToken cancellationToken = default);
+
     Task<Dictionary<Guid, string?>> GetCodesBySaleIdsAsync(
         IEnumerable<Guid> saleIds,
         CancellationToken cancellationToken = default);

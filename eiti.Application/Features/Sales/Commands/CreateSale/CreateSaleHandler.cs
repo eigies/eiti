@@ -3,6 +3,7 @@ using eiti.Application.Abstractions.Repositories;
 using eiti.Application.Abstractions.Services;
 using eiti.Application.Common;
 using eiti.Application.Common.Authorization;
+using eiti.Application.Features.Banks.Common;
 using eiti.Domain.Banks;
 using eiti.Domain.Branches;
 using eiti.Domain.Cash;
@@ -241,10 +242,40 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
             .Select(p => p.CardBankId!.Value)
             .Distinct()
             .ToList();
-        var bankMap = cardBankIds.Count == 0
+        var transferBankIds = request.Payments
+            .Where(p => (SalePaymentMethod)p.IdPaymentMethod == SalePaymentMethod.Transfer && p.TransferBankId.HasValue)
+            .Select(p => p.TransferBankId!.Value)
+            .Distinct()
+            .ToList();
+        var chequeBankIds = request.Payments
+            .Where(p => (SalePaymentMethod)p.IdPaymentMethod == SalePaymentMethod.Check && p.Cheque is not null)
+            .Select(p => p.Cheque!.BankId)
+            .Distinct()
+            .ToList();
+        var allBankIds = cardBankIds
+            .Concat(transferBankIds)
+            .Concat(chequeBankIds)
+            .Distinct()
+            .ToList();
+        var bankMap = allBankIds.Count == 0
             ? new Dictionary<int, Bank>()
-            : (await _bankRepository.GetByIdsAsync(cardBankIds, companyId!, cancellationToken))
+            : (await _bankRepository.GetByIdsAsync(allBankIds, companyId, cancellationToken))
                 .ToDictionary(b => b.Id);
+
+        if (cardBankIds.Any(id => !bankMap.TryGetValue(id, out var bank) || !BankUsageRules.Supports(bank, BankUsage.Card)))
+        {
+            return Result<CreateSaleResponse>.Failure(CreateSaleErrors.CardBankInvalid);
+        }
+
+        if (transferBankIds.Any(id => !bankMap.TryGetValue(id, out var bank) || !BankUsageRules.Supports(bank, BankUsage.Transfer)))
+        {
+            return Result<CreateSaleResponse>.Failure(CreateSaleErrors.TransferBankInvalid);
+        }
+
+        if (chequeBankIds.Any(id => !bankMap.TryGetValue(id, out var bank) || !BankUsageRules.Supports(bank, BankUsage.Cheque)))
+        {
+            return Result<CreateSaleResponse>.Failure(CreateSaleErrors.ChequeBankInvalid);
+        }
 
         var cardSurchargeTotal = 0m;
         foreach (var reqPayment in request.Payments)

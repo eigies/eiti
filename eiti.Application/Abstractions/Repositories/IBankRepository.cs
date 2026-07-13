@@ -5,7 +5,7 @@ namespace eiti.Application.Abstractions.Repositories;
 
 public interface IBankRepository
 {
-    Task<IReadOnlyList<Bank>> ListAsync(bool activeOnly, CompanyId companyId, CancellationToken ct);
+    Task<IReadOnlyList<Bank>> ListAsync(bool activeOnly, CompanyId companyId, CancellationToken ct, BankUsage usage = BankUsage.All);
     Task<Bank?> GetByIdAsync(int id, CompanyId companyId, CancellationToken ct);
     Task<IReadOnlyList<Bank>> GetByIdsAsync(IEnumerable<int> ids, CompanyId companyId, CancellationToken ct);
     Task AddAsync(Bank bank, CancellationToken ct);

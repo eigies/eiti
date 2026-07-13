@@ -52,6 +52,13 @@ public sealed class UpsertInstallmentPlanHandler : IRequestHandler<UpsertInstall
             .Select(p => new BankInstallmentPlanResponse(p.Id, p.Cuotas, p.SurchargePct, p.Active))
             .ToList();
 
-        return Result<BankResponse>.Success(new BankResponse(bank.Id, bank.Name, bank.Active, plans));
+        return Result<BankResponse>.Success(new BankResponse(
+            bank.Id,
+            bank.Name,
+            bank.Active,
+            bank.UseForCard,
+            bank.UseForTransfer,
+            bank.UseForCheque,
+            plans));
     }
 }

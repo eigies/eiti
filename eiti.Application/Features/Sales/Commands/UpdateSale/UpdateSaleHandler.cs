@@ -3,6 +3,8 @@ using eiti.Application.Abstractions.Repositories;
 using eiti.Application.Abstractions.Services;
 using eiti.Application.Common;
 using eiti.Application.Common.Authorization;
+using eiti.Application.Features.Banks.Common;
+using eiti.Domain.Banks;
 using eiti.Domain.Cash;
 using eiti.Domain.Companies;
 using eiti.Domain.Customers;
@@ -287,6 +289,27 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
             {
                 return Result<UpdateSaleResponse>.Failure(
                     Error.Validation("Sales.Update.InvalidPayments", ex.Message));
+            }
+
+            foreach (var reqPayment in request.Payments)
+            {
+                if ((SalePaymentMethod)reqPayment.IdPaymentMethod == SalePaymentMethod.Card && reqPayment.CardBankId.HasValue)
+                {
+                    var bank = await _bankRepository.GetByIdAsync(reqPayment.CardBankId.Value, companyId, cancellationToken);
+                    if (!BankUsageRules.Supports(bank, BankUsage.Card))
+                    {
+                        return Result<UpdateSaleResponse>.Failure(UpdateSaleErrors.CardBankInvalid);
+                    }
+                }
+
+                if ((SalePaymentMethod)reqPayment.IdPaymentMethod == SalePaymentMethod.Transfer && reqPayment.TransferBankId.HasValue)
+                {
+                    var bank = await _bankRepository.GetByIdAsync(reqPayment.TransferBankId.Value, companyId, cancellationToken);
+                    if (!BankUsageRules.Supports(bank, BankUsage.Transfer))
+                    {
+                        return Result<UpdateSaleResponse>.Failure(UpdateSaleErrors.TransferBankInvalid);
+                    }
+                }
             }
 
             var tradeInsResult = await BuildTradeInsAsync(request.TradeIns, productMap, companyId, cancellationToken);

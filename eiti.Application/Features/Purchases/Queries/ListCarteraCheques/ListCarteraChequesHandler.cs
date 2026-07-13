@@ -33,7 +33,7 @@ public sealed class ListCarteraChequesHandler
 
         var companyId = _currentUserService.CompanyId!;
 
-        var filters = new ChequeFilters(ChequeStatus.EnCartera, null, null, null);
+        var filters = new ChequeFilters(ChequeStatus.EnCartera, null, null, null, null);
         var cheques = await _chequeRepository.ListAsync(filters, companyId, cancellationToken);
 
         var allBanks = await _bankRepository.ListAsync(false, companyId, cancellationToken);

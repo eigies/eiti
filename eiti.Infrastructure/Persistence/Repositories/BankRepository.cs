@@ -14,7 +14,11 @@ public sealed class BankRepository : IBankRepository
         _db = db;
     }
 
-    public async Task<IReadOnlyList<Bank>> ListAsync(bool activeOnly, CompanyId companyId, CancellationToken ct)
+    public async Task<IReadOnlyList<Bank>> ListAsync(
+        bool activeOnly,
+        CompanyId companyId,
+        CancellationToken ct,
+        BankUsage usage = BankUsage.All)
     {
         var query = _db.Banks.Include(b => b.InstallmentPlans)
             .Where(b => b.CompanyId == companyId);
@@ -23,6 +27,14 @@ public sealed class BankRepository : IBankRepository
         {
             query = query.Where(b => b.Active);
         }
+
+        query = usage switch
+        {
+            BankUsage.Card => query.Where(b => b.UseForCard),
+            BankUsage.Transfer => query.Where(b => b.UseForTransfer),
+            BankUsage.Cheque => query.Where(b => b.UseForCheque),
+            _ => query
+        };
 
         return await query.OrderBy(b => b.Name).ToListAsync(ct);
     }
