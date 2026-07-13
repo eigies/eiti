@@ -31,4 +31,12 @@ public static class AddCustomerPaymentErrors
     public static readonly Error ChequeRequired = Error.Validation(
         "Customers.AddPayment.ChequeRequired",
         "Para cobrar con cheque debe completar los datos del cheque.");
+
+    public static readonly Error CardBankInvalid = Error.Validation(
+        "Customers.AddPayment.CardBankInvalid",
+        "El banco seleccionado no esta habilitado para tarjetas.");
+
+    public static readonly Error ChequeBankInvalid = Error.Validation(
+        "Customers.AddPayment.ChequeBankInvalid",
+        "El banco seleccionado no esta habilitado como banco emisor de cheques.");
 }

@@ -3,7 +3,9 @@ using eiti.Application.Abstractions.Repositories;
 using eiti.Application.Abstractions.Services;
 using eiti.Application.Common;
 using eiti.Application.Common.Authorization;
+using eiti.Application.Features.Banks.Common;
 using eiti.Application.Features.Customers.Common;
+using eiti.Domain.Banks;
 using eiti.Domain.Cash;
 using eiti.Domain.Cheques;
 using eiti.Domain.Customers;
@@ -105,14 +107,22 @@ public sealed class AddCustomerPaymentHandler : IRequestHandler<AddCustomerPayme
             userId.Value);
 
         // Recargo de tarjeta por plan del banco (informativo, no altera el monto imputado).
-        if (method == SalePaymentMethod.Card && command.CardBankId.HasValue && command.CardCuotas.HasValue)
+        if (method == SalePaymentMethod.Card && command.CardBankId.HasValue)
         {
             var bank = await _bankRepository.GetByIdAsync(command.CardBankId.Value, companyId, cancellationToken);
-            var plan = CardSurchargeCalculator.FindPlan(bank, command.CardCuotas.Value);
-            if (plan is not null)
+            if (!BankUsageRules.Supports(bank, BankUsage.Card))
             {
-                var surchargeAmt = CardSurchargeCalculator.Compute(amount, plan.SurchargePct);
-                payment.SetCardData(bank!.Id, plan.Cuotas, plan.SurchargePct, surchargeAmt);
+                return Result<AddCustomerPaymentResponse>.Failure(AddCustomerPaymentErrors.CardBankInvalid);
+            }
+
+            if (command.CardCuotas.HasValue)
+            {
+                var plan = CardSurchargeCalculator.FindPlan(bank, command.CardCuotas.Value);
+                if (plan is not null)
+                {
+                    var surchargeAmt = CardSurchargeCalculator.Compute(amount, plan.SurchargePct);
+                    payment.SetCardData(bank!.Id, plan.Cuotas, plan.SurchargePct, surchargeAmt);
+                }
             }
         }
 
@@ -120,6 +130,12 @@ public sealed class AddCustomerPaymentHandler : IRequestHandler<AddCustomerPayme
         if (method == SalePaymentMethod.Check && command.Cheque is not null)
         {
             var c = command.Cheque;
+            var chequeBank = await _bankRepository.GetByIdAsync(c.BankId, companyId, cancellationToken);
+            if (!BankUsageRules.Supports(chequeBank, BankUsage.Cheque))
+            {
+                return Result<AddCustomerPaymentResponse>.Failure(AddCustomerPaymentErrors.ChequeBankInvalid);
+            }
+
             var cheque = Cheque.CreateForCcPayment(
                 companyId,
                 payment.Id,

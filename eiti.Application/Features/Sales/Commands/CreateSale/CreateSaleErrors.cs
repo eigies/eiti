@@ -39,4 +39,16 @@ public static class CreateSaleErrors
     public static readonly Error CashSessionFromPreviousDay = Error.Conflict(
         "Sales.Create.CashSessionFromPreviousDay",
         "The open cash session belongs to a previous day. Please close it and open a new one before creating sales.");
+
+    public static readonly Error CardBankInvalid = Error.Validation(
+        "Sales.Create.CardBankInvalid",
+        "El banco seleccionado no esta habilitado para tarjetas.");
+
+    public static readonly Error TransferBankInvalid = Error.Validation(
+        "Sales.Create.TransferBankInvalid",
+        "El banco seleccionado no esta habilitado para transferencias.");
+
+    public static readonly Error ChequeBankInvalid = Error.Validation(
+        "Sales.Create.ChequeBankInvalid",
+        "El banco seleccionado no esta habilitado como banco emisor de cheques.");
 }
