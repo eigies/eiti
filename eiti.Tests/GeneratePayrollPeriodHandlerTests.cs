@@ -61,6 +61,8 @@ public sealed class GeneratePayrollPeriodHandlerTests
             employeeRepository.Object,
             deductionRepository.Object,
             advanceRepository.Object,
+            new Mock<IPayrollBonusRepository>().Object,
+            new Mock<IPayrollBonusConceptRepository>().Object,
             liquidationRepository.Object,
             new Mock<IUnitOfWork>().Object);
 
@@ -92,6 +94,8 @@ public sealed class GeneratePayrollPeriodHandlerTests
             employeeRepository.Object,
             new Mock<IPayrollDeductionConceptRepository>().Object,
             new Mock<IPayrollAdvanceRepository>().Object,
+            new Mock<IPayrollBonusRepository>().Object,
+            new Mock<IPayrollBonusConceptRepository>().Object,
             new Mock<IPayrollLiquidationRepository>().Object,
             new Mock<IUnitOfWork>().Object);
 
@@ -127,6 +131,8 @@ public sealed class GeneratePayrollPeriodHandlerTests
             employeeRepository.Object,
             new Mock<IPayrollDeductionConceptRepository>().Object,
             new Mock<IPayrollAdvanceRepository>().Object,
+            new Mock<IPayrollBonusRepository>().Object,
+            new Mock<IPayrollBonusConceptRepository>().Object,
             liquidationRepository.Object,
             new Mock<IUnitOfWork>().Object);
 
@@ -151,6 +157,8 @@ public sealed class GeneratePayrollPeriodHandlerTests
             new Mock<IEmployeeRepository>().Object,
             new Mock<IPayrollDeductionConceptRepository>().Object,
             new Mock<IPayrollAdvanceRepository>().Object,
+            new Mock<IPayrollBonusRepository>().Object,
+            new Mock<IPayrollBonusConceptRepository>().Object,
             new Mock<IPayrollLiquidationRepository>().Object,
             new Mock<IUnitOfWork>().Object);
 
@@ -159,5 +167,74 @@ public sealed class GeneratePayrollPeriodHandlerTests
             CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Handle_ShouldAddBonusLines_WhenEmployeeHasPendingBonuses_FixedAndPercentage()
+    {
+        var companyId = CompanyId.New();
+        var employee = Employee.Create(companyId, null, "Ana", "Lopez", null, null, null, EmployeeRole.Staff);
+        employee.SetPayrollConfig(300000m, PayrollPeriodicity.Monthly);
+
+        var user = MockUser(companyId);
+        var employeeRepository = new Mock<IEmployeeRepository>();
+        employeeRepository
+            .Setup(r => r.ListByCompanyAsync(companyId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<Employee> { employee });
+
+        var deductionConceptRepository = new Mock<IPayrollDeductionConceptRepository>();
+        deductionConceptRepository
+            .Setup(r => r.ListByCompanyAsync(companyId, true, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<PayrollDeductionConcept>());
+
+        var advanceRepository = new Mock<IPayrollAdvanceRepository>();
+        advanceRepository
+            .Setup(r => r.ListPendingByEmployeeAsync(companyId, employee.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<PayrollAdvance>());
+
+        var concept = PayrollBonusConcept.Create(companyId, "Presentismo");
+        var bonusConceptRepository = new Mock<IPayrollBonusConceptRepository>();
+        bonusConceptRepository
+            .Setup(r => r.GetByIdAsync(concept.Id, companyId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(concept);
+
+        var fixedBonus = PayrollBonus.Create(companyId, employee.Id, concept.Id, PayrollBonusAmountType.FixedAmount, 15000m, null);
+        var percentageBonus = PayrollBonus.Create(companyId, employee.Id, concept.Id, PayrollBonusAmountType.Percentage, 10m, null);
+        var bonusRepository = new Mock<IPayrollBonusRepository>();
+        bonusRepository
+            .Setup(r => r.ListPendingByEmployeeAsync(companyId, employee.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<PayrollBonus> { fixedBonus, percentageBonus });
+
+        var liquidationRepository = new Mock<IPayrollLiquidationRepository>();
+        liquidationRepository
+            .Setup(r => r.ExistsForPeriodAsync(companyId, employee.Id, "2026-07", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+        PayrollLiquidation? persisted = null;
+        liquidationRepository
+            .Setup(r => r.AddAsync(It.IsAny<PayrollLiquidation>(), It.IsAny<CancellationToken>()))
+            .Callback<PayrollLiquidation, CancellationToken>((l, _) => persisted = l)
+            .Returns(Task.CompletedTask);
+
+        var handler = new GeneratePayrollPeriodHandler(
+            user.Object,
+            employeeRepository.Object,
+            deductionConceptRepository.Object,
+            advanceRepository.Object,
+            bonusRepository.Object,
+            bonusConceptRepository.Object,
+            liquidationRepository.Object,
+            new Mock<IUnitOfWork>().Object);
+
+        var result = await handler.Handle(
+            new GeneratePayrollPeriodCommand((int)PayrollPeriodicity.Monthly, "2026-07", new DateTime(2026, 7, 1), new DateTime(2026, 7, 31)),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        persisted.Should().NotBeNull();
+        persisted!.BonusLines.Should().HaveCount(2);
+        persisted.NetAmount.Should().Be(345000m); // 300000 + 15000 (fijo) + 30000 (10% de 300000)
+        fixedBonus.Status.Should().Be(PayrollBonusStatus.Applied);
+        fixedBonus.PayrollLiquidationId.Should().Be(persisted.Id);
+        percentageBonus.Status.Should().Be(PayrollBonusStatus.Applied);
     }
 }

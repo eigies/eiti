@@ -14,6 +14,8 @@ public sealed class GeneratePayrollPeriodHandler : IRequestHandler<GeneratePayro
     private readonly IEmployeeRepository _employeeRepository;
     private readonly IPayrollDeductionConceptRepository _deductionConceptRepository;
     private readonly IPayrollAdvanceRepository _advanceRepository;
+    private readonly IPayrollBonusRepository _bonusRepository;
+    private readonly IPayrollBonusConceptRepository _bonusConceptRepository;
     private readonly IPayrollLiquidationRepository _liquidationRepository;
     private readonly IUnitOfWork _unitOfWork;
 
@@ -22,6 +24,8 @@ public sealed class GeneratePayrollPeriodHandler : IRequestHandler<GeneratePayro
         IEmployeeRepository employeeRepository,
         IPayrollDeductionConceptRepository deductionConceptRepository,
         IPayrollAdvanceRepository advanceRepository,
+        IPayrollBonusRepository bonusRepository,
+        IPayrollBonusConceptRepository bonusConceptRepository,
         IPayrollLiquidationRepository liquidationRepository,
         IUnitOfWork unitOfWork)
     {
@@ -29,6 +33,8 @@ public sealed class GeneratePayrollPeriodHandler : IRequestHandler<GeneratePayro
         _employeeRepository = employeeRepository;
         _deductionConceptRepository = deductionConceptRepository;
         _advanceRepository = advanceRepository;
+        _bonusRepository = bonusRepository;
+        _bonusConceptRepository = bonusConceptRepository;
         _liquidationRepository = liquidationRepository;
         _unitOfWork = unitOfWork;
     }
@@ -77,6 +83,25 @@ public sealed class GeneratePayrollPeriodHandler : IRequestHandler<GeneratePayro
                 .Select(advance => PayrollLiquidationAdvanceLine.Create(advance.Id.Value, advance.Amount))
                 .ToList();
 
+            var pendingBonuses = await _bonusRepository.ListPendingByEmployeeAsync(companyId, employee.Id, cancellationToken) ?? [];
+            var bonusConceptNames = new Dictionary<Guid, string>();
+            foreach (var bonus in pendingBonuses)
+            {
+                if (!bonusConceptNames.ContainsKey(bonus.ConceptId.Value))
+                {
+                    var concept = await _bonusConceptRepository.GetByIdAsync(bonus.ConceptId, companyId, cancellationToken);
+                    bonusConceptNames[bonus.ConceptId.Value] = concept?.Name ?? "Bonificacion";
+                }
+            }
+            var bonusLines = pendingBonuses
+                .Select(bonus => PayrollLiquidationBonusLine.Create(
+                    bonus.Id.Value,
+                    bonusConceptNames[bonus.ConceptId.Value],
+                    bonus.AmountType,
+                    bonus.Value,
+                    bonus.Resolve(employee.BaseSalary.Value)))
+                .ToList();
+
             var liquidation = PayrollLiquidation.Create(
                 companyId,
                 employee.Id,
@@ -87,11 +112,16 @@ public sealed class GeneratePayrollPeriodHandler : IRequestHandler<GeneratePayro
                 employee.BaseSalary.Value,
                 deductionLines,
                 advanceLines,
-                []);
+                bonusLines);
 
             foreach (var advance in pendingAdvances)
             {
                 advance.Apply(liquidation.Id);
+            }
+
+            foreach (var bonus in pendingBonuses)
+            {
+                bonus.Apply(liquidation.Id);
             }
 
             await _liquidationRepository.AddAsync(liquidation, cancellationToken);
