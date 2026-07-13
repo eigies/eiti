@@ -26,6 +26,7 @@ public sealed class PayrollLiquidationRepository : IPayrollLiquidationRepository
         return await _context.PayrollLiquidations
             .Include(x => x.DeductionLines)
             .Include(x => x.AdvanceLines)
+            .Include(x => x.BonusLines)
             .FirstOrDefaultAsync(x => x.Id == id && x.CompanyId == companyId, cancellationToken);
     }
 
@@ -51,6 +52,7 @@ public sealed class PayrollLiquidationRepository : IPayrollLiquidationRepository
         return await BuildQuery(companyId, employeeId, periodLabel, status)
             .Include(x => x.DeductionLines)
             .Include(x => x.AdvanceLines)
+            .Include(x => x.BonusLines)
             .OrderByDescending(x => x.CreatedAt)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
