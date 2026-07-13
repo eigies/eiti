@@ -32,7 +32,7 @@ public sealed class ListChequesHandler : IRequestHandler<ListChequesQuery, Resul
             return Result<IReadOnlyList<ChequeListItemResponse>>.Failure(authCheck.Error);
 
         var companyId = _currentUserService.CompanyId!;
-        var filters = new ChequeFilters(request.Estado, request.BankId, request.FechaVencFrom, request.FechaVencTo);
+        var filters = new ChequeFilters(request.Estado, request.BankId, request.FechaVencFrom, request.FechaVencTo, request.Numero);
         var cheques = await _chequeRepository.ListAsync(filters, companyId, cancellationToken);
 
         // Fetch all banks once for name lookup

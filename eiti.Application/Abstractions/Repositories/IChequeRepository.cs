@@ -7,7 +7,8 @@ public record ChequeFilters(
     ChequeStatus? Estado,
     int? BankId,
     DateTime? FechaVencFrom,
-    DateTime? FechaVencTo);
+    DateTime? FechaVencTo,
+    string? Numero = null);
 
 public interface IChequeRepository
 {

@@ -28,6 +28,12 @@ public sealed class ChequeRepository : IChequeRepository
             query = query.Where(c => c.BankId == filters.BankId.Value);
         }
 
+        if (!string.IsNullOrWhiteSpace(filters.Numero))
+        {
+            var numero = filters.Numero.Trim();
+            query = query.Where(c => c.Numero.Contains(numero));
+        }
+
         if (filters.FechaVencFrom.HasValue)
         {
             query = query.Where(c => c.FechaVencimiento >= filters.FechaVencFrom.Value.Date);
