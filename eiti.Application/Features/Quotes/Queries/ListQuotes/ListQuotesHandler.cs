@@ -40,21 +40,17 @@ public sealed class ListQuotesHandler : IRequestHandler<ListQuotesQuery, Result<
             quotes = quotes.Where(quote => allowed.Contains(quote.BranchId.Value)).ToList();
         }
 
+        // Clientes en un solo query (antes era N+1: un SELECT por cliente).
         var customerIds = quotes
             .Where(quote => quote.CustomerId is not null)
             .Select(quote => quote.CustomerId!.Value)
             .Distinct()
             .ToList();
 
-        var customerMap = new Dictionary<Guid, string>();
-        foreach (var customerId in customerIds)
-        {
-            var customer = await _customerRepository.GetByIdAsync(new CustomerId(customerId), companyId, cancellationToken);
-            if (customer is not null)
-            {
-                customerMap[customerId] = customer.FullName;
-            }
-        }
+        var customers = customerIds.Count == 0
+            ? []
+            : await _customerRepository.ListByIdsAsync(companyId, customerIds.Select(id => new CustomerId(id)), cancellationToken);
+        var customerMap = customers.ToDictionary(customer => customer.Id.Value, customer => customer.FullName);
 
         var now = DateTime.UtcNow;
         return Result<IReadOnlyList<QuoteListItemResponse>>.Success(
