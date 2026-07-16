@@ -102,7 +102,7 @@ public sealed class CreateQuoteHandler : IRequestHandler<CreateQuoteCommand, Res
         }
         catch (ArgumentException ex)
         {
-            return Result<CreateQuoteResponse>.Failure(Error.Validation("Quotes.Create.InvalidInput", ex.Message));
+            return Result<CreateQuoteResponse>.Failure(CreateQuoteErrors.InvalidInput(ex.Message));
         }
 
         await _quoteRepository.AddAsync(quote, cancellationToken);

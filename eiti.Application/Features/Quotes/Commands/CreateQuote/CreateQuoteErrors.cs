@@ -19,4 +19,7 @@ public static class CreateQuoteErrors
     public static readonly Error InvalidCustomerOrProspect = Error.Validation(
         "Quotes.Create.InvalidCustomerOrProspect",
         "A quote must have exactly one of an existing customer or a prospect name.");
+
+    public static Error InvalidInput(string message) =>
+        Error.Validation("Quotes.Create.InvalidInput", message);
 }

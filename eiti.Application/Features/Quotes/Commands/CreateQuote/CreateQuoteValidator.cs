@@ -27,6 +27,9 @@ public sealed class CreateQuoteValidator : AbstractValidator<CreateQuoteCommand>
 
                 detail.RuleFor(x => x.UnitPrice)
                     .GreaterThanOrEqualTo(0m).WithMessage("Unit price cannot be negative.");
+
+                detail.RuleFor(x => x.DiscountPercent)
+                    .InclusiveBetween(0m, 100m).WithMessage("Discount percent must be between 0 and 100.");
             });
 
         RuleFor(x => x.GeneralDiscountPercent)
