@@ -12,6 +12,9 @@ public static class RoleCatalog
             {
                 PermissionCodes.SalesAccess,
                 PermissionCodes.SalesCreate,
+                PermissionCodes.QuotesAccess,
+                PermissionCodes.QuotesCreate,
+                PermissionCodes.QuotesConvert,
                 PermissionCodes.SalesUpdate,
                 PermissionCodes.SalesDelete,
                 PermissionCodes.SalesPay,
@@ -70,6 +73,9 @@ public static class RoleCatalog
             {
                 PermissionCodes.SalesAccess,
                 PermissionCodes.SalesCreate,
+                PermissionCodes.QuotesAccess,
+                PermissionCodes.QuotesCreate,
+                PermissionCodes.QuotesConvert,
                 PermissionCodes.SalesUpdate,
                 PermissionCodes.SalesDelete,
                 PermissionCodes.SalesPay,
@@ -128,6 +134,9 @@ public static class RoleCatalog
             {
                 PermissionCodes.SalesAccess,
                 PermissionCodes.SalesCreate,
+                PermissionCodes.QuotesAccess,
+                PermissionCodes.QuotesCreate,
+                PermissionCodes.QuotesConvert,
                 PermissionCodes.SalesUpdate,
                 PermissionCodes.SalesPay,
                 PermissionCodes.PurchasesAccess
