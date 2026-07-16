@@ -102,4 +102,85 @@ public sealed class ConvertQuoteToSaleHandlerTests
         result.Error.Code.Should().Be("Quotes.Convert.Expired");
         quote.Status.Should().Be(QuoteStatus.Pending);
     }
+
+    [Fact]
+    public async Task Handle_ShouldFail_WhenQuoteIsNotPending()
+    {
+        var companyId = CompanyId.New();
+        var branchId = BranchId.New();
+        var quote = BuildQuote(DateTime.UtcNow.AddDays(7), companyId, branchId);
+        quote.Cancel();
+
+        var currentUserService = new Mock<ICurrentUserService>();
+        currentUserService.SetupGet(s => s.IsAuthenticated).Returns(true);
+        currentUserService.SetupGet(s => s.CompanyId).Returns(companyId);
+
+        var quoteRepository = new Mock<IQuoteRepository>();
+        quoteRepository
+            .Setup(r => r.GetByIdAsync(quote.Id, companyId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(quote);
+
+        var sender = new Mock<ISender>();
+
+        var handler = new ConvertQuoteToSaleHandler(
+            currentUserService.Object,
+            quoteRepository.Object,
+            sender.Object,
+            new Mock<IUnitOfWork>().Object);
+
+        var result = await handler.Handle(
+            new ConvertQuoteToSaleCommand(
+                quote.Id.Value, branchId.Value, Guid.NewGuid(),
+                [new CreateSaleDetailItemRequest(Guid.NewGuid(), 1, null, 0)]),
+            CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Be(ConvertQuoteToSaleErrors.NotPending);
+        sender.Verify(
+            s => s.Send(It.IsAny<CreateCcSaleCommand>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task Handle_ShouldNotMarkConverted_WhenCreateCcSaleCommandFails()
+    {
+        var companyId = CompanyId.New();
+        var branchId = BranchId.New();
+        var quote = BuildQuote(DateTime.UtcNow.AddDays(7), companyId, branchId);
+        var failureError = Error.Validation("CreateCcSale.Invalid", "Something was invalid.");
+
+        var currentUserService = new Mock<ICurrentUserService>();
+        currentUserService.SetupGet(s => s.IsAuthenticated).Returns(true);
+        currentUserService.SetupGet(s => s.CompanyId).Returns(companyId);
+
+        var quoteRepository = new Mock<IQuoteRepository>();
+        quoteRepository
+            .Setup(r => r.GetByIdAsync(quote.Id, companyId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(quote);
+
+        var sender = new Mock<ISender>();
+        sender
+            .Setup(s => s.Send(It.IsAny<CreateCcSaleCommand>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result<CreateCcSaleResponse>.Failure(failureError));
+
+        var unitOfWork = new Mock<IUnitOfWork>();
+
+        var handler = new ConvertQuoteToSaleHandler(
+            currentUserService.Object,
+            quoteRepository.Object,
+            sender.Object,
+            unitOfWork.Object);
+
+        var result = await handler.Handle(
+            new ConvertQuoteToSaleCommand(
+                quote.Id.Value, branchId.Value, Guid.NewGuid(),
+                [new CreateSaleDetailItemRequest(Guid.NewGuid(), 1, null, 0)]),
+            CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Be(failureError);
+        quote.Status.Should().Be(QuoteStatus.Pending);
+        quote.ConvertedSaleId.Should().BeNull();
+        unitOfWork.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
 }
