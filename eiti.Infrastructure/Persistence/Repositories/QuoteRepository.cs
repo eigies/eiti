@@ -1,5 +1,7 @@
 using eiti.Application.Abstractions.Repositories;
+using eiti.Domain.Branches;
 using eiti.Domain.Companies;
+using eiti.Domain.Customers;
 using eiti.Domain.Quotes;
 using Microsoft.EntityFrameworkCore;
 
@@ -59,7 +61,8 @@ public sealed class QuoteRepository : IQuoteRepository
 
         if (customerId.HasValue)
         {
-            query = query.Where(quote => quote.CustomerId != null && quote.CustomerId.Value == customerId.Value);
+            var customerIdValueObject = new CustomerId(customerId.Value);
+            query = query.Where(quote => quote.CustomerId == customerIdValueObject);
         }
 
         return await query
@@ -69,6 +72,7 @@ public sealed class QuoteRepository : IQuoteRepository
 
     public async Task<int> CountByBranchAsync(Guid branchId, CancellationToken cancellationToken = default)
     {
-        return await _context.Quotes.CountAsync(quote => quote.BranchId.Value == branchId, cancellationToken);
+        var branchIdValueObject = new BranchId(branchId);
+        return await _context.Quotes.CountAsync(quote => quote.BranchId == branchIdValueObject, cancellationToken);
     }
 }
