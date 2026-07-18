@@ -8,6 +8,10 @@ public static class PermissionCodes
     public const string SalesDelete = "sales.delete";
     public const string SalesPay = "sales.pay";
 
+    public const string QuotesAccess = "quotes.access";
+    public const string QuotesCreate = "quotes.create";
+    public const string QuotesConvert = "quotes.convert";
+
     public const string CashAccess = "cash.access";
     public const string CashOpen = "cash.open";
     public const string CashClose = "cash.close";
