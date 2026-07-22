@@ -11,7 +11,8 @@ public sealed record CreateCcSaleCommand(
     IReadOnlyList<CreateSaleDetailItemRequest> Details,
     IReadOnlyList<CreateSaleTradeInItemRequest>? TradeIns = null,
     decimal GeneralDiscountPercent = 0,
-    decimal? ManualOverridePrice = null
+    decimal? ManualOverridePrice = null,
+    decimal? VatRate = null
 ) : IRequest<Result<CreateCcSaleResponse>>, IRequirePermissions
 {
     public IReadOnlyCollection<string> RequiredPermissions => [PermissionCodes.SalesCreate];

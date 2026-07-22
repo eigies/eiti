@@ -67,7 +67,7 @@ public sealed class QuotesController : ControllerBase
     {
         var command = new ConvertQuoteToSaleCommand(
             id, body.BranchId, body.CustomerId, body.Details, body.TradeIns,
-            body.GeneralDiscountPercent, body.ManualOverridePrice);
+            body.GeneralDiscountPercent, body.ManualOverridePrice, body.WithVat);
         var result = await _sender.Send(command, cancellationToken);
         return result.ToActionResult();
     }
@@ -79,4 +79,5 @@ public sealed record ConvertQuoteToSaleRequestBody(
     IReadOnlyList<eiti.Application.Features.Sales.Commands.CreateSale.CreateSaleDetailItemRequest> Details,
     IReadOnlyList<eiti.Application.Features.Sales.Commands.CreateSale.CreateSaleTradeInItemRequest>? TradeIns,
     decimal GeneralDiscountPercent,
-    decimal? ManualOverridePrice);
+    decimal? ManualOverridePrice,
+    bool WithVat = false);

@@ -212,6 +212,13 @@ public sealed class CreateCcSaleHandler : IRequestHandler<CreateCcSaleCommand, R
             sale.SetManualOverride(request.ManualOverridePrice.Value, _currentUserService.UserId?.Value);
         }
 
+        // Desglose de IVA (venta proveniente de un presupuesto convertido "con IVA"): los detalles ya vienen
+        // con IVA incluido, así que VatAmount se deriva del total final (respeta descuentos/override).
+        if (request.VatRate.HasValue)
+        {
+            sale.SetVat(request.VatRate.Value);
+        }
+
         // Movimientos de reserva: se registran ahora que la venta existe, para quedar atados a su código.
         foreach (var detail in groupedDetails)
         {
@@ -284,6 +291,8 @@ public sealed class CreateCcSaleHandler : IRequestHandler<CreateCcSaleCommand, R
                 sale.GeneralDiscountPercent,
                 sale.OriginalTotal,
                 sale.TotalAmount,
+                sale.VatRate,
+                sale.VatAmount,
                 sale.ManualOverridePrice,
                 sale.IsCuentaCorriente,
                 sale.CreatedAt,

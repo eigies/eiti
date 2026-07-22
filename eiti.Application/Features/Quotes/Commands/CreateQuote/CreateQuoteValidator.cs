@@ -35,6 +35,10 @@ public sealed class CreateQuoteValidator : AbstractValidator<CreateQuoteCommand>
         RuleFor(x => x.GeneralDiscountPercent)
             .InclusiveBetween(0m, 100m).WithMessage("General discount percent must be between 0 and 100.");
 
+        RuleFor(x => x.VatRate)
+            .Must(rate => rate == 0m || rate == 10.5m || rate == 21m)
+            .WithMessage("VatRate must be one of 0 (exento), 10.5 or 21.");
+
         RuleFor(x => x.ExpiresAt)
             .GreaterThan(DateTime.UtcNow).WithMessage("ExpiresAt must be in the future.");
     }

@@ -13,6 +13,55 @@ public sealed class QuoteTests
         QuoteDetail.Create(ProductId.New(), 2, 150m, 10m);
 
     [Fact]
+    public void Create_ShouldSumVatOnNetPrices_WhenIncludesVat()
+    {
+        // Precios NETOS: 2 x 100 = 200 neto. Con IVA 21% => IVA 42, total 242.
+        var quote = Quote.Create(
+            CompanyId.New(), BranchId.New(), customerId: CustomerId.New(),
+            prospectName: null, prospectContact: null,
+            details: new[] { QuoteDetail.Create(ProductId.New(), 2, 100m) },
+            generalDiscountPercent: 0,
+            expiresAt: DateTime.UtcNow.AddDays(7),
+            createdByUserId: Guid.NewGuid(),
+            vatRate: 21m, includesVat: true);
+
+        quote.NetAmount.Should().Be(200m);
+        quote.VatAmount.Should().Be(42m);
+        quote.GrandTotal.Should().Be(242m);
+    }
+
+    [Fact]
+    public void VatAmount_ShouldBeZero_WhenNotIncludesVat()
+    {
+        var quote = Quote.Create(
+            CompanyId.New(), BranchId.New(), customerId: CustomerId.New(),
+            prospectName: null, prospectContact: null,
+            details: new[] { QuoteDetail.Create(ProductId.New(), 2, 100m) },
+            generalDiscountPercent: 0,
+            expiresAt: DateTime.UtcNow.AddDays(7),
+            createdByUserId: Guid.NewGuid(),
+            vatRate: 21m, includesVat: false);
+
+        quote.VatAmount.Should().Be(0m);
+        quote.GrandTotal.Should().Be(200m);
+    }
+
+    [Fact]
+    public void Create_ShouldThrow_WhenVatRateNotAllowed()
+    {
+        var act = () => Quote.Create(
+            CompanyId.New(), BranchId.New(), customerId: CustomerId.New(),
+            prospectName: null, prospectContact: null,
+            details: new[] { SampleDetail() },
+            generalDiscountPercent: 0,
+            expiresAt: DateTime.UtcNow.AddDays(7),
+            createdByUserId: Guid.NewGuid(),
+            vatRate: 15m, includesVat: true);
+
+        act.Should().Throw<ArgumentException>();
+    }
+
+    [Fact]
     public void Create_ShouldThrow_WhenBothCustomerAndProspectProvided()
     {
         var act = () => Quote.Create(

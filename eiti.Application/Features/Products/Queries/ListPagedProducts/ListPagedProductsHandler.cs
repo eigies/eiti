@@ -1,6 +1,7 @@
 using eiti.Application.Abstractions.Repositories;
 using eiti.Application.Abstractions.Services;
 using eiti.Application.Common;
+using eiti.Application.Common.Authorization;
 using eiti.Application.Features.Products.Queries.ListProducts;
 using MediatR;
 
@@ -37,6 +38,9 @@ public sealed class ListPagedProductsHandler
         var authCheck = _currentUserService.EnsureAuthenticated();
         if (authCheck.IsFailure)
             return Result<PagedProductsResponse>.Failure(authCheck.Error);
+
+        // Sin el permiso de costo no se expone el costo (se devuelve 0), para que no viaje en el JSON.
+        var canViewCost = _currentUserService.HasPermission(PermissionCodes.ProductsViewCost);
 
         var pageSize = request.PageSize <= 0
             ? DefaultPageSize
@@ -95,7 +99,7 @@ public sealed class ListPagedProductsHandler
                     product.Description,
                     product.Price,
                     product.Price,
-                    product.CostPrice,
+                    canViewCost ? product.CostPrice : 0m,
                     product.UnitPrice,
                     product.AllowsManualValueInSale,
                     product.NoDeliverySurcharge,

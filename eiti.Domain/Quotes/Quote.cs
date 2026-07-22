@@ -14,6 +14,8 @@ public sealed class Quote : AggregateRoot<QuoteId>
     public string? ProspectContact { get; private set; }
     public decimal GeneralDiscountPercent { get; private set; }
     public decimal TotalAmount { get; private set; }
+    public decimal VatRate { get; private set; }
+    public bool IncludesVat { get; private set; }
     public DateTime ExpiresAt { get; private set; }
     public QuoteStatus Status { get; private set; }
     public Guid? ConvertedSaleId { get; private set; }
@@ -23,6 +25,15 @@ public sealed class Quote : AggregateRoot<QuoteId>
 
     private readonly List<QuoteDetail> _details = [];
     public IReadOnlyCollection<QuoteDetail> Details => _details;
+
+    // Los precios cargados son NETOS (sin IVA); el sistema suma el IVA sobre el neto.
+    // NetAmount == TotalAmount (subtotal neto con descuentos). VatAmount/GrandTotal son derivados.
+    public static readonly decimal[] AllowedVatRates = [0m, 10.5m, 21m];
+    public decimal NetAmount => TotalAmount;
+    public decimal VatAmount => IncludesVat && VatRate > 0
+        ? decimal.Round(TotalAmount * VatRate / 100m, 2, MidpointRounding.AwayFromZero)
+        : 0m;
+    public decimal GrandTotal => TotalAmount + VatAmount;
 
     private Quote()
     {
@@ -37,6 +48,8 @@ public sealed class Quote : AggregateRoot<QuoteId>
         string? prospectContact,
         List<QuoteDetail> details,
         decimal generalDiscountPercent,
+        decimal vatRate,
+        bool includesVat,
         DateTime expiresAt,
         Guid createdByUserId,
         DateTime createdAt,
@@ -49,6 +62,8 @@ public sealed class Quote : AggregateRoot<QuoteId>
         ProspectName = prospectName;
         ProspectContact = prospectContact;
         GeneralDiscountPercent = NormalizePercent(generalDiscountPercent);
+        VatRate = vatRate;
+        IncludesVat = includesVat;
         ExpiresAt = expiresAt;
         Status = QuoteStatus.Pending;
         CreatedByUserId = createdByUserId;
@@ -75,7 +90,9 @@ public sealed class Quote : AggregateRoot<QuoteId>
         DateTime expiresAt,
         Guid createdByUserId,
         string? code = null,
-        DateTime? createdAt = null)
+        DateTime? createdAt = null,
+        decimal vatRate = 21m,
+        bool includesVat = true)
     {
         var hasCustomer = customerId is not null;
         var hasProspect = !string.IsNullOrWhiteSpace(prospectName);
@@ -84,6 +101,12 @@ public sealed class Quote : AggregateRoot<QuoteId>
         {
             throw new ArgumentException(
                 "A quote must have exactly one of CustomerId or ProspectName.", nameof(customerId));
+        }
+
+        if (Array.IndexOf(AllowedVatRates, vatRate) < 0)
+        {
+            throw new ArgumentException(
+                "VatRate must be one of 0 (exento), 10.5 or 21.", nameof(vatRate));
         }
 
         var detailList = details.ToList();
@@ -107,6 +130,8 @@ public sealed class Quote : AggregateRoot<QuoteId>
             hasProspect ? prospectContact?.Trim() : null,
             detailList,
             generalDiscountPercent,
+            vatRate,
+            includesVat,
             expiresAt,
             createdByUserId,
             effectiveCreatedAt,

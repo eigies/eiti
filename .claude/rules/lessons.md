@@ -1,5 +1,16 @@
 # Lessons Learned
 
+## Anular compra dejaba el pago pegado a la compra cancelada (mismo patrón que CC) - 2026-07-22
+
+**Síntoma:** usuario anula COMP-0086 (parcialmente pagada, $70.000). La compra queda Cancelada pero el pago de $70.000 sigue imputado y ACTIVO sobre la compra anulada → la plata queda "atrapada", no vuelve como saldo a favor ni se puede imputar a otra compra. Saldo pendiente inconsistente.
+
+**Causa raíz:** `CancelPurchaseHandler` revertía stock y hacía `purchase.Cancel()` pero **nunca tocaba `purchase.Payments`** (las imputaciones `PurchasePayments`). Idéntico al bug histórico de anular venta CC.
+
+**Fix (paridad con CancelSale):** `CancelPurchaseCommand` ahora lleva `PurchaseCancellationRefundMode?` (Credit=1 saldo a favor / ReversePayments=2 revertir pago). El handler obliga a elegir cuando hay pagos activos. Se extrajo `SupplierPaymentReversal.ReverseAsync` (reutilizado por `CancelSupplierPayment` y por el modo ReversePayments). Credit usa `SupplierCreditApplicator` (FIFO a compras pendientes). Front: modal de elección en `purchase-detail` (patrón del modal de anular venta CC en `customer-account`), gateado por `totalPaid > 0`. Además ahora se pueden cancelar compras Pagadas (antes lo bloqueaba `CannotCancelPaid`).
+
+**Patrón a recordar:** en cualquier flujo "cancelar el padre" (venta, compra, ...) que tenga pagos/cobros/asignaciones vinculadas, el handler DEBE resolver esos vínculos (revertir imputaciones + decidir destino del dinero). Un `.Cancel()` que solo cambia el status del padre deja registros hijos activos apuntando a un padre cancelado. Ya pasó con: transporte (SaleTransport), cobros CC (CancelSale), y ahora pagos de proveedor (CancelPurchase).
+
+
 ## ChunkLoadError / "no anda el menú" tras deploy del front - 2026-07-05
 
 **Síntoma:** después de `vercel deploy --prod` del front, un usuario que tenía la app abierta reporta que "no anda el menú, no puedo navegar". Consola: `ChunkLoadError: Loading chunk NNN failed` + `Failed to load module script: Expected a JavaScript-or-Wasm module script but the server responded with a MIME type of "text/html"`.

@@ -16,6 +16,8 @@ public sealed record GetSaleByIdResponse(
     decimal GeneralDiscountPercent,
     decimal OriginalTotal,
     decimal TotalAmount,
+    decimal? VatRate,
+    decimal? VatAmount,
     decimal CardSurchargeTotal,
     decimal? ManualOverridePrice,
     Guid? OverriddenByUserId,

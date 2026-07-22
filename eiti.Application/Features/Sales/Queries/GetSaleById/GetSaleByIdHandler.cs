@@ -88,6 +88,8 @@ public sealed class GetSaleByIdHandler : IRequestHandler<GetSaleByIdQuery, Resul
                 sale.GeneralDiscountPercent,
                 sale.OriginalTotal,
                 sale.TotalAmount,
+                sale.VatRate,
+                sale.VatAmount,
                 sale.CardSurchargeTotal,
                 sale.ManualOverridePrice,
                 sale.OverriddenByUserId,

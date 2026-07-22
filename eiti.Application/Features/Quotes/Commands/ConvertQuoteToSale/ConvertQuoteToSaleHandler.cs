@@ -53,14 +53,27 @@ public sealed class ConvertQuoteToSaleHandler : IRequestHandler<ConvertQuoteToSa
             return Result<CreateCcSaleResponse>.Failure(ConvertQuoteToSaleErrors.Expired);
         }
 
+        // "Con IVA": los precios del presupuesto son netos, así que se llevan a FINAL (neto × (1+tasa)) antes
+        // de crear la venta; el total queda con IVA incluido y la venta guarda el desglose (VatRate/VatAmount).
+        // "Sin IVA": bajan los netos tal cual y no se registra IVA. Exento (tasa 0) equivale a sin IVA.
+        var applyVat = request.WithVat && quote.VatRate > 0m;
+        var saleDetails = applyVat
+            ? request.Details
+                .Select(detail => detail.UnitPrice.HasValue
+                    ? detail with { UnitPrice = decimal.Round(detail.UnitPrice.Value * (1m + quote.VatRate / 100m), 2, MidpointRounding.AwayFromZero) }
+                    : detail)
+                .ToList()
+            : request.Details;
+
         var createSaleResult = await _sender.Send(
             new CreateCcSaleCommand(
                 request.BranchId,
                 request.CustomerId,
-                request.Details,
+                saleDetails,
                 request.TradeIns,
                 request.GeneralDiscountPercent,
-                request.ManualOverridePrice),
+                request.ManualOverridePrice,
+                applyVat ? quote.VatRate : null),
             cancellationToken);
 
         if (createSaleResult.IsFailure)

@@ -11,6 +11,8 @@ public sealed record CreateCcSaleResponse(
     decimal GeneralDiscountPercent,
     decimal OriginalTotal,
     decimal TotalAmount,
+    decimal? VatRate,
+    decimal? VatAmount,
     decimal? ManualOverridePrice,
     bool IsCuentaCorriente,
     DateTime CreatedAt,

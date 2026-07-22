@@ -1,6 +1,7 @@
 using eiti.Application.Abstractions.Repositories;
 using eiti.Application.Abstractions.Services;
 using eiti.Application.Common;
+using eiti.Application.Common.Authorization;
 using eiti.Application.Features.Stock.Common;
 using eiti.Domain.Branches;
 using MediatR;
@@ -36,6 +37,9 @@ public sealed class ListBranchStockHandler : IRequestHandler<ListBranchStockQuer
         if (branchAccess.IsFailure)
             return Result<IReadOnlyList<BranchProductStockResponse>>.Failure(branchAccess.Error);
 
+        // Sin el permiso de costo no se expone el costo/override (se devuelve 0/null), para que no viaje en el JSON.
+        var canViewCost = _currentUserService.HasPermission(PermissionCodes.ProductsViewCost);
+
         var branch = await _branchRepository.GetByIdAsync(new BranchId(request.BranchId), _currentUserService.CompanyId, cancellationToken);
         if (branch is null)
         {
@@ -60,17 +64,17 @@ public sealed class ListBranchStockHandler : IRequestHandler<ListBranchStockQuer
                     product.Name,
                     product.Price,
                     product.Price,
-                    product.CostPrice,
+                    canViewCost ? product.CostPrice : 0m,
                     product.UnitPrice,
                     product.AllowsManualValueInSale,
                     stock?.OnHandQuantity ?? 0,
                     stock?.ReservedQuantity ?? 0,
                     stock?.AvailableQuantity ?? 0,
                     stock?.UpdatedAt,
-                    stock?.CostOverride,
+                    canViewCost ? stock?.CostOverride : null,
                     stock?.SalePriceOverride,
                     stock?.SalePriceOverride ?? product.Price,
-                    stock?.CostOverride ?? product.CostPrice);
+                    canViewCost ? (stock?.CostOverride ?? product.CostPrice) : 0m);
             }).ToList());
     }
 }

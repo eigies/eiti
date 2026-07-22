@@ -48,7 +48,7 @@ public sealed class ConvertQuoteToSaleHandlerTests
             .Setup(s => s.Send(It.IsAny<CreateCcSaleCommand>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result<CreateCcSaleResponse>.Success(new CreateCcSaleResponse(
                 saleId, "SC-001", branchId.Value, Guid.NewGuid(), "Juan Perez",
-                1, "OnHold", 0, 100m, 100m, null, true, DateTime.UtcNow,
+                1, "OnHold", 0, 100m, 100m, null, null, null, true, DateTime.UtcNow,
                 0, 0, [], 0, 100m, [])));
 
         var handler = new ConvertQuoteToSaleHandler(

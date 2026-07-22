@@ -7,6 +7,7 @@ using eiti.Application.Features.Reports.Queries.PaymentMethodsReport;
 using eiti.Application.Features.Reports.Queries.SalesReport;
 using eiti.Application.Features.Reports.Queries.StockMovementsReport;
 using eiti.Application.Features.Reports.Queries.StockMatrix;
+using eiti.Application.Features.Reports.Queries.WholesaleByCustomer;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -57,6 +58,21 @@ public sealed class ReportsController : ControllerBase
     {
         var result = await _sender.Send(
             new SalesReportQuery(dateFrom, dateTo, groupBy ?? "product", customerId, installerId, vehicleId, channel, deliveryMode, categoryId, saleType, branchId),
+            cancellationToken);
+        return result.ToActionResult();
+    }
+
+    [HttpGet("sales/wholesale-by-customer")]
+    public async Task<IActionResult> WholesaleByCustomer(
+        [FromQuery] DateTime dateFrom,
+        [FromQuery] DateTime dateTo,
+        [FromQuery] string? saleType,
+        [FromQuery] Guid? branchId,
+        [FromQuery] Guid? customerId,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await _sender.Send(
+            new WholesaleByCustomerQuery(dateFrom, dateTo, saleType ?? "wholesale", branchId, customerId),
             cancellationToken);
         return result.ToActionResult();
     }

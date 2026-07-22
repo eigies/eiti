@@ -59,9 +59,10 @@ public sealed class PurchasesController : ControllerBase
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> CancelPurchase(
         Guid id,
+        [FromQuery] PurchaseCancellationRefundMode? refundMode,
         CancellationToken cancellationToken)
     {
-        var result = await _sender.Send(new CancelPurchaseCommand(id), cancellationToken);
+        var result = await _sender.Send(new CancelPurchaseCommand(id, refundMode), cancellationToken);
         return result.ToActionResult();
     }
 

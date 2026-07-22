@@ -17,7 +17,9 @@ public sealed record CreateQuoteCommand(
     string? ProspectContact,
     IReadOnlyList<CreateQuoteDetailItemRequest> Details,
     decimal GeneralDiscountPercent,
-    DateTime ExpiresAt
+    DateTime ExpiresAt,
+    decimal VatRate = 21m,
+    bool IncludesVat = true
 ) : IRequest<Result<CreateQuoteResponse>>, IRequirePermissions
 {
     public IReadOnlyCollection<string> RequiredPermissions => [PermissionCodes.QuotesCreate];

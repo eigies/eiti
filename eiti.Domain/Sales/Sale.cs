@@ -23,6 +23,11 @@ public sealed class Sale : AggregateRoot<SaleId>
     public decimal GeneralDiscountPercent { get; private set; }
     public decimal OriginalTotal { get; private set; }
     public decimal TotalAmount { get; private set; }
+    // Desglose de IVA para ventas provenientes de un presupuesto convertido "con IVA".
+    // Null en ventas sin IVA. Cuando se setea, TotalAmount ya es el FINAL (con IVA incluido)
+    // y VatAmount es la porción de IVA contenida en ese total.
+    public decimal? VatRate { get; private set; }
+    public decimal? VatAmount { get; private set; }
     public decimal? ManualOverridePrice { get; private set; }
     public Guid? OverriddenByUserId { get; private set; }
     public DateTime? OverriddenAt { get; private set; }
@@ -268,6 +273,21 @@ public sealed class Sale : AggregateRoot<SaleId>
         OverriddenByUserId = null;
         OverriddenAt = null;
         RecalculateTotal();
+    }
+
+    // Registra el desglose de IVA sobre el total FINAL ya calculado (los detalles vienen con IVA incluido).
+    // VatAmount se deriva del total actual, así respeta descuentos/override sin duplicar la cuenta.
+    public void SetVat(decimal ratePercent)
+    {
+        if (ratePercent < 0)
+        {
+            throw new ArgumentException("VAT rate cannot be negative.", nameof(ratePercent));
+        }
+
+        VatRate = ratePercent;
+        VatAmount = ratePercent > 0
+            ? NormalizeAmount(TotalAmount - TotalAmount / (1m + ratePercent / 100m))
+            : 0m;
     }
 
     public SaleCcPayment AddCcPayment(SalePaymentMethod method, decimal amount, DateTime date, string? notes, bool allowOverpayment = false)

@@ -3,6 +3,7 @@ using eiti.Application.Abstractions.Repositories;
 using eiti.Application.Abstractions.Services;
 using eiti.Application.Common;
 using eiti.Application.Common.Authorization;
+using eiti.Application.Features.Purchases.Common;
 using eiti.Domain.Cash;
 using eiti.Domain.Cheques;
 using eiti.Domain.Purchases;
@@ -75,40 +76,9 @@ public sealed class CancelSupplierPaymentHandler : IRequestHandler<CancelSupplie
             session = resolve.Session;
         }
 
-        // Revertir las imputaciones FIFO que generó este pago (sus compras vuelven a Pendiente).
-        var purchases = await _purchaseRepository.ListBySupplierPaymentIdAsync(companyId.Value, payment.Id, cancellationToken);
-        var imputedTotal = 0m;
-        foreach (var purchase in purchases)
-        {
-            var rows = purchase.Payments
-                .Where(p => p.SupplierPaymentId == payment.Id && p.Status == PurchasePaymentStatus.Active)
-                .ToList();
-            foreach (var row in rows)
-            {
-                imputedTotal += row.Amount;
-                purchase.CancelPayment(row.Id);
-            }
-        }
-
-        // Si el pago genero saldo a favor, la anulacion lo revierte.
-        var creditGeneratedByPayment = Math.Max(0m, payment.Amount - imputedTotal);
-        if (creditGeneratedByPayment > 0m)
-        {
-            supplier.ConsumeCredit(creditGeneratedByPayment);
-        }
+        await SupplierPaymentReversal.ReverseAsync(
+            payment, supplier, session, _purchaseRepository, _chequeRepository, companyId, userId, cancellationToken);
         _supplierRepository.Update(supplier);
-
-        // Reintegro de caja (solo efectivo) y devolución del cheque a cartera.
-        session?.RegisterSupplierPaymentCancel(payment.Amount, payment.Id, userId, payment.Method);
-
-        if (payment.Method == PurchasePaymentMethod.Check && payment.ChequeId.HasValue)
-        {
-            var cheque = await _chequeRepository.GetByIdAsync(payment.ChequeId.Value, companyId, cancellationToken);
-            if (cheque is not null && cheque.Estado == ChequeStatus.Entregado)
-                cheque.ReturnToCartera();
-        }
-
-        payment.Cancel();
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 

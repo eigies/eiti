@@ -98,7 +98,9 @@ public sealed class CreateQuoteHandler : IRequestHandler<CreateQuoteCommand, Res
                 request.GeneralDiscountPercent,
                 request.ExpiresAt,
                 userId,
-                quoteCode);
+                quoteCode,
+                vatRate: request.VatRate,
+                includesVat: request.IncludesVat);
         }
         catch (ArgumentException ex)
         {
@@ -118,6 +120,11 @@ public sealed class CreateQuoteHandler : IRequestHandler<CreateQuoteCommand, Res
             quote.ProspectContact,
             quote.GeneralDiscountPercent,
             quote.TotalAmount,
+            quote.VatRate,
+            quote.IncludesVat,
+            quote.NetAmount,
+            quote.VatAmount,
+            quote.GrandTotal,
             quote.ExpiresAt,
             (int)quote.Status,
             quote.Status.ToString(),

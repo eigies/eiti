@@ -37,6 +37,8 @@ public sealed class QuoteConfiguration : IEntityTypeConfiguration<Quote>
         builder.Property(quote => quote.ProspectContact).HasMaxLength(200).IsRequired(false);
         builder.Property(quote => quote.GeneralDiscountPercent).HasColumnType("decimal(5,2)").HasDefaultValue(0m).IsRequired();
         builder.Property(quote => quote.TotalAmount).HasColumnType("decimal(18,2)").IsRequired();
+        builder.Property(quote => quote.VatRate).HasColumnType("decimal(5,2)").HasDefaultValue(21m).IsRequired();
+        builder.Property(quote => quote.IncludesVat).HasDefaultValue(true).IsRequired();
         builder.Property(quote => quote.ExpiresAt).IsRequired();
         builder.Property(quote => quote.Status).HasColumnName("IdQuoteStatus").HasConversion<int>().IsRequired();
         builder.Property(quote => quote.ConvertedSaleId).IsRequired(false);
