@@ -43,4 +43,8 @@ public static class UpdateSaleErrors
     public static readonly Error TransferBankInvalid = Error.Validation(
         "Sales.Update.TransferBankInvalid",
         "El banco seleccionado no esta habilitado para transferencias.");
+
+    public static readonly Error CannotChargeCuentaCorriente = Error.Conflict(
+        "Sales.Update.CannotChargeCuentaCorriente",
+        "Las ventas de Cuenta Corriente se cobran desde la cuenta del cliente, no desde esta pantalla.");
 }

@@ -1,5 +1,25 @@
 # Lessons Learned
 
+## Cobrar una venta CC desde "Gestión de Ventas" generaba un pago fantasma en caja - 2026-07-24
+
+**Síntoma:** venta SMA-042 (Cuenta Corriente) figuraba "Pagada" en Gestión de Ventas con "Efectivo: $174.000", pero la cuenta corriente del cliente mostraba el cobro real por Tarjeta, como si fueran dos pagos distintos. La caja (todavía abierta) terminó con **$174.000 de más** registrados: $348.000 de ingresos para una venta de $174.000.
+
+**Causa raíz:** una venta CC nace en estado `OnHold`, igual que una venta normal sin cobrar. El botón "Cobrar" rápido de Gestión de Ventas (`markAsPaid` en `sales-page.component.ts`) y el `UpdateSaleHandler` del backend **no chequeaban `IsCuentaCorriente`** antes de marcar Pagada. El flujo normal (`UpdateSale`) crea un `SalePayment` directo + un ingreso real de caja — un camino totalmente distinto y ciego al ledger de Cuenta Corriente (`CustomerPayment` + `SaleCcPayment`, que se maneja desde la cuenta del cliente vía `AddCustomerPayment`). Con dos caminos posibles para "cobrar" la misma venta, alguien cobró por los dos: una vez mal (Efectivo, vía Gestión de Ventas, sin reflejarse en CC) y una vez bien (Tarjeta, vía cuenta corriente) — quedando duplicado en caja.
+
+**Fix:** front redirige a `/clients-cc/customer/:customerId` si `sale.isCuentaCorriente` en vez de ejecutar el cobro rápido (esa pantalla ya permite un cobro que se imputa FIFO contra *todas* las ventas pendientes del cliente, así que no se pierde la posibilidad de cobrar varias juntas). Backend: `UpdateSaleHandler` rechaza explícitamente marcar Pagada una venta `IsCuentaCorriente` (`Sales.Update.CannotChargeCuentaCorriente`) — defensa en profundidad para que ningún otro camino (API directa, futuro bug de UI) pueda repetirlo. Dato en prod corregido a mano: se borró el `SalePayment` fantasma y se insertó un movimiento reverso en caja (mismo patrón que `RegisterSaleCancellation`) para netear el efectivo esperado a $0, sin tocar el cobro real ni el estado de la venta.
+
+**Patrón a recordar:** cuando una entidad tiene dos modalidades de negocio (venta normal vs. CC, compra con pago inmediato vs. cuenta de proveedor), **cualquier acción que mute el estado de pago debe chequear la modalidad primero**. Si un handler genérico (`UpdateSale`) puede aplicarse a ambas modalidades sin distinguir, tarde o temprano alguien dispara el camino equivocado para la modalidad equivocada — y como cada modalidad tiene su propio ledger, el resultado no es un error visible sino datos duplicados/perdidos en silencio. Mismo espíritu que la lección de "cancelar el padre" de más abajo, pero del lado de "cobrar", no de "anular".
+
+## Usé un `<select>` HTML nativo en vez de `app-searchable-select` - 2026-07-22
+
+**Síntoma:** el usuario notó que el selector de IVA (21% / 10,5% / Exento) en `quote-form.component.html` se veía "nativo del HTML", distinto al resto de los dropdowns de la app.
+
+**Causa raíz:** al agregar el selector de alícuota escribí un `<select><option>` nativo en vez de usar `app-searchable-select`, el componente de dropdown que usa toda la app (incluso otro campo del mismo formulario, `selectedBranchId`, dos líneas más arriba). Lo pasé por alto porque funcionalmente andaba bien — el error era puramente de consistencia visual, y por eso no lo agarré compilando ni con el e2e.
+
+**Fix:** reemplazado por `<app-searchable-select [(ngModel)]="vatRate" (ngModelChange)="setVatRate($event)" [options]="vatRateSelectOptions">`, mismo patrón `[(ngModel)]` que ya usa `selectedBranchId` en el mismo form (sin `<form>` envolvente, así que no hace falta `[ngModelOptions]="{standalone:true}"`).
+
+**Patrón a recordar:** antes de escribir cualquier `<select>`, `<input type="date">` con picker custom, o control de UI nuevo, **grepear primero cómo se resuelve ese mismo tipo de control en otro lugar del mismo archivo o feature vecina** — casi seguro ya existe un componente compartido (`app-searchable-select`, etc.) y usar HTML nativo se nota inmediatamente al lado de los demás campos. Esto no lo detecta ni el build ni los tests: es un chequeo visual que hay que hacer a propósito.
+
 ## Anular compra dejaba el pago pegado a la compra cancelada (mismo patrón que CC) - 2026-07-22
 
 **Síntoma:** usuario anula COMP-0086 (parcialmente pagada, $70.000). La compra queda Cancelada pero el pago de $70.000 sigue imputado y ACTIVO sobre la compra anulada → la plata queda "atrapada", no vuelve como saldo a favor ni se puede imputar a otra compra. Saldo pendiente inconsistente.

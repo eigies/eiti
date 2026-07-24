@@ -1,10 +1,12 @@
 using eiti.Application.Abstractions.Data;
 using eiti.Application.Abstractions.Repositories;
 using eiti.Application.Abstractions.Services;
+using eiti.Application.Common.Authorization;
 using eiti.Application.Features.Sales.Commands.UpdateSale;
 using eiti.Domain.Banks;
 using eiti.Domain.Branches;
 using eiti.Domain.Companies;
+using eiti.Domain.Customers;
 using eiti.Domain.Products;
 using eiti.Domain.Sales;
 using eiti.Domain.Stock;
@@ -15,6 +17,61 @@ namespace eiti.Tests;
 
 public sealed class UpdateSaleHandlerTests
 {
+    // Regresión: cobrar una venta CC desde acá (en vez de la cuenta del cliente) generaba un
+    // SalePayment + ingreso de caja "fantasma" que no quedaba reflejado en la cuenta corriente
+    // (bug real detectado en producción, venta SMA-042).
+    [Fact]
+    public async Task Handle_ShouldRejectMarkingPaid_WhenSaleIsCuentaCorriente()
+    {
+        var companyId = CompanyId.New();
+        var branch = Branch.Create(companyId, "Sucursal Centro", "SC", "San Martin 123");
+        var product = Product.Create(companyId, "BAT-001", "BAT-001", "Contoso", "Bateria nueva", null, 100m, 70m, null);
+        var ccSale = Sale.CreateCc(
+            companyId,
+            branch.Id,
+            CustomerId.New(),
+            [SaleDetail.Create(product.Id, 1, product.Price)]);
+
+        var currentUserService = new Mock<ICurrentUserService>();
+        currentUserService.SetupGet(service => service.IsAuthenticated).Returns(true);
+        currentUserService.SetupGet(service => service.CompanyId).Returns(companyId);
+        currentUserService.Setup(service => service.HasPermission(PermissionCodes.SalesPay)).Returns(true);
+
+        var saleRepository = new Mock<ISaleRepository>();
+        saleRepository
+            .Setup(repository => repository.GetByIdAsync(ccSale.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(ccSale);
+
+        var handler = new UpdateSaleHandler(
+            currentUserService.Object,
+            saleRepository.Object,
+            new Mock<ICustomerRepository>().Object,
+            new Mock<IProductRepository>().Object,
+            new Mock<IBranchProductStockRepository>().Object,
+            new Mock<IStockMovementRepository>().Object,
+            new Mock<ICashDrawerRepository>().Object,
+            new Mock<ICashSessionRepository>().Object,
+            new Mock<ISaleTransportAssignmentRepository>().Object,
+            new Mock<IAddressRepository>().Object,
+            new Mock<IBankRepository>().Object,
+            new Mock<IUnitOfWork>().Object);
+
+        var result = await handler.Handle(
+            new UpdateSaleCommand(
+                ccSale.Id.Value,
+                null,
+                (int)SaleStatus.Paid,
+                false,
+                null,
+                [new UpdateSaleDetailItemRequest(product.Id.Value, 1)],
+                [],
+                []),
+            CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error!.Code.Should().Be("Sales.Update.CannotChargeCuentaCorriente");
+    }
+
     [Fact]
     public async Task Handle_ShouldRejectCardPayment_WhenBankIsNotEnabledForCard()
     {

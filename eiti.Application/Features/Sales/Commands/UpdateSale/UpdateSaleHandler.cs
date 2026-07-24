@@ -198,6 +198,14 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
             return Result<UpdateSaleResponse>.Failure(UpdateSaleErrors.PaymentForbidden);
         }
 
+        // Las ventas CC se cobran vía AddCustomerPayment (cuenta del cliente), que imputa contra el ledger
+        // de CcPayments. Marcarlas Paid por acá crearía un SalePayment + ingreso de caja "fantasma" que no
+        // queda reflejado en la cuenta corriente del cliente (bug real detectado en producción, venta SMA-042).
+        if (requestedStatus == SaleStatus.Paid && sale.IsCuentaCorriente)
+        {
+            return Result<UpdateSaleResponse>.Failure(UpdateSaleErrors.CannotChargeCuentaCorriente);
+        }
+
         var productMap = new Dictionary<Guid, Product>();
         var saleDetails = new List<SaleDetail>();
         var stockMap = new Dictionary<Guid, BranchProductStock>();
