@@ -61,6 +61,7 @@ public static class PermissionCatalog
         PermissionCodes.PayrollLiquidationsGenerate,
         PermissionCodes.PayrollLiquidationsPay,
         PermissionCodes.PayrollAdvancesManage,
+        PermissionCodes.DriversDelete,
     };
 
     public static bool IsValid(string permissionCode) =>

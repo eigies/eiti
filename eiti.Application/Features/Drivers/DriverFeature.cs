@@ -2,6 +2,7 @@ using eiti.Application.Abstractions.Data;
 using eiti.Application.Abstractions.Repositories;
 using eiti.Application.Abstractions.Services;
 using eiti.Application.Common;
+using eiti.Application.Common.Authorization;
 using eiti.Domain.Employees;
 using MediatR;
 
@@ -32,7 +33,17 @@ public sealed record UpsertDriverProfileCommand(
 
 public sealed record GetDriverQuery(Guid EmployeeId) : IRequest<Result<DriverResponse>>;
 public sealed record ListDriversQuery() : IRequest<Result<IReadOnlyList<DriverResponse>>>;
-public sealed record DeleteDriverProfileCommand(Guid EmployeeId) : IRequest<Result>;
+public sealed record DeleteDriverProfileCommand(Guid EmployeeId) : IRequest<Result>, IRequirePermissions
+{
+    public IReadOnlyCollection<string> RequiredPermissions => [PermissionCodes.DriversDelete];
+}
+
+internal static class DeleteDriverProfileErrors
+{
+    public static readonly Error EmployeeNotFound = Error.NotFound("Drivers.Delete.EmployeeNotFound", "The requested employee was not found.");
+    public static readonly Error ProfileNotFound = Error.NotFound("Drivers.Delete.ProfileNotFound", "The requested driver profile was not found.");
+    public static readonly Error HasOpenAssignments = Error.Conflict("Drivers.Delete.HasOpenAssignments", "El conductor tiene viajes asignados o en transito. Finalizalos o reasignalos antes de eliminarlo.");
+}
 
 public sealed class UpsertDriverProfileHandler : IRequestHandler<UpsertDriverProfileCommand, Result<DriverResponse>>
 {
@@ -160,13 +171,23 @@ public sealed class DeleteDriverProfileHandler : IRequestHandler<DeleteDriverPro
     private readonly ICurrentUserService _currentUserService;
     private readonly IEmployeeRepository _employeeRepository;
     private readonly IDriverProfileRepository _driverProfileRepository;
+    private readonly ISaleTransportAssignmentRepository _saleTransportAssignmentRepository;
+    private readonly IVehicleRepository _vehicleRepository;
     private readonly IUnitOfWork _unitOfWork;
 
-    public DeleteDriverProfileHandler(ICurrentUserService currentUserService, IEmployeeRepository employeeRepository, IDriverProfileRepository driverProfileRepository, IUnitOfWork unitOfWork)
+    public DeleteDriverProfileHandler(
+        ICurrentUserService currentUserService,
+        IEmployeeRepository employeeRepository,
+        IDriverProfileRepository driverProfileRepository,
+        ISaleTransportAssignmentRepository saleTransportAssignmentRepository,
+        IVehicleRepository vehicleRepository,
+        IUnitOfWork unitOfWork)
     {
         _currentUserService = currentUserService;
         _employeeRepository = employeeRepository;
         _driverProfileRepository = driverProfileRepository;
+        _saleTransportAssignmentRepository = saleTransportAssignmentRepository;
+        _vehicleRepository = vehicleRepository;
         _unitOfWork = unitOfWork;
     }
 
@@ -176,15 +197,33 @@ public sealed class DeleteDriverProfileHandler : IRequestHandler<DeleteDriverPro
         if (authCheck.IsFailure)
             return Result.Failure(authCheck.Error);
 
-        var employee = await _employeeRepository.GetByIdAsync(new EmployeeId(request.EmployeeId), _currentUserService.CompanyId, cancellationToken);
-        if (employee is null)
-            return Result.Failure(Error.NotFound("Drivers.Delete.EmployeeNotFound", "The requested employee was not found."));
+        var companyId = _currentUserService.CompanyId;
 
-        var profile = await _driverProfileRepository.GetByEmployeeIdAsync(employee.Id, _currentUserService.CompanyId, cancellationToken);
+        var employee = await _employeeRepository.GetByIdAsync(new EmployeeId(request.EmployeeId), companyId, cancellationToken);
+        if (employee is null)
+            return Result.Failure(DeleteDriverProfileErrors.EmployeeNotFound);
+
+        var profile = await _driverProfileRepository.GetByEmployeeIdAsync(employee.Id, companyId, cancellationToken);
         if (profile is null)
-            return Result.Failure(Error.NotFound("Drivers.Delete.ProfileNotFound", "The requested driver profile was not found."));
+            return Result.Failure(DeleteDriverProfileErrors.ProfileNotFound);
+
+        // Un chofer con viajes Assigned/InTransit no puede desaparecer: el remito y la
+        // pantalla de transporte quedarian apuntando a un conductor inexistente.
+        if (await _saleTransportAssignmentRepository.HasOpenAssignmentsByDriverAsync(employee.Id, companyId, cancellationToken))
+            return Result.Failure(DeleteDriverProfileErrors.HasOpenAssignments);
+
+        // Soltar el chofer de todo vehiculo que lo tenga asignado antes de borrar el perfil.
+        var vehicles = await _vehicleRepository.ListByCompanyAsync(companyId, cancellationToken);
+        foreach (var vehicle in vehicles.Where(v => v.AssignedDriverEmployeeId == employee.Id))
+        {
+            vehicle.UnassignDriver();
+        }
 
         _driverProfileRepository.Remove(profile);
+        // El Employee no se borra (lo referencian viajes historicos y sueldos): se desactiva,
+        // asi deja de aparecer como chofer disponible en toda la app.
+        employee.Deactivate();
+
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return Result.Success();

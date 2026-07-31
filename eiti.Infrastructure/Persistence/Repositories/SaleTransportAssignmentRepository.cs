@@ -1,5 +1,6 @@
 using eiti.Application.Abstractions.Repositories;
 using eiti.Domain.Companies;
+using eiti.Domain.Employees;
 using eiti.Domain.Sales;
 using eiti.Domain.Transport;
 using Microsoft.EntityFrameworkCore;
@@ -28,4 +29,11 @@ public sealed class SaleTransportAssignmentRepository : ISaleTransportAssignment
 
     public async Task<IReadOnlyList<SaleTransportAssignment>> ListBySaleIdsAsync(IReadOnlyList<SaleId> saleIds, CompanyId companyId, CancellationToken cancellationToken = default) =>
         await _context.SaleTransportAssignments.Where(x => x.CompanyId == companyId && saleIds.Contains(x.SaleId)).ToListAsync(cancellationToken);
+
+    public Task<bool> HasOpenAssignmentsByDriverAsync(EmployeeId driverEmployeeId, CompanyId companyId, CancellationToken cancellationToken = default) =>
+        _context.SaleTransportAssignments.AnyAsync(
+            x => x.CompanyId == companyId
+                && x.DriverEmployeeId == driverEmployeeId
+                && (x.Status == SaleTransportStatus.Assigned || x.Status == SaleTransportStatus.InTransit),
+            cancellationToken);
 }

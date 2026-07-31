@@ -78,6 +78,9 @@ public static class PermissionCodes
 
     public const string ProductsCostPriceAlert = "products.cost_price_alert";
 
+    // Transporte / flota
+    public const string DriversDelete = "drivers.delete";
+
     public const string PayrollManage = "payroll.manage";
     public const string PayrollLiquidationsGenerate = "payroll.liquidations.generate";
     public const string PayrollLiquidationsPay = "payroll.liquidations.pay";

@@ -1,4 +1,5 @@
 using eiti.Domain.Companies;
+using eiti.Domain.Employees;
 using eiti.Domain.Sales;
 using eiti.Domain.Transport;
 
@@ -10,4 +11,5 @@ public interface ISaleTransportAssignmentRepository
     Task<SaleTransportAssignment?> GetByIdAsync(SaleTransportAssignmentId id, CompanyId companyId, CancellationToken cancellationToken = default);
     Task<SaleTransportAssignment?> GetBySaleIdAsync(SaleId saleId, CompanyId companyId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<SaleTransportAssignment>> ListBySaleIdsAsync(IReadOnlyList<SaleId> saleIds, CompanyId companyId, CancellationToken cancellationToken = default);
+    Task<bool> HasOpenAssignmentsByDriverAsync(EmployeeId driverEmployeeId, CompanyId companyId, CancellationToken cancellationToken = default);
 }

@@ -64,7 +64,8 @@ public static class RoleCatalog
                 PermissionCodes.PayrollManage,
                 PermissionCodes.PayrollLiquidationsGenerate,
                 PermissionCodes.PayrollLiquidationsPay,
-                PermissionCodes.PayrollAdvancesManage
+                PermissionCodes.PayrollAdvancesManage,
+                PermissionCodes.DriversDelete
             }),
         new RoleDefinition(
             SystemRoles.Admin,
@@ -126,7 +127,8 @@ public static class RoleCatalog
                 PermissionCodes.PayrollManage,
                 PermissionCodes.PayrollLiquidationsGenerate,
                 PermissionCodes.PayrollLiquidationsPay,
-                PermissionCodes.PayrollAdvancesManage
+                PermissionCodes.PayrollAdvancesManage,
+                PermissionCodes.DriversDelete
             }),
         new RoleDefinition(
             SystemRoles.Seller,
