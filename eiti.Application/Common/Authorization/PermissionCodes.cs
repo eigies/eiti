@@ -59,6 +59,7 @@ public static class PermissionCodes
     public const string ReportsSalesRanking = "reports.sales.ranking";
     public const string ReportsSalesDailyControl = "reports.sales.daily_control";
     public const string ReportsWholesaleByCustomer = "reports.sales.wholesale_by_customer";
+    public const string ReportsSalesTradeIns = "reports.sales.trade_ins";
     public const string ReportsDebtors = "reports.debtors";
     public const string ReportsCash = "reports.cash";
     public const string ReportsStock = "reports.stock";
@@ -78,7 +79,6 @@ public static class PermissionCodes
 
     public const string ProductsCostPriceAlert = "products.cost_price_alert";
 
-    // Transporte / flota
     public const string DriversDelete = "drivers.delete";
 
     public const string PayrollManage = "payroll.manage";

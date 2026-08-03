@@ -7,6 +7,7 @@ using eiti.Application.Features.Reports.Queries.PaymentMethodsReport;
 using eiti.Application.Features.Reports.Queries.SalesReport;
 using eiti.Application.Features.Reports.Queries.StockMovementsReport;
 using eiti.Application.Features.Reports.Queries.StockMatrix;
+using eiti.Application.Features.Reports.Queries.TradeInsByBranch;
 using eiti.Application.Features.Reports.Queries.WholesaleByCustomer;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -73,6 +74,20 @@ public sealed class ReportsController : ControllerBase
     {
         var result = await _sender.Send(
             new WholesaleByCustomerQuery(dateFrom, dateTo, saleType ?? "wholesale", branchId, customerId),
+            cancellationToken);
+        return result.ToActionResult();
+    }
+
+    [HttpGet("sales/trade-ins-by-branch")]
+    public async Task<IActionResult> TradeInsByBranch(
+        [FromQuery] DateTime dateFrom,
+        [FromQuery] DateTime dateTo,
+        [FromQuery] Guid? branchId,
+        [FromQuery] Guid? customerId,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await _sender.Send(
+            new TradeInsByBranchQuery(dateFrom, dateTo, branchId, customerId),
             cancellationToken);
         return result.ToActionResult();
     }

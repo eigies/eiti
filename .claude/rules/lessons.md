@@ -1,5 +1,15 @@
 # Lessons Learned
 
+## Agregué permisos al final de cada lista en vez de al bloque temático que ya existía - 2026-08-03
+
+**Síntoma:** el usuario marcó "creaste un bloque nuevo en permisos y ya existía, es reportería donde debe ir". Al sumar `reports.sales.trade_ins` lo appendeé al final de `PermissionCatalog.All`, del const `PermissionCodes` del front, del array `PermissionCatalog` del front y de la lista de cada rol en `RoleCatalog` — cuando las cuatro listas ya tienen un bloque de reportes agrupado. Además inventé un comentario de sección `// Transporte / flota` en `PermissionCodes.cs` para `drivers.delete`, cuando los permisos sueltos de ese archivo van sin encabezado propio. Bonus: la etiqueta del catálogo decía `"Reportes: ..."` cuando todas las demás usan el prefijo `"Reportería: ..."`.
+
+**Causa raíz:** usé `Edit` anclando al **último elemento** de cada lista (`PermissionCodes.PayrollAdvancesManage,\n };`) porque era el ancla más fácil de hacer única, en vez de leer la lista completa y ubicar el grupo temático. Las cinco listas quedaron funcionalmente correctas — el permiso valida y se asigna igual — así que **no lo agarra el build, ni los tests, ni el e2e**. Solo se nota leyendo el archivo, o en la pantalla de perfiles de acceso donde el permiso nuevo aparece descolgado al final en vez de junto a los otros reportes.
+
+**Por qué graphify no lo detectó:** el grafo modela **símbolos y relaciones** (qué llama a qué, qué depende de qué), no la posición ni los comentarios de sección dentro de un archivo. Para el grafo, una constante declarada en la línea 62 o en la 85 es el mismo nodo con las mismas aristas. Graphify sirve para "qué existe y cómo se conecta" (acá resolvió perfecto que el canje ya era `SaleTradeIn` y que la sucursal sale de `Sale.BranchId`), **no** para "dónde se escribe".
+
+**Patrón a recordar:** antes de agregar un elemento a una lista o enum existente, **leer la lista entera y ubicar el grupo temático** — nunca anclar el `Edit` al último elemento por comodidad. Vale para `PermissionCodes`, `PermissionCatalog`, `RoleCatalog`, el `permission.models.ts` del front, rutas, y cualquier catálogo agrupado por dominio. Y chequear el **prefijo de las etiquetas vecinas** antes de escribir una nueva. Mismo espíritu que la lección del `<select>` nativo: es consistencia, no correctitud, y por eso ninguna herramienta automática te avisa.
+
 ## Cobrar una venta CC desde "Gestión de Ventas" generaba un pago fantasma en caja - 2026-07-24
 
 **Síntoma:** venta SMA-042 (Cuenta Corriente) figuraba "Pagada" en Gestión de Ventas con "Efectivo: $174.000", pero la cuenta corriente del cliente mostraba el cobro real por Tarjeta, como si fueran dos pagos distintos. La caja (todavía abierta) terminó con **$174.000 de más** registrados: $348.000 de ingresos para una venta de $174.000.

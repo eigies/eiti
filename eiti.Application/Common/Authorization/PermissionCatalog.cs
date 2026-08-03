@@ -45,6 +45,7 @@ public static class PermissionCatalog
         PermissionCodes.ReportsSalesRanking,
         PermissionCodes.ReportsSalesDailyControl,
         PermissionCodes.ReportsWholesaleByCustomer,
+        PermissionCodes.ReportsSalesTradeIns,
         PermissionCodes.ReportsDebtors,
         PermissionCodes.ReportsCash,
         PermissionCodes.ReportsStock,
