@@ -1,5 +1,25 @@
 # Lessons Learned
 
+## Caja abierta en 0 por carrera con el monto sugerido: se perdieron 36.000 del fondo - 2026-08-08
+
+**Síntoma:** la sesión de caja `32947dad` (07-08) no tenía movimiento de apertura y arrancaba directamente con una venta, mientras que la anterior `c429edc3` (06-08) sí lo tenía.
+
+**Causa raíz (dos capas):**
+
+1. **Por qué no hay movimiento:** `CashSession.Open()` solo crea el `OpeningFloat` `if (openingAmount > 0)`. La sesión se abrió con `OpeningAmount = 0`, así que no hay nada que registrar. El log de auditoría confirma que el cliente mandó `{"OpeningAmount":0}` en una sola llamada exitosa — no fue el backend ni corrupción. La invariante `OpeningAmount > 0 ⟺ existe movimiento tipo 1` se cumplía en las 194 sesiones de la base.
+
+2. **Por qué se abrió en 0:** en `cash.component.ts`, cuando `getCurrentSession` falla (no hay sesión abierta) se hace `loadingSession = false` — que ya **muestra y habilita el formulario con `openingAmount: 0`** — y *recién después* se dispara `getLastClosedSession` para traer el monto sugerido. El valor correcto llega un viaje HTTP más tarde. En el medio el botón "Abrir caja" está disponible con el 0 cargado. Además ese `subscribe` no tenía rama `error`, así que una falla del sugerido era muda.
+
+**Cómo se probó que el sugerido es lo que normalmente llena el campo:** en esa caja la apertura coincidió *al peso* con el cierre anterior durante 19 sesiones consecutivas y se rompió una sola vez. Un humano tipeando no acierta 19 veces exactas; lo llena el autocompletado.
+
+**Hallazgo colateral más grave:** las 15 sesiones previas cerraron con diferencia **exactamente 0**. En una caja contada a mano eso no pasa nunca: el operador ingresa el número que la pantalla ya muestra como esperado, en vez de contar a ciegas. Por eso nadie detectó los 36.000 faltantes el mismo día — el control existe pero está anulado por cómo se usa. El campo de cierre NO viene precargado (arranca en `null`), así que es práctica operativa, no bug.
+
+**Fix de datos (manual en prod, decidido por el usuario):** `UPDATE CashSessions SET OpeningAmount = 36000, ActualClosingAmount = 2282700` + `INSERT` del movimiento `OpeningFloat` replicando exactamente la forma que genera el dominio (Type=1, Direction=1, ReferenceType='Session', ReferenceId=sesión, Description='Opening float', mismo `CreatedByUserId` y `OccurredAt` = `OpenedAt`). Se corrigió también el cierre porque si no la sesión pasaba a mostrar un faltante de −36.000 que no ocurrió. Ejecutado en una transacción con asserts previos sobre el estado exacto diagnosticado.
+
+**Fix de código:** confirmación obligatoria al abrir la caja mostrando el monto, con advertencia explícita si no coincide con el cierre anterior o si el sugerido todavía está en vuelo; `error` handler en `getLastClosedSession`; reset del sugerido al cambiar de caja.
+
+**Patrón a recordar:** cuando un campo crítico se autocompleta con el resultado de un request asíncrono, **el formulario no puede ser enviable mientras ese request está en vuelo** — o el default (acá `0`) se convierte en un valor válido que nadie revisó. Vale para montos, cotizaciones, stock inicial y cualquier default numérico que "normalmente lo llena el sistema". Y si un control de arqueo da diferencia 0 el 100% de las veces, el control no está funcionando: está siendo copiado.
+
 ## Agregué permisos al final de cada lista en vez de al bloque temático que ya existía - 2026-08-03
 
 **Síntoma:** el usuario marcó "creaste un bloque nuevo en permisos y ya existía, es reportería donde debe ir". Al sumar `reports.sales.trade_ins` lo appendeé al final de `PermissionCatalog.All`, del const `PermissionCodes` del front, del array `PermissionCatalog` del front y de la lista de cada rol en `RoleCatalog` — cuando las cuatro listas ya tienen un bloque de reportes agrupado. Además inventé un comentario de sección `// Transporte / flota` en `PermissionCodes.cs` para `drivers.delete`, cuando los permisos sueltos de ese archivo van sin encabezado propio. Bonus: la etiqueta del catálogo decía `"Reportes: ..."` cuando todas las demás usan el prefijo `"Reportería: ..."`.
