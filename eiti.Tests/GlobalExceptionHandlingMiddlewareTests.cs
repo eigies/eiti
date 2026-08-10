@@ -30,8 +30,12 @@ public sealed class GlobalExceptionHandlingMiddlewareTests
         body.Should().Contain("An unexpected error occurred. Please try again later.");
         body.Should().NotContain("Super secret internal error details");
 
+        // camelCase: es lo que emite ProblemDetails de MVC y lo que lee el front (`detail`).
+        // Con PascalCase el cliente no encuentra el mensaje y muestra su texto generico.
         using var doc = JsonDocument.Parse(body);
-        doc.RootElement.GetProperty("Detail").GetString()
+        doc.RootElement.GetProperty("detail").GetString()
             .Should().Be("An unexpected error occurred. Please try again later.");
+        doc.RootElement.GetProperty("status").GetInt32().Should().Be(500);
+        doc.RootElement.TryGetProperty("Detail", out _).Should().BeFalse();
     }
 }

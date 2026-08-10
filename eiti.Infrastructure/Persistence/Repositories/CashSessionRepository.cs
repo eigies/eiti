@@ -204,8 +204,10 @@ public sealed class CashSessionRepository : ICashSessionRepository
 
         if (branchIds is not null)
         {
-            var branchList = branchIds.ToList();
-            sessions = sessions.Where(session => branchList.Contains(session.BranchId.Value));
+            // Comparar el value object entero: acceder a .Value dentro del arbol de expresion
+            // no lo traduce EF y tira InvalidOperationException. Mismo patron que SaleRepository.
+            var allowed = branchIds.Select(id => new BranchId(id)).ToList();
+            sessions = sessions.Where(session => allowed.Contains(session.BranchId));
         }
 
         return await sessions

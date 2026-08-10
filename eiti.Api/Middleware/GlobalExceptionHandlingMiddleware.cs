@@ -10,6 +10,14 @@ namespace eiti.Api.Middleware;
 
 public sealed class GlobalExceptionHandlingMiddleware
 {
+    // ProblemDetails de MVC (via ResultExtensions) sale en camelCase. Sin estas opciones el
+    // serializador respeta los nombres declarados (PascalCase) y el front, que lee `detail`,
+    // nunca encuentra el mensaje: todo 500 termina mostrando el texto generico del cliente.
+    private static readonly JsonSerializerOptions SerializerOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+    };
+
     private readonly RequestDelegate _next;
     private readonly ILogger<GlobalExceptionHandlingMiddleware> _logger;
 
@@ -72,7 +80,7 @@ public sealed class GlobalExceptionHandlingMiddleware
         };
 
         context.Response.StatusCode = statusCode;
-        await context.Response.WriteAsync(JsonSerializer.Serialize(response));
+        await context.Response.WriteAsync(JsonSerializer.Serialize(response, SerializerOptions));
     }
 
     // PostgreSQL: SQLSTATE 23505 = unique_violation (índice/constraint único duplicado).
