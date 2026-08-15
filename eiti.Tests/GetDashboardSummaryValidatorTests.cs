@@ -23,7 +23,7 @@ public sealed class GetDashboardSummaryValidatorTests
             new DateTime(2026, 8, 31), new DateTime(2026, 8, 1)));
 
         result.IsValid.Should().BeFalse();
-        result.Errors.Should().Contain(e => e.ErrorMessage.Contains("anterior"));
+        result.Errors.Should().Contain(e => e.ErrorMessage.Contains("posterior"));
     }
 
     [Fact]

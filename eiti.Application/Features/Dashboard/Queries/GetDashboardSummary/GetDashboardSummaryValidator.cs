@@ -13,6 +13,6 @@ public sealed class GetDashboardSummaryValidator : AbstractValidator<GetDashboar
         RuleFor(x => x.DateFrom)
             .LessThanOrEqualTo(x => x.DateTo)
             .When(x => x.DateFrom != default && x.DateTo != default)
-            .WithMessage("La fecha desde debe ser anterior o igual a la fecha hasta.");
+            .WithMessage("La fecha desde no puede ser posterior a la fecha hasta.");
     }
 }
