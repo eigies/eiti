@@ -46,10 +46,19 @@ public sealed class GetDashboardSummaryHandlerTests
     private static Sale CcSale(BranchId branchId, CustomerId customerId, ProductId productId, decimal price) =>
         Sale.CreateCc(Company, branchId, customerId, [SaleDetail.Create(productId, 1, price)]);
 
+    // Sale.Create fija CreatedAt = DateTime.UtcNow y no expone una fabrica para elegir la fecha.
+    // Solo para probar la ventana ampliada de BuildDays (ver SerieDeSieteDias_TraeVentasDe...),
+    // se ajusta CreatedAt por reflection despues de crear la venta.
+    private static Sale Backdate(Sale sale, DateTime createdAt)
+    {
+        typeof(Sale).GetProperty(nameof(Sale.CreatedAt))!.SetValue(sale, createdAt);
+        return sale;
+    }
+
     private static GetDashboardSummaryHandler BuildHandler(
         Mock<ICurrentUserService> user,
         IReadOnlyList<Sale> sales,
-        Product product)
+        params Product[] products)
     {
         var saleRepository = new Mock<ISaleRepository>();
         saleRepository
@@ -65,9 +74,13 @@ public sealed class GetDashboardSummaryHandlerTests
             .ReturnsAsync(0);
 
         var productRepository = new Mock<IProductRepository>();
+        // Filtra por los ids pedidos, como haria la implementacion real: si el handler pidiera
+        // el catalogo entero (GetByCompanyIdAsync) o los ids equivocados, esto lo expondria.
         productRepository
-            .Setup(r => r.GetByCompanyIdAsync(It.IsAny<CompanyId>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync([product]);
+            .Setup(r => r.GetByIdsAsync(
+                It.IsAny<IEnumerable<ProductId>>(), It.IsAny<CompanyId>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IEnumerable<ProductId> ids, CompanyId companyId, CancellationToken ct) =>
+                (IReadOnlyList<Product>)products.Where(p => ids.Contains(p.Id)).ToList());
 
         var customerRepository = new Mock<ICustomerRepository>();
         customerRepository
@@ -165,7 +178,6 @@ public sealed class GetDashboardSummaryHandlerTests
     [Fact]
     public async Task ElRangoDelMes_SeConvierteConBusinessCalendar_NoConFechaCruda()
     {
-        var product = SampleProduct();
         var saleRepository = new Mock<ISaleRepository>();
         saleRepository
             .Setup(r => r.ListForSalesReportAsync(
@@ -173,13 +185,10 @@ public sealed class GetDashboardSummaryHandlerTests
                 It.IsAny<Guid?>(), It.IsAny<Guid?>(),
                 It.IsAny<IReadOnlyCollection<Guid>?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
-        var productRepository = new Mock<IProductRepository>();
-        productRepository
-            .Setup(r => r.GetByCompanyIdAsync(It.IsAny<CompanyId>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync([product]);
 
+        // Sin ventas no hay detalles que resolver: el handler nunca llega a pedir productos.
         var handler = new GetDashboardSummaryHandler(
-            MockUser().Object, saleRepository.Object, productRepository.Object,
+            MockUser().Object, saleRepository.Object, new Mock<IProductRepository>().Object,
             new Mock<ICustomerRepository>().Object);
 
         await handler.Handle(
@@ -201,7 +210,6 @@ public sealed class GetDashboardSummaryHandlerTests
     [Fact]
     public async Task SinSucursalPedida_UsuarioRestringido_AcotaPorSusSucursalesPermitidas()
     {
-        var product = SampleProduct();
         var saleRepository = new Mock<ISaleRepository>();
         saleRepository
             .Setup(r => r.ListForSalesReportAsync(
@@ -209,14 +217,11 @@ public sealed class GetDashboardSummaryHandlerTests
                 It.IsAny<Guid?>(), It.IsAny<Guid?>(),
                 It.IsAny<IReadOnlyCollection<Guid>?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
-        var productRepository = new Mock<IProductRepository>();
-        productRepository
-            .Setup(r => r.GetByCompanyIdAsync(It.IsAny<CompanyId>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync([product]);
 
+        // Sin ventas no hay detalles que resolver: el handler nunca llega a pedir productos.
         var handler = new GetDashboardSummaryHandler(
             MockUser(canViewAll: false, allowedBranches: [BranchA.Value]).Object,
-            saleRepository.Object, productRepository.Object,
+            saleRepository.Object, new Mock<IProductRepository>().Object,
             new Mock<ICustomerRepository>().Object);
 
         await handler.Handle(
@@ -232,6 +237,11 @@ public sealed class GetDashboardSummaryHandlerTests
             It.IsAny<CancellationToken>()), Times.Once);
     }
 
+    // Este test verifica que la serie tenga 7 puntos y que el mas nuevo tenga la venta, NO la
+    // conversion de zona horaria: la venta se crea con CreatedAt = UtcNow y BuildDays arranca
+    // el bucketing desde "hoy" resuelto con UtcNow, asi que una version con el bug de .Date
+    // crudo pasaria igual salvo en la franja horaria en que el dia local y el dia UTC difieren.
+    // La matematica del huso esta cubierta en BusinessCalendarTests.
     [Fact]
     public async Task SerieDeSieteDias_SiempreTieneSieteDias_YLosVaciosEnCero()
     {
@@ -253,34 +263,55 @@ public sealed class GetDashboardSummaryHandlerTests
     [Fact]
     public async Task TopProductos_OrdenaPorUnidades()
     {
-        var product = SampleProduct();
+        // Con un solo producto en juego, OrderByDescending y OrderBy dan el mismo resultado:
+        // hacen falta DOS productos con distinta cantidad de unidades para que el orden
+        // importe de verdad.
+        var winner = SampleProduct();
+        var loser = Product.Create(
+            Company, "CAB-001", "CAB-001", "Contoso", "Cable", null, 20_000m, 12_000m, null);
         var sales = new List<Sale>
         {
-            RetailSale(BranchA, product.Id, 100_000m),
-            RetailSale(BranchA, product.Id, 100_000m)
+            RetailSale(BranchA, winner.Id, 100_000m),
+            RetailSale(BranchA, winner.Id, 100_000m),
+            RetailSale(BranchA, loser.Id, 20_000m)
         };
-        var handler = BuildHandler(MockUser(), sales, product);
+        var handler = BuildHandler(MockUser(), sales, winner, loser);
 
         var result = await handler.Handle(
             new GetDashboardSummaryQuery(new DateTime(2026, 8, 1), new DateTime(2026, 8, 31)),
             CancellationToken.None);
 
-        result.Value.TopProducts.Should().HaveCount(1);
-        result.Value.TopProducts[0].ProductId.Should().Be(product.Id.Value);
+        result.Value.TopProducts.Should().HaveCount(2);
+        result.Value.TopProducts[0].ProductId.Should().Be(winner.Id.Value);
         result.Value.TopProducts[0].Units.Should().Be(2);
         result.Value.TopProducts[0].SalesCount.Should().Be(2);
         result.Value.TopProducts[0].Name.Should().Be("Bateria");
+        result.Value.TopProducts[1].ProductId.Should().Be(loser.Id.Value);
+        result.Value.TopProducts[1].Units.Should().Be(1);
+        result.Value.TopProducts[1].Name.Should().Be("Cable");
     }
 
     [Fact]
     public async Task Cobranza_SeCalculaPorEstadoNoPorPagos()
     {
         var product = SampleProduct();
-        // Sale.Create con SaleStatus.Paid => cobrada. Una CC nace OnHold => pendiente.
+        // Sale.Create con SaleStatus.Paid => cobrada. Una CC nace OnHold => pendiente. Pero
+        // RetailSale adjunta un SalePayment por el TOTAL, asi que con solo esas dos ventas una
+        // implementacion basada en MonetaryPaidAmount (pagos) da los mismos numeros que una
+        // basada en SaleStatus y el test pasa igual con el criterio roto.
+        // Esta venta OnHold con pago PARCIAL es la que distingue los dos criterios: por estado
+        // aporta 100.000 a pendiente; por pagos aportaria 30.000 a cobrado y 70.000 a pendiente.
+        // allowOverpayment queda en false (default): Sale.SetSettlement usa
+        // "allowOverpayment || SaleStatus.Paid" como requireAtLeastTotal, y con true el pago
+        // parcial (30.000 < 100.000) tira InvalidOperationException al crear la venta.
+        var partiallyPaidOnHold = Sale.Create(Company, BranchA, null, false, SaleStatus.OnHold,
+            [SaleDetail.Create(product.Id, 1, 100_000m)],
+            [SalePayment.Create(SalePaymentMethod.Cash, 30_000m, null)]);
         var sales = new List<Sale>
         {
             RetailSale(BranchA, product.Id, 100_000m),
-            CcSale(BranchA, CustomerId.New(), product.Id, 40_000m)
+            CcSale(BranchA, CustomerId.New(), product.Id, 40_000m),
+            partiallyPaidOnHold
         };
         var handler = BuildHandler(MockUser(), sales, product);
 
@@ -290,9 +321,9 @@ public sealed class GetDashboardSummaryHandlerTests
 
         result.Value.Collections.PaidAmount.Should().Be(100_000m);
         result.Value.Collections.PaidCount.Should().Be(1);
-        result.Value.Collections.PendingAmount.Should().Be(40_000m);
-        result.Value.Collections.PendingCount.Should().Be(1);
-        result.Value.Collections.AvgTicket.Should().Be(70_000m);
+        result.Value.Collections.PendingAmount.Should().Be(140_000m);
+        result.Value.Collections.PendingCount.Should().Be(2);
+        result.Value.Collections.AvgTicket.Should().Be(80_000m);
     }
 
     [Fact]
@@ -316,6 +347,10 @@ public sealed class GetDashboardSummaryHandlerTests
     public async Task CanceladasDeHoy_SalenDeLaConsultaAparte()
     {
         var product = SampleProduct();
+        var todayLocal = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, BusinessCalendar.TimeZone).Date;
+        var expectedFrom = BusinessCalendar.StartOfDayUtc(todayLocal);
+        var expectedTo = BusinessCalendar.EndOfDayUtc(todayLocal);
+
         var saleRepository = new Mock<ISaleRepository>();
         saleRepository
             .Setup(r => r.ListForSalesReportAsync(
@@ -331,11 +366,15 @@ public sealed class GetDashboardSummaryHandlerTests
 
         var productRepository = new Mock<IProductRepository>();
         productRepository
-            .Setup(r => r.GetByCompanyIdAsync(It.IsAny<CompanyId>(), It.IsAny<CancellationToken>()))
+            .Setup(r => r.GetByIdsAsync(
+                It.IsAny<IEnumerable<ProductId>>(), It.IsAny<CompanyId>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([product]);
 
+        // Usuario restringido a BranchA: si CountCancelledAsync perdiera allowedBranchIds en el
+        // camino, un usuario sin permiso de ver todas las sucursales veria canceladas ajenas.
         var handler = new GetDashboardSummaryHandler(
-            MockUser().Object, saleRepository.Object, productRepository.Object,
+            MockUser(canViewAll: false, allowedBranches: [BranchA.Value]).Object,
+            saleRepository.Object, productRepository.Object,
             new Mock<ICustomerRepository>().Object);
 
         var result = await handler.Handle(
@@ -344,5 +383,115 @@ public sealed class GetDashboardSummaryHandlerTests
 
         result.Value.TodayStatus.CancelledCount.Should().Be(3);
         result.Value.TodayStatus.ActiveCount.Should().Be(1);
+
+        // El rango tiene que ser el de HOY, no el del mes pedido (1-31 ago), y allowedBranchIds
+        // no puede perderse en el camino: con It.IsAny<> en todo esto pasaba igual aunque el
+        // handler mandara el rango del mes o soltara el filtro de sucursal.
+        saleRepository.Verify(r => r.CountCancelledAsync(
+            It.IsAny<CompanyId>(),
+            expectedFrom,
+            expectedTo,
+            null,
+            It.Is<IReadOnlyCollection<Guid>?>(b => b != null && b.Count == 1 && b.Contains(BranchA.Value)),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task SerieDeSieteDias_TraeVentasDeAntesDelRangoPedido_SiCaenDentroDeLaVentanaDelGrafico()
+    {
+        var product = SampleProduct();
+        var todayLocal = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, BusinessCalendar.TimeZone).Date;
+
+        // "Ayer" cae dentro de la ventana de 7 dias del grafico (hoy-6..hoy) pero ANTES del
+        // rango pedido (mas abajo, solo "hoy"). Sin el fetch ampliado a ListForSalesReportAsync
+        // esta venta nunca llega al handler y el punto de "ayer" sale en cero pese a existir.
+        var yesterdaySale = Backdate(
+            RetailSale(BranchA, product.Id, 55_000m),
+            BusinessCalendar.StartOfDayUtc(todayLocal.AddDays(-1)).AddHours(12));
+        var allStoredSales = new List<Sale> { yesterdaySale };
+
+        // Mock que SI filtra por from/to (a diferencia de BuildHandler, que devuelve una lista
+        // fija sin importar el rango): hace falta para poder distinguir el rango pedido del
+        // rango ampliado, que es justo lo que este test verifica.
+        var saleRepository = new Mock<ISaleRepository>();
+        saleRepository
+            .Setup(r => r.ListForSalesReportAsync(
+                It.IsAny<CompanyId>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(),
+                It.IsAny<Guid?>(), It.IsAny<Guid?>(),
+                It.IsAny<IReadOnlyCollection<Guid>?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((CompanyId companyId, DateTime from, DateTime to, Guid? branchId,
+                    Guid? customerId, IReadOnlyCollection<Guid>? allowedBranchIds, CancellationToken ct) =>
+                (IReadOnlyList<Sale>)allStoredSales
+                    .Where(s => s.CreatedAt >= from && s.CreatedAt <= to)
+                    .ToList());
+        saleRepository
+            .Setup(r => r.CountCancelledAsync(
+                It.IsAny<CompanyId>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(),
+                It.IsAny<Guid?>(), It.IsAny<IReadOnlyCollection<Guid>?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(0);
+
+        var handler = new GetDashboardSummaryHandler(
+            MockUser().Object, saleRepository.Object,
+            new Mock<IProductRepository>().Object, new Mock<ICustomerRepository>().Object);
+
+        // Rango pedido = solo "hoy": fuerza a que "ayer" quede afuera de from..to pero adentro
+        // de la ventana de 7 dias del grafico.
+        var result = await handler.Handle(
+            new GetDashboardSummaryQuery(todayLocal, todayLocal),
+            CancellationToken.None);
+
+        result.Value.Days[^2].RetailCount.Should().Be(1);
+        result.Value.Days[^2].RetailAmount.Should().Be(55_000m);
+        // El rango pedido no incluye "ayer": Month/Collections no deben contarla, solo la
+        // serie de 7 dias puede mirar mas atras que el periodo pedido.
+        result.Value.Month.Total.Count.Should().Be(0);
+        result.Value.Collections.PaidCount.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task UltimasVentas_ResuelveElNombreDelClienteCuandoLoHay()
+    {
+        // BuildHandler mockea ICustomerRepository devolviendo Array.Empty<Customer>() por
+        // defecto, asi que ningun otro test ejercita el camino feliz de la resolucion de
+        // nombre: si el diccionario se rompiera (key equivocada, nunca se llama al repo), todas
+        // las ventas dirian "Consumidor final" y la suite seguiria en verde.
+        var product = SampleProduct();
+        var customer = Customer.Create(Company, "Juana", "Perez", null);
+        var sales = new List<Sale> { CcSale(BranchA, customer.Id, product.Id, 40_000m) };
+
+        var saleRepository = new Mock<ISaleRepository>();
+        saleRepository
+            .Setup(r => r.ListForSalesReportAsync(
+                It.IsAny<CompanyId>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(),
+                It.IsAny<Guid?>(), It.IsAny<Guid?>(),
+                It.IsAny<IReadOnlyCollection<Guid>?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(sales);
+        saleRepository
+            .Setup(r => r.CountCancelledAsync(
+                It.IsAny<CompanyId>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(),
+                It.IsAny<Guid?>(), It.IsAny<IReadOnlyCollection<Guid>?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(0);
+
+        var productRepository = new Mock<IProductRepository>();
+        productRepository
+            .Setup(r => r.GetByIdsAsync(
+                It.IsAny<IEnumerable<ProductId>>(), It.IsAny<CompanyId>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([product]);
+
+        var customerRepository = new Mock<ICustomerRepository>();
+        customerRepository
+            .Setup(r => r.ListByIdsAsync(
+                It.IsAny<CompanyId>(), It.IsAny<IEnumerable<CustomerId>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([customer]);
+
+        var handler = new GetDashboardSummaryHandler(
+            MockUser().Object, saleRepository.Object, productRepository.Object, customerRepository.Object);
+
+        var result = await handler.Handle(
+            new GetDashboardSummaryQuery(new DateTime(2026, 8, 1), new DateTime(2026, 8, 31)),
+            CancellationToken.None);
+
+        result.Value.RecentSales.Should().ContainSingle();
+        result.Value.RecentSales[0].CustomerName.Should().Be("Juana Perez");
     }
 }

@@ -2,6 +2,8 @@ using eiti.Application.Abstractions.Repositories;
 using eiti.Application.Abstractions.Services;
 using eiti.Application.Common;
 using eiti.Application.Common.Authorization;
+using eiti.Domain.Companies;
+using eiti.Domain.Products;
 using eiti.Domain.Sales;
 using MediatR;
 
@@ -51,15 +53,25 @@ public sealed class GetDashboardSummaryHandler
         }
 
         var (from, to) = BusinessCalendar.ToUtcRange(request.DateFrom, request.DateTo);
+        var todayLocal = TodayLocal();
 
-        var sales = await _saleRepository.ListForSalesReportAsync(
-            companyId, from, to, request.BranchId, null, allowedBranchIds, cancellationToken);
+        // La serie del grafico mira 7 dias hacia atras desde hoy, que a principio de mes caen
+        // en el mes anterior. Se pide el rango ampliado para que esos dias no salgan en cero.
+        var chartFromUtc = BusinessCalendar.StartOfDayUtc(todayLocal.AddDays(-(ChartDays - 1)));
+        var fetchFrom = from < chartFromUtc ? from : chartFromUtc;
 
-        // ListForSalesReportAsync excluye las canceladas por diseno. El conteo de canceladas
-        // para el pulso del dia se agrega en la tarea siguiente, con una consulta aparte.
+        var allSales = await _saleRepository.ListForSalesReportAsync(
+            companyId, fetchFrom, to, request.BranchId, null, allowedBranchIds, cancellationToken);
+
+        // Month, Collections, TopProducts y RecentSales se calculan sobre el rango PEDIDO
+        // (from..to), nunca sobre el ampliado: el fetch ampliado es solo insumo para que la
+        // serie de 7 dias tenga datos reales cuando esos dias caen antes del inicio del periodo.
+        var sales = allSales.Where(s => s.CreatedAt >= from && s.CreatedAt <= to).ToList();
+
+        // ListForSalesReportAsync excluye las canceladas por diseno; el conteo de canceladas
+        // para el pulso del dia sale de CountCancelledAsync, una consulta COUNT aparte.
         var month = BuildTotals(sales);
 
-        var todayLocal = TodayLocal();
         var todayFrom = BusinessCalendar.StartOfDayUtc(todayLocal);
         var todayTo = BusinessCalendar.EndOfDayUtc(todayLocal);
         var todaySales = sales.Where(s => s.CreatedAt >= todayFrom && s.CreatedAt <= todayTo).ToList();
@@ -68,7 +80,7 @@ public sealed class GetDashboardSummaryHandler
         var cancelledToday = await _saleRepository.CountCancelledAsync(
             companyId, todayFrom, todayTo, request.BranchId, allowedBranchIds, cancellationToken);
 
-        var days = BuildDays(sales, todayLocal);
+        var days = BuildDays(allSales, todayLocal);
         var topProducts = await BuildTopProductsAsync(sales, companyId, cancellationToken);
         var collections = BuildCollections(sales);
         var todayStatus = BuildTodayStatus(todaySales, cancelledToday);
@@ -125,7 +137,7 @@ public sealed class GetDashboardSummaryHandler
     }
 
     private async Task<IReadOnlyList<DashboardTopProduct>> BuildTopProductsAsync(
-        IReadOnlyCollection<Sale> sales, Domain.Companies.CompanyId companyId, CancellationToken ct)
+        IReadOnlyCollection<Sale> sales, CompanyId companyId, CancellationToken ct)
     {
         var accumulator = new Dictionary<Guid, (int Units, HashSet<Guid> SaleIds)>();
 
@@ -148,12 +160,20 @@ public sealed class GetDashboardSummaryHandler
         if (accumulator.Count == 0)
             return Array.Empty<DashboardTopProduct>();
 
-        var products = (await _productRepository.GetByCompanyIdAsync(companyId, ct))
+        // Se recorta a los TopProductsCount ganadores ANTES de pedir nombres: GetByCompanyIdAsync
+        // trae el catalogo entero al change tracker en cada carga del dashboard, GetByIdsAsync
+        // trae solo los que se van a mostrar.
+        var top = accumulator
+            .OrderByDescending(kvp => kvp.Value.Units)
+            .ThenByDescending(kvp => kvp.Value.SaleIds.Count)
+            .Take(TopProductsCount)
+            .ToList();
+
+        var productIds = top.Select(kvp => new ProductId(kvp.Key)).ToList();
+        var products = (await _productRepository.GetByIdsAsync(productIds, companyId, ct))
             .ToDictionary(p => p.Id.Value, p => p);
 
-        return accumulator
-            .OrderByDescending(kvp => kvp.Value.Units)
-            .Take(TopProductsCount)
+        return top
             .Select(kvp =>
             {
                 products.TryGetValue(kvp.Key, out var product);
@@ -164,6 +184,12 @@ public sealed class GetDashboardSummaryHandler
                     kvp.Value.Units,
                     kvp.Value.SaleIds.Count);
             })
+            // Desempate final por nombre: sin esto, dos productos empatados en unidades y
+            // cantidad de ventas quedan en un orden que depende de la enumeracion del
+            // diccionario, no del dato.
+            .OrderByDescending(p => p.Units)
+            .ThenByDescending(p => p.SalesCount)
+            .ThenBy(p => p.Name, StringComparer.Ordinal)
             .ToList();
     }
 
@@ -194,7 +220,7 @@ public sealed class GetDashboardSummaryHandler
             cancelledCount);
 
     private async Task<IReadOnlyList<DashboardRecentSale>> BuildRecentSalesAsync(
-        IReadOnlyCollection<Sale> sales, Domain.Companies.CompanyId companyId, CancellationToken ct)
+        IReadOnlyCollection<Sale> sales, CompanyId companyId, CancellationToken ct)
     {
         var recent = sales
             .OrderByDescending(s => s.CreatedAt)
