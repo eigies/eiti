@@ -40,10 +40,13 @@ public sealed class DailySalesControlHandler
 
         var companyId = _currentUserService.CompanyId!;
         var requestedStatus = request.Status == 0 ? (int?)null : request.Status;
+        // El rango llega como fecha local del usuario; se traduce al instante UTC equivalente.
+        var (from, to) = BusinessCalendar.ToUtcRange(request.DateFrom, request.DateTo);
+
         var sales = (await _saleRepository.ListByCompanyAsync(
                 companyId,
-                request.DateFrom.Date,
-                request.DateTo.Date,
+                from,
+                to,
                 requestedStatus,
                 includeCuentaCorriente: true,
                 cancellationToken))

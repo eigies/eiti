@@ -50,10 +50,14 @@ public sealed class ListSalesHandler : IRequestHandler<ListSalesQuery, Result<IR
         if (authCheck.IsFailure)
             return Result<IReadOnlyList<ListSalesItemResponse>>.Failure(authCheck.Error);
 
+        // Las fechas llegan como día local del usuario; se traducen al instante UTC equivalente.
+        var from = request.DateFrom.HasValue ? BusinessCalendar.StartOfDayUtc(request.DateFrom.Value) : (DateTime?)null;
+        var to = request.DateTo.HasValue ? BusinessCalendar.EndOfDayUtc(request.DateTo.Value) : (DateTime?)null;
+
         var sales = await _saleRepository.ListByCompanyAsync(
             _currentUserService.CompanyId,
-            request.DateFrom,
-            request.DateTo,
+            from,
+            to,
             request.IdSaleStatus,
             request.IncludeCuentaCorriente,
             cancellationToken);

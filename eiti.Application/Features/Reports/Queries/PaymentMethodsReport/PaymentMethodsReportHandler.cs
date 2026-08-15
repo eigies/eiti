@@ -11,15 +11,18 @@ public sealed class PaymentMethodsReportHandler
 {
     private readonly ICurrentUserService _currentUserService;
     private readonly ISaleRepository _saleRepository;
+    private readonly ICustomerPaymentRepository _customerPaymentRepository;
     private readonly IBankRepository _bankRepository;
 
     public PaymentMethodsReportHandler(
         ICurrentUserService currentUserService,
         ISaleRepository saleRepository,
+        ICustomerPaymentRepository customerPaymentRepository,
         IBankRepository bankRepository)
     {
         _currentUserService = currentUserService;
         _saleRepository = saleRepository;
+        _customerPaymentRepository = customerPaymentRepository;
         _bankRepository = bankRepository;
     }
 
@@ -33,45 +36,67 @@ public sealed class PaymentMethodsReportHandler
 
         var companyId = _currentUserService.CompanyId!;
 
-        var from = request.DateFrom.Date;
-        var to = request.DateTo.Date.AddDays(1).AddTicks(-1);
+        // El rango llega como fecha local del usuario; se traduce al instante UTC equivalente.
+        var (from, to) = BusinessCalendar.ToUtcRange(request.DateFrom, request.DateTo);
 
         var allowedBranchIds = _currentUserService.CanViewAllBranches
             ? null
             : _currentUserService.AllowedBranchIds;
 
-        var sales = await _saleRepository.ListWithPaymentsForReportAsync(
-            companyId, from, to, request.BranchId, allowedBranchIds, cancellationToken);
-
-        // Mayorista = ventas por Cuenta Corriente; Minorista = ventas normales.
-        if (!string.IsNullOrWhiteSpace(request.SaleType))
-        {
-            sales = request.SaleType.ToLowerInvariant() switch
-            {
-                "wholesale" => sales.Where(s => s.IsCuentaCorriente).ToList(),
-                "retail" => sales.Where(s => !s.IsCuentaCorriente).ToList(),
-                _ => sales
-            };
-        }
+        // Minorista y Mayorista se cobran por caminos distintos y viven en tablas distintas:
+        //   - Minorista: venta normal -> SalePayment (lleva el medio real).
+        //   - Mayorista: venta por Cuenta Corriente -> se cobra con un CustomerPayment (lleva el
+        //     medio real) que se imputa FIFO como SaleCcPayment con metodo CustomerCredit.
+        // Por eso filtrar las ventas por IsCuentaCorriente y despues leer SalePayments devolvia
+        // vacio para Mayorista: una venta CC no tiene pagos directos.
+        var saleType = (request.SaleType ?? "all").ToLowerInvariant();
+        var includeRetail = saleType is "all" or "retail";
+        var includeWholesale = saleType is "all" or "wholesale";
 
         // Agrega por medio de pago: cantidad de pagos y monto total.
         var groups = new Dictionary<int, (int Count, decimal Total)>();
         // Desglose de Tarjeta por (banco, cuotas).
         var cardGroups = new Dictionary<(int? BankId, int? Cuotas), (int Count, decimal Total)>();
-        foreach (var sale in sales)
-        {
-            foreach (var payment in sale.Payments)
-            {
-                var key = (int)payment.Method;
-                groups.TryGetValue(key, out var acc);
-                groups[key] = (acc.Count + 1, acc.Total + payment.Amount);
 
-                if (payment.Method == SalePaymentMethod.Card)
+        void Accumulate(SalePaymentMethod method, decimal amount, int? cardBankId, int? cardCuotas)
+        {
+            var key = (int)method;
+            groups.TryGetValue(key, out var acc);
+            groups[key] = (acc.Count + 1, acc.Total + amount);
+
+            if (method == SalePaymentMethod.Card)
+            {
+                var cardKey = (cardBankId, cardCuotas);
+                cardGroups.TryGetValue(cardKey, out var cardAcc);
+                cardGroups[cardKey] = (cardAcc.Count + 1, cardAcc.Total + amount);
+            }
+        }
+
+        if (includeRetail)
+        {
+            var sales = await _saleRepository.ListWithPaymentsForReportAsync(
+                companyId, from, to, request.BranchId, allowedBranchIds, cancellationToken);
+
+            // Se excluyen las ventas CC a proposito: su dinero entra por el cobro de cuenta
+            // corriente. Un SalePayment sobre una venta CC es una anomalia (ver lessons.md) y
+            // contarlo ademas del cobro duplicaria el importe.
+            foreach (var sale in sales.Where(s => !s.IsCuentaCorriente))
+            {
+                foreach (var payment in sale.Payments)
                 {
-                    var cardKey = (payment.CardBankId, payment.CardCuotas);
-                    cardGroups.TryGetValue(cardKey, out var cardAcc);
-                    cardGroups[cardKey] = (cardAcc.Count + 1, cardAcc.Total + payment.Amount);
+                    Accumulate(payment.Method, payment.Amount, payment.CardBankId, payment.CardCuotas);
                 }
+            }
+        }
+
+        if (includeWholesale)
+        {
+            var ccPayments = await _customerPaymentRepository.ListForPaymentMethodsReportAsync(
+                companyId.Value, from, to, request.BranchId, allowedBranchIds, cancellationToken);
+
+            foreach (var payment in ccPayments)
+            {
+                Accumulate(payment.Method, payment.Amount, payment.CardBankId, payment.CardCuotas);
             }
         }
 

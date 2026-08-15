@@ -43,8 +43,8 @@ public sealed class SalesReportHandler : IRequestHandler<SalesReportQuery, Resul
         var companyId = _currentUserService.CompanyId!;
         var groupBy = request.GroupBy.ToLowerInvariant();
 
-        var from = request.DateFrom.Date;
-        var to = request.DateTo.Date.AddDays(1).AddTicks(-1);
+        // El rango llega como fecha local del usuario; se traduce al instante UTC equivalente.
+        var (from, to) = BusinessCalendar.ToUtcRange(request.DateFrom, request.DateTo);
 
         // Filtros baratos empujados a SQL: sucursal, cliente, excluye canceladas y sucursales permitidas.
         var allowedBranchIds = _currentUserService.CanViewAllBranches

@@ -42,8 +42,8 @@ public sealed class StockMovementsReportHandler
 
         var companyId = _currentUserService.CompanyId!;
 
-        var from = request.DateFrom.Date;
-        var to = request.DateTo.Date.AddDays(1).AddTicks(-1);
+        // El rango llega como fecha local del usuario; se traduce al instante UTC equivalente.
+        var (from, to) = BusinessCalendar.ToUtcRange(request.DateFrom, request.DateTo);
 
         var allowedBranchIds = _currentUserService.CanViewAllBranches
             ? null

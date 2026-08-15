@@ -63,10 +63,11 @@ public sealed class SaleRepository : ISaleRepository
             query = query.Where(sale => sale.CreatedAt >= dateFrom.Value);
         }
 
+        // dateFrom/dateTo son instantes UTC ya resueltos por el handler (BusinessCalendar): el
+        // repositorio no vuelve a interpretar el día, porque no sabe en qué huso vive el usuario.
         if (dateTo.HasValue)
         {
-            var dateToEndOfDay = dateTo.Value.Date.AddDays(1);
-            query = query.Where(sale => sale.CreatedAt < dateToEndOfDay);
+            query = query.Where(sale => sale.CreatedAt <= dateTo.Value);
         }
 
         if (idSaleStatus.HasValue)

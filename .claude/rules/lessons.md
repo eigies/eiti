@@ -1,5 +1,23 @@
 # Lessons Learned
 
+## El día del usuario no es el día UTC: reportes cortados a las 21:00 - 2026-08-15
+
+**Síntoma:** Gustavo (Baterías Soler) no veía en el reporte de medios de pago un cobro por transferencia de 250.000 y uno con tarjeta de 182.000, y además reportó que "a partir de las 21 se pasa al otro día".
+
+**Eran dos bugs distintos sobre el mismo día**, y conviene no confundirlos:
+
+1. **El reporte no leía cobros de cuenta corriente.** Una venta CC no tiene `SalePayments`: se cobra con un `CustomerPayment` (que lleva el medio real) imputado como `SaleCcPayment` con método `CustomerCredit`. El handler filtraba las ventas por `IsCuentaCorriente` y después leía `sale.Payments`, o sea el dropdown "Mayorista (CC)" **devolvía vacío siempre**: en todo el histórico de la empresa devolvía 1 sola fila, y esa fila era una anomalía (una venta CC con un `SalePayment` directo, el bug de SMA-042). La plata mayorista real eran 105.287.096 en 187 cobros. Fix: `wholesale` lee `CustomerPayments`, `retail` lee `SalePayments` de ventas no-CC, `all` suma ambos — lo que además elimina un doble conteo latente.
+
+2. **El filtro de fechas comparaba día local contra timestamps UTC.** El sistema guarda todo con `DateTime.UtcNow` (121 usos, cero `DateTime.Now`). El cliente manda `dateFrom=2026-08-14` y el backend hacía `request.DateFrom.Date` → `14/08 00:00 UTC`. Pero el 14 **local** en Argentina va de `14/08 03:00 UTC` a `15/08 03:00 UTC`: la ventana quedaba corrida 3 horas, agarrando las 21–24 del 13 y perdiendo las 21–24 del 14.
+
+**Poner `TZ` en el contenedor NO lo arregla** — es el error intuitivo. `DateTime.UtcNow` devuelve UTC sin importar el huso del host, así que no cambia ni lo que se guarda ni lo que se compara. Peor: si después alguien escribe un `DateTime.Now`, empieza a guardar hora local mezclada con 121 campos UTC.
+
+**Fix:** `eiti.Application/Common/BusinessCalendar.cs` traduce fecha de negocio → instante UTC (`StartOfDayUtc` / `EndOfDayUtc` / `ToUtcRange`), con el huso desde `APP_TIMEZONE` y default `America/Argentina/Buenos_Aires`. Aplicado en los **11 puntos de entrada** que filtran por fecha. Los repositorios dejaron de reinterpretar el día por su cuenta (`SaleRepository.ListByCompanyAsync` hacía su propio fin de día): ahora reciben instantes UTC ya resueltos, porque el repositorio no sabe en qué huso vive el usuario.
+
+**Bug hermano en el front:** 8 lugares calculaban "hoy" con `new Date().toISOString().slice(0,10)`, que da la fecha **UTC**. Después de las 21:00 local el formulario se precargaba con el día siguiente — así quedó grabado `Date = 2026-08-15` en el cobro de las 21:13 del 14. En el mismo repo había 19 lugares usando el correcto `toLocaleDateString('en-CA')`. Se unificaron todos a esa forma.
+
+**Patrón a recordar:** guardar en UTC está bien; el error es **comparar una fecha de calendario contra un instante** sin convertir. Cada vez que un filtro reciba un `dateFrom`/`dateTo` "de día", tiene que pasar por la conversión de huso antes de tocar la base — y la conversión va en un solo lugar, no repetida en cada handler. Del lado del cliente, `toISOString()` nunca sirve para obtener "hoy": siempre `toLocaleDateString('en-CA')`. Y ojo con reportes que ofrecen un filtro (acá "Mayorista") cuya fuente de datos no puede satisfacerlo: devuelven vacío sin error, así que nadie se entera hasta que un usuario reclama.
+
 ## Caja abierta en 0 por carrera con el monto sugerido: se perdieron 36.000 del fondo - 2026-08-08
 
 **Síntoma:** la sesión de caja `32947dad` (07-08) no tenía movimiento de apertura y arrancaba directamente con una venta, mientras que la anterior `c429edc3` (06-08) sí lo tenía.

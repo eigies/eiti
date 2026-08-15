@@ -48,8 +48,9 @@ public sealed class ListCashSessionHistoryHandler : IRequestHandler<ListCashSess
         if (accessCheck.IsFailure)
             return Result<IReadOnlyList<CashSessionResponse>>.Failure(accessCheck.Error!);
 
-        var from = request.From?.Date;
-        var to = request.To?.Date.AddDays(1).AddTicks(-1);
+        // Las fechas llegan como día local del usuario; se traducen al instante UTC equivalente.
+        var from = request.From.HasValue ? BusinessCalendar.StartOfDayUtc(request.From.Value) : (DateTime?)null;
+        var to = request.To.HasValue ? BusinessCalendar.EndOfDayUtc(request.To.Value) : (DateTime?)null;
 
         if (from.HasValue && to.HasValue && from > to)
         {

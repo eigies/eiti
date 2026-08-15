@@ -31,8 +31,13 @@ public sealed class ListQuotesHandler : IRequestHandler<ListQuotesQuery, Result<
 
         var companyId = _currentUserService.CompanyId!;
 
+        // Las fechas llegan como día local del usuario; se traducen al instante UTC equivalente.
+        // El repositorio compara con <= dateTo, asi que sin el fin de dia se perdia el ultimo dia entero.
+        var from = request.DateFrom.HasValue ? BusinessCalendar.StartOfDayUtc(request.DateFrom.Value) : (DateTime?)null;
+        var to = request.DateTo.HasValue ? BusinessCalendar.EndOfDayUtc(request.DateTo.Value) : (DateTime?)null;
+
         var quotes = await _quoteRepository.ListAsync(
-            companyId, request.Status, request.DateFrom, request.DateTo, request.CustomerId, cancellationToken);
+            companyId, request.Status, from, to, request.CustomerId, cancellationToken);
 
         if (!_currentUserService.CanViewAllBranches)
         {
