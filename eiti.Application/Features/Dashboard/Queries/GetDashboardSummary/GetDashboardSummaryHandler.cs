@@ -55,8 +55,8 @@ public sealed class GetDashboardSummaryHandler
         var sales = await _saleRepository.ListForSalesReportAsync(
             companyId, from, to, request.BranchId, null, allowedBranchIds, cancellationToken);
 
-        // ListForSalesReportAsync ya excluye canceladas, pero el dashboard necesita contarlas
-        // para el Pulso del dia, asi que se recalcula sobre lo que hay.
+        // ListForSalesReportAsync excluye las canceladas por diseno. El conteo de canceladas
+        // para el pulso del dia se agrega en la tarea siguiente, con una consulta aparte.
         var month = BuildTotals(sales);
 
         var todayLocal = TodayLocal();

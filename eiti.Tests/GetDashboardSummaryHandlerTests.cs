@@ -1,5 +1,6 @@
 using eiti.Application.Abstractions.Repositories;
 using eiti.Application.Abstractions.Services;
+using eiti.Application.Common;
 using eiti.Application.Common.Authorization;
 using eiti.Application.Features.Dashboard.Queries.GetDashboardSummary;
 using eiti.Domain.Branches;
@@ -131,6 +132,11 @@ public sealed class GetDashboardSummaryHandlerTests
         result.Value.Month.Total.Count.Should().Be(1);
     }
 
+    // Este test verifica el ruteo mes/hoy, NO la conversion de zona horaria: la venta se crea
+    // con CreatedAt = UtcNow y el handler resuelve "hoy" desde UtcNow, asi que una version con
+    // el bug de .Date crudo pasaria igual. La matematica del huso esta cubierta en
+    // BusinessCalendarTests, y que el handler la use se verifica en
+    // ElRangoDelMes_SeConvierteConBusinessCalendar_NoConFechaCruda.
     [Fact]
     public async Task VentasDeHoy_QuedanEnLaColumnaHoy()
     {
@@ -145,5 +151,75 @@ public sealed class GetDashboardSummaryHandlerTests
         result.Value.Today.Total.Count.Should().Be(1);
         result.Value.Today.Retail.Count.Should().Be(1);
         result.Value.Today.CurrentAccount.Count.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task ElRangoDelMes_SeConvierteConBusinessCalendar_NoConFechaCruda()
+    {
+        var product = SampleProduct();
+        var saleRepository = new Mock<ISaleRepository>();
+        saleRepository
+            .Setup(r => r.ListForSalesReportAsync(
+                It.IsAny<CompanyId>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(),
+                It.IsAny<Guid?>(), It.IsAny<Guid?>(),
+                It.IsAny<IReadOnlyCollection<Guid>?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+        var productRepository = new Mock<IProductRepository>();
+        productRepository
+            .Setup(r => r.GetByCompanyIdAsync(It.IsAny<CompanyId>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([product]);
+
+        var handler = new GetDashboardSummaryHandler(
+            MockUser().Object, saleRepository.Object, productRepository.Object,
+            new Mock<ICustomerRepository>().Object);
+
+        await handler.Handle(
+            new GetDashboardSummaryQuery(new DateTime(2026, 8, 1), new DateTime(2026, 8, 31)),
+            CancellationToken.None);
+
+        // El dia local arranca a las 03:00 UTC. Con .Date crudo esto seria 00:00 y el test falla.
+        var (expectedFrom, expectedTo) = BusinessCalendar.ToUtcRange(
+            new DateTime(2026, 8, 1), new DateTime(2026, 8, 31));
+
+        saleRepository.Verify(r => r.ListForSalesReportAsync(
+            It.IsAny<CompanyId>(),
+            expectedFrom,
+            expectedTo,
+            It.IsAny<Guid?>(), It.IsAny<Guid?>(),
+            It.IsAny<IReadOnlyCollection<Guid>?>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task SinSucursalPedida_UsuarioRestringido_AcotaPorSusSucursalesPermitidas()
+    {
+        var product = SampleProduct();
+        var saleRepository = new Mock<ISaleRepository>();
+        saleRepository
+            .Setup(r => r.ListForSalesReportAsync(
+                It.IsAny<CompanyId>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(),
+                It.IsAny<Guid?>(), It.IsAny<Guid?>(),
+                It.IsAny<IReadOnlyCollection<Guid>?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+        var productRepository = new Mock<IProductRepository>();
+        productRepository
+            .Setup(r => r.GetByCompanyIdAsync(It.IsAny<CompanyId>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([product]);
+
+        var handler = new GetDashboardSummaryHandler(
+            MockUser(canViewAll: false, allowedBranches: [BranchA.Value]).Object,
+            saleRepository.Object, productRepository.Object,
+            new Mock<ICustomerRepository>().Object);
+
+        await handler.Handle(
+            new GetDashboardSummaryQuery(new DateTime(2026, 8, 1), new DateTime(2026, 8, 31)),
+            CancellationToken.None);
+
+        // Sin este filtro un usuario restringido veria las ventas de todas las sucursales.
+        saleRepository.Verify(r => r.ListForSalesReportAsync(
+            It.IsAny<CompanyId>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(),
+            null,
+            It.IsAny<Guid?>(),
+            It.Is<IReadOnlyCollection<Guid>?>(b => b != null && b.Count == 1 && b.Contains(BranchA.Value)),
+            It.IsAny<CancellationToken>()), Times.Once);
     }
 }
