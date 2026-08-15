@@ -191,6 +191,15 @@ Destino de cada widget actual:
 | "Pulso del día" | baja a secundario, sin cambios |
 | "Últimas ventas" + drill-down | se queda, respetando la sucursal |
 
+### Restricciones visuales
+
+El rediseño es de **jerarquía y contenido, no de identidad visual**. Se reutilizan las clases y los tokens que el dashboard ya tiene (`hero-card`, `kpi-card`, `data-panel`, `panel-toggle`, `pulse-card`) y se reordenan.
+
+- **Todos los colores salen de custom properties existentes** (`--amber`, `--danger`, `--success`, `--text`, `--bg-panel`, `--border-2`, …). Cero valores hardcodeados.
+- Debe verse correcto en `theme-dark` y `theme-light`. Cualquier color nuevo se compone con `color-mix` sobre los tokens, como ya hace el resto del CSS.
+- Si aparece una oportunidad clara de mejorar la lectura con un gráfico o un elemento nuevo, se puede sumar — pero atado a la paleta y verificado en los dos temas. Ante la duda, se mantiene lo que ya existe.
+- **Las dos series del gráfico necesitan distinguirse.** La paleta define `--amber`, `--success` y `--danger` en los dos temas. Se usa **`--amber` para minorista** (es el acento principal y el volumen dominante) y **`--success` para cuenta corriente**. Dos tonos del mismo ámbar no se distinguen bien en barras finas, y `--danger` está reservado para estados de error. La leyenda nombra cada serie, así el color no es el único portador de la información.
+
 ### Estado y persistencia
 
 Estado del componente:
