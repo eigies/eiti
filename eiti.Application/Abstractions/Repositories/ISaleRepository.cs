@@ -39,6 +39,16 @@ public interface ISaleRepository
         IReadOnlyCollection<Guid>? allowedBranchIds,
         CancellationToken cancellationToken = default);
 
+    // Cantidad de ventas canceladas del período. El dashboard la necesita para el pulso del
+    // día, y ListForSalesReportAsync las excluye por diseño. Un COUNT evita traerlas.
+    Task<int> CountCancelledAsync(
+        CompanyId companyId,
+        DateTime from,
+        DateTime to,
+        Guid? branchId,
+        IReadOnlyCollection<Guid>? allowedBranchIds,
+        CancellationToken cancellationToken = default);
+
     // Reporte de canjes: mismos filtros que el reporte de ventas pero con Include(TradeIns) en vez de
     // Details, y solo ventas que efectivamente recibieron algo en canje. AsNoTracking.
     Task<IReadOnlyList<Sale>> ListForTradeInReportAsync(

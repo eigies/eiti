@@ -120,6 +120,38 @@ public sealed class SaleRepository : ISaleRepository
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<int> CountCancelledAsync(
+        CompanyId companyId,
+        DateTime from,
+        DateTime to,
+        Guid? branchId,
+        IReadOnlyCollection<Guid>? allowedBranchIds,
+        CancellationToken cancellationToken = default)
+    {
+        var query = _context.Sales
+            .AsNoTracking()
+            .Where(sale => sale.CompanyId == companyId
+                && sale.CreatedAt >= from
+                && sale.CreatedAt <= to
+                && sale.SaleStatus == SaleStatus.Cancel);
+
+        if (branchId.HasValue)
+        {
+            var bId = new BranchId(branchId.Value);
+            query = query.Where(sale => sale.BranchId == bId);
+        }
+
+        if (allowedBranchIds is not null && allowedBranchIds.Count > 0)
+        {
+            // Comparar el value object entero: acceder a .Value dentro del arbol de expresion
+            // no lo traduce EF. Mismo patron que el resto de los filtros por sucursal.
+            var allowed = allowedBranchIds.Select(id => new BranchId(id)).ToList();
+            query = query.Where(sale => allowed.Contains(sale.BranchId));
+        }
+
+        return await query.CountAsync(cancellationToken);
+    }
+
     public async Task<IReadOnlyList<Sale>> ListForTradeInReportAsync(
         CompanyId companyId,
         DateTime from,

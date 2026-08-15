@@ -65,14 +65,17 @@ public sealed class GetDashboardSummaryHandler
         var todaySales = sales.Where(s => s.CreatedAt >= todayFrom && s.CreatedAt <= todayTo).ToList();
         var today = BuildTotals(todaySales);
 
+        var cancelledToday = await _saleRepository.CountCancelledAsync(
+            companyId, todayFrom, todayTo, request.BranchId, allowedBranchIds, cancellationToken);
+
+        var days = BuildDays(sales, todayLocal);
+        var topProducts = await BuildTopProductsAsync(sales, companyId, cancellationToken);
+        var collections = BuildCollections(sales);
+        var todayStatus = BuildTodayStatus(todaySales, cancelledToday);
+        var recentSales = await BuildRecentSalesAsync(sales, companyId, cancellationToken);
+
         return Result<GetDashboardSummaryResponse>.Success(new GetDashboardSummaryResponse(
-            month,
-            today,
-            Array.Empty<DashboardDayPoint>(),
-            Array.Empty<DashboardTopProduct>(),
-            new DashboardCollections(0m, 0, 0m, 0, 0m),
-            new DashboardTodayStatus(todaySales.Count, 0, 0, 0),
-            Array.Empty<DashboardRecentSale>()));
+            month, today, days, topProducts, collections, todayStatus, recentSales));
     }
 
     // El "hoy" del usuario, no el del servidor: se toma la fecha local segun BusinessCalendar.
@@ -92,4 +95,137 @@ public sealed class GetDashboardSummaryHandler
 
     private static DashboardSegment Segment(IReadOnlyCollection<Sale> sales) =>
         new(sales.Count, decimal.Round(sales.Sum(s => s.TotalAmount), 2, MidpointRounding.AwayFromZero));
+
+    // Siempre 7 puntos, del mas viejo al mas nuevo. Los dias sin ventas van en cero,
+    // no ausentes: el grafico necesita el eje completo.
+    private static IReadOnlyList<DashboardDayPoint> BuildDays(
+        IReadOnlyCollection<Sale> sales, DateTime todayLocal)
+    {
+        var points = new List<DashboardDayPoint>(ChartDays);
+
+        for (var offset = ChartDays - 1; offset >= 0; offset--)
+        {
+            var day = todayLocal.AddDays(-offset);
+            var dayFrom = BusinessCalendar.StartOfDayUtc(day);
+            var dayTo = BusinessCalendar.EndOfDayUtc(day);
+            var ofDay = sales.Where(s => s.CreatedAt >= dayFrom && s.CreatedAt <= dayTo).ToList();
+
+            var retail = ofDay.Where(s => !s.IsCuentaCorriente).ToList();
+            var cc = ofDay.Where(s => s.IsCuentaCorriente).ToList();
+
+            points.Add(new DashboardDayPoint(
+                day,
+                retail.Count,
+                decimal.Round(retail.Sum(s => s.TotalAmount), 2, MidpointRounding.AwayFromZero),
+                cc.Count,
+                decimal.Round(cc.Sum(s => s.TotalAmount), 2, MidpointRounding.AwayFromZero)));
+        }
+
+        return points;
+    }
+
+    private async Task<IReadOnlyList<DashboardTopProduct>> BuildTopProductsAsync(
+        IReadOnlyCollection<Sale> sales, Domain.Companies.CompanyId companyId, CancellationToken ct)
+    {
+        var accumulator = new Dictionary<Guid, (int Units, HashSet<Guid> SaleIds)>();
+
+        foreach (var sale in sales)
+        {
+            foreach (var detail in sale.Details)
+            {
+                var key = detail.ProductId.Value;
+                if (!accumulator.TryGetValue(key, out var acc))
+                {
+                    acc = (0, new HashSet<Guid>());
+                }
+
+                acc.Units += detail.Quantity;
+                acc.SaleIds.Add(sale.Id.Value);
+                accumulator[key] = acc;
+            }
+        }
+
+        if (accumulator.Count == 0)
+            return Array.Empty<DashboardTopProduct>();
+
+        var products = (await _productRepository.GetByCompanyIdAsync(companyId, ct))
+            .ToDictionary(p => p.Id.Value, p => p);
+
+        return accumulator
+            .OrderByDescending(kvp => kvp.Value.Units)
+            .Take(TopProductsCount)
+            .Select(kvp =>
+            {
+                products.TryGetValue(kvp.Key, out var product);
+                return new DashboardTopProduct(
+                    kvp.Key,
+                    product?.Name ?? "Producto eliminado",
+                    product?.Brand ?? "Sin marca",
+                    kvp.Value.Units,
+                    kvp.Value.SaleIds.Count);
+            })
+            .ToList();
+    }
+
+    // Cobrado y pendiente salen del ESTADO de la venta, no de sus pagos: Sale.MonetaryPaidAmount
+    // es _payments.Sum(...) y sin Include(Payments) daria 0. Mismo criterio que el dashboard viejo.
+    private static DashboardCollections BuildCollections(IReadOnlyCollection<Sale> sales)
+    {
+        var paid = sales.Where(s => s.SaleStatus == SaleStatus.Paid).ToList();
+        var pending = sales.Where(s => s.SaleStatus == SaleStatus.OnHold).ToList();
+        var total = sales.Sum(s => s.TotalAmount);
+
+        return new DashboardCollections(
+            decimal.Round(paid.Sum(s => s.TotalAmount), 2, MidpointRounding.AwayFromZero),
+            paid.Count,
+            decimal.Round(pending.Sum(s => s.TotalAmount), 2, MidpointRounding.AwayFromZero),
+            pending.Count,
+            sales.Count == 0 ? 0m : decimal.Round(total / sales.Count, 2, MidpointRounding.AwayFromZero));
+    }
+
+    // OJO: cancelledCount NO puede salir de todaySales. ListForSalesReportAsync filtra
+    // SaleStatus != Cancel, asi que las canceladas nunca llegan y el contador daria siempre 0.
+    // Viene de una consulta COUNT aparte (ver Step 4 de esta tarea).
+    private static DashboardTodayStatus BuildTodayStatus(
+        IReadOnlyCollection<Sale> todaySales, int cancelledCount) =>
+        new(todaySales.Count,
+            todaySales.Count(s => s.SaleStatus == SaleStatus.Paid),
+            todaySales.Count(s => s.SaleStatus == SaleStatus.OnHold),
+            cancelledCount);
+
+    private async Task<IReadOnlyList<DashboardRecentSale>> BuildRecentSalesAsync(
+        IReadOnlyCollection<Sale> sales, Domain.Companies.CompanyId companyId, CancellationToken ct)
+    {
+        var recent = sales
+            .OrderByDescending(s => s.CreatedAt)
+            .Take(RecentSalesCount)
+            .ToList();
+
+        if (recent.Count == 0)
+            return Array.Empty<DashboardRecentSale>();
+
+        var customerIds = recent
+            .Where(s => s.CustomerId is not null)
+            .Select(s => s.CustomerId!)
+            .Distinct()
+            .ToList();
+
+        var customerNames = customerIds.Count == 0
+            ? new Dictionary<Guid, string>()
+            : (await _customerRepository.ListByIdsAsync(companyId, customerIds, ct))
+                .ToDictionary(c => c.Id.Value, c => c.FullName);
+
+        return recent
+            .Select(s => new DashboardRecentSale(
+                s.Id.Value,
+                s.Code,
+                s.CreatedAt,
+                s.CustomerId is not null && customerNames.TryGetValue(s.CustomerId.Value, out var name)
+                    ? name
+                    : "Consumidor final",
+                (int)s.SaleStatus,
+                s.TotalAmount,
+                s.IsCuentaCorriente))
+            .ToList();
+    }
 }

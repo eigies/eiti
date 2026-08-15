@@ -58,6 +58,11 @@ public sealed class GetDashboardSummaryHandlerTests
                 It.IsAny<Guid?>(), It.IsAny<Guid?>(),
                 It.IsAny<IReadOnlyCollection<Guid>?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(sales);
+        saleRepository
+            .Setup(r => r.CountCancelledAsync(
+                It.IsAny<CompanyId>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(),
+                It.IsAny<Guid?>(), It.IsAny<IReadOnlyCollection<Guid>?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(0);
 
         var productRepository = new Mock<IProductRepository>();
         productRepository
@@ -65,6 +70,10 @@ public sealed class GetDashboardSummaryHandlerTests
             .ReturnsAsync([product]);
 
         var customerRepository = new Mock<ICustomerRepository>();
+        customerRepository
+            .Setup(r => r.ListByIdsAsync(
+                It.IsAny<CompanyId>(), It.IsAny<IEnumerable<CustomerId>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<Customer>());
 
         return new GetDashboardSummaryHandler(
             user.Object, saleRepository.Object, productRepository.Object, customerRepository.Object);
@@ -221,5 +230,119 @@ public sealed class GetDashboardSummaryHandlerTests
             It.IsAny<Guid?>(),
             It.Is<IReadOnlyCollection<Guid>?>(b => b != null && b.Count == 1 && b.Contains(BranchA.Value)),
             It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task SerieDeSieteDias_SiempreTieneSieteDias_YLosVaciosEnCero()
+    {
+        var product = SampleProduct();
+        var handler = BuildHandler(MockUser(), [RetailSale(BranchA, product.Id, 100_000m)], product);
+
+        var result = await handler.Handle(
+            new GetDashboardSummaryQuery(new DateTime(2026, 8, 1), new DateTime(2026, 8, 31)),
+            CancellationToken.None);
+
+        result.Value.Days.Should().HaveCount(7);
+        result.Value.Days.Should().BeInAscendingOrder(d => d.Date);
+        // La venta es de hoy, asi que el ultimo punto la tiene y los anteriores estan en cero.
+        result.Value.Days[^1].RetailCount.Should().Be(1);
+        result.Value.Days[0].RetailCount.Should().Be(0);
+        result.Value.Days[0].RetailAmount.Should().Be(0m);
+    }
+
+    [Fact]
+    public async Task TopProductos_OrdenaPorUnidades()
+    {
+        var product = SampleProduct();
+        var sales = new List<Sale>
+        {
+            RetailSale(BranchA, product.Id, 100_000m),
+            RetailSale(BranchA, product.Id, 100_000m)
+        };
+        var handler = BuildHandler(MockUser(), sales, product);
+
+        var result = await handler.Handle(
+            new GetDashboardSummaryQuery(new DateTime(2026, 8, 1), new DateTime(2026, 8, 31)),
+            CancellationToken.None);
+
+        result.Value.TopProducts.Should().HaveCount(1);
+        result.Value.TopProducts[0].ProductId.Should().Be(product.Id.Value);
+        result.Value.TopProducts[0].Units.Should().Be(2);
+        result.Value.TopProducts[0].SalesCount.Should().Be(2);
+        result.Value.TopProducts[0].Name.Should().Be("Bateria");
+    }
+
+    [Fact]
+    public async Task Cobranza_SeCalculaPorEstadoNoPorPagos()
+    {
+        var product = SampleProduct();
+        // Sale.Create con SaleStatus.Paid => cobrada. Una CC nace OnHold => pendiente.
+        var sales = new List<Sale>
+        {
+            RetailSale(BranchA, product.Id, 100_000m),
+            CcSale(BranchA, CustomerId.New(), product.Id, 40_000m)
+        };
+        var handler = BuildHandler(MockUser(), sales, product);
+
+        var result = await handler.Handle(
+            new GetDashboardSummaryQuery(new DateTime(2026, 8, 1), new DateTime(2026, 8, 31)),
+            CancellationToken.None);
+
+        result.Value.Collections.PaidAmount.Should().Be(100_000m);
+        result.Value.Collections.PaidCount.Should().Be(1);
+        result.Value.Collections.PendingAmount.Should().Be(40_000m);
+        result.Value.Collections.PendingCount.Should().Be(1);
+        result.Value.Collections.AvgTicket.Should().Be(70_000m);
+    }
+
+    [Fact]
+    public async Task UltimasVentas_DevuelveComoMaximoSeisYLasMasRecientesPrimero()
+    {
+        var product = SampleProduct();
+        var sales = Enumerable.Range(0, 8)
+            .Select(_ => RetailSale(BranchA, product.Id, 10_000m))
+            .ToList();
+        var handler = BuildHandler(MockUser(), sales, product);
+
+        var result = await handler.Handle(
+            new GetDashboardSummaryQuery(new DateTime(2026, 8, 1), new DateTime(2026, 8, 31)),
+            CancellationToken.None);
+
+        result.Value.RecentSales.Should().HaveCount(6);
+        result.Value.RecentSales.Should().BeInDescendingOrder(s => s.CreatedAt);
+    }
+
+    [Fact]
+    public async Task CanceladasDeHoy_SalenDeLaConsultaAparte()
+    {
+        var product = SampleProduct();
+        var saleRepository = new Mock<ISaleRepository>();
+        saleRepository
+            .Setup(r => r.ListForSalesReportAsync(
+                It.IsAny<CompanyId>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(),
+                It.IsAny<Guid?>(), It.IsAny<Guid?>(),
+                It.IsAny<IReadOnlyCollection<Guid>?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([RetailSale(BranchA, product.Id, 100_000m)]);
+        saleRepository
+            .Setup(r => r.CountCancelledAsync(
+                It.IsAny<CompanyId>(), It.IsAny<DateTime>(), It.IsAny<DateTime>(),
+                It.IsAny<Guid?>(), It.IsAny<IReadOnlyCollection<Guid>?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(3);
+
+        var productRepository = new Mock<IProductRepository>();
+        productRepository
+            .Setup(r => r.GetByCompanyIdAsync(It.IsAny<CompanyId>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([product]);
+
+        var handler = new GetDashboardSummaryHandler(
+            MockUser().Object, saleRepository.Object, productRepository.Object,
+            new Mock<ICustomerRepository>().Object);
+
+        var result = await handler.Handle(
+            new GetDashboardSummaryQuery(new DateTime(2026, 8, 1), new DateTime(2026, 8, 31)),
+            CancellationToken.None);
+
+        result.Value.TodayStatus.CancelledCount.Should().Be(3);
+        result.Value.TodayStatus.ActiveCount.Should().Be(1);
     }
 }
