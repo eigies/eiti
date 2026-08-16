@@ -7,6 +7,7 @@ using eiti.Infrastructure.Authentication;
 using eiti.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
@@ -126,7 +127,19 @@ builder.Services.AddRateLimiter(options =>
     });
 });
 
+// El JSON de la app comprime ~85%. El dashboard y los reportes eran los mas pesados.
+// Brotli primero (mejor ratio), gzip como fallback para clientes que no lo soporten.
+builder.Services.AddResponseCompression(options =>
+{
+    options.EnableForHttps = true;
+    options.Providers.Add<BrotliCompressionProvider>();
+    options.Providers.Add<GzipCompressionProvider>();
+    options.MimeTypes = ResponseCompressionDefaults.MimeTypes.Concat(["application/json"]);
+});
+
 var app = builder.Build();
+
+app.UseResponseCompression();
 
 // Aplica migraciones pendientes al arranque para que el contenedor sea autosuficiente en Railway.
 using (var scope = app.Services.CreateScope())
