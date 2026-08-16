@@ -65,6 +65,16 @@ public sealed class GetDashboardSummaryHandler
         var chartFromUtc = BusinessCalendar.StartOfDayUtc(todayLocal.AddDays(-(ChartDays - 1)));
         var fetchFrom = from < chartFromUtc ? from : chartFromUtc;
 
+        // La comparativa necesita el mes anterior completo. Se amplia el mismo fetch en vez de
+        // hacer una consulta aparte: el filtrado por rango ya se hace en memoria mas abajo.
+        var currentMonthStart = new DateTime(request.DateFrom.Year, request.DateFrom.Month, 1);
+        var previousMonthStart = currentMonthStart.AddMonths(-1);
+        var previousMonthFromUtc = BusinessCalendar.StartOfDayUtc(previousMonthStart);
+        if (previousMonthFromUtc < fetchFrom)
+        {
+            fetchFrom = previousMonthFromUtc;
+        }
+
         var allSales = await _saleRepository.ListForSalesReportAsync(
             companyId, fetchFrom, to, request.BranchId, null, allowedBranchIds, cancellationToken);
 
@@ -101,8 +111,13 @@ public sealed class GetDashboardSummaryHandler
         var todayStatus = BuildTodayStatus(todaySales, cancelledToday);
         var recentSales = await BuildRecentSalesAsync(sales, companyId, cancellationToken);
 
+        var monthComparison = BuildMonthComparison(
+            allSales, currentMonthStart, previousMonthStart, todayLocal,
+            categoryFilter, categoryByProduct);
+
         var response = new GetDashboardSummaryResponse(
-            month, today, days, topProducts, collections, todayStatus, recentSales);
+            month, today, days, topProducts, collections, todayStatus, recentSales,
+            monthComparison);
 
         return Result<GetDashboardSummaryResponse>.Success(
             canViewFinancials ? response : StripAmounts(response));
@@ -122,8 +137,17 @@ public sealed class GetDashboardSummaryHandler
                 0m, source.Collections.PaidCount, 0m, source.Collections.PendingCount, 0m),
             RecentSales = source.RecentSales
                 .Select(s => s with { TotalAmount = 0m })
-                .ToList()
+                .ToList(),
+            MonthComparison = source.MonthComparison with
+            {
+                Current = StripCumulative(source.MonthComparison.Current),
+                Previous = StripCumulative(source.MonthComparison.Previous)
+            }
         };
+
+    private static IReadOnlyList<DashboardCumulativePoint> StripCumulative(
+        IReadOnlyList<DashboardCumulativePoint> points) =>
+        points.Select(p => p with { Amount = 0m }).ToList();
 
     private static DashboardPeriodTotals StripTotals(DashboardPeriodTotals totals) =>
         new(
@@ -136,6 +160,72 @@ public sealed class GetDashboardSummaryHandler
         TimeZoneInfo.ConvertTimeFromUtc(
             _timeProvider.GetUtcNow().UtcDateTime,
             BusinessCalendar.TimeZone).Date;
+
+    // Acumulado dia a dia de los dos meses, cortados en el mismo dia del mes.
+    //
+    // Si el periodo pedido es el mes en curso, el corte es hoy; si es un mes pasado, se toma
+    // completo. Las dos series llegan siempre hasta el mismo dia para que la comparacion sea
+    // honesta: julio entero contra agosto a mitad de camino diria que siempre se viene peor.
+    private static DashboardMonthComparison BuildMonthComparison(
+        IReadOnlyCollection<Sale> allSales,
+        DateTime currentMonthStart,
+        DateTime previousMonthStart,
+        DateTime todayLocal,
+        HashSet<Guid>? categoryFilter,
+        IReadOnlyDictionary<Guid, Guid?> categoryByProduct)
+    {
+        var isCurrentMonth = todayLocal.Year == currentMonthStart.Year
+            && todayLocal.Month == currentMonthStart.Month;
+
+        var daysInCurrent = DateTime.DaysInMonth(currentMonthStart.Year, currentMonthStart.Month);
+        var daysInPrevious = DateTime.DaysInMonth(previousMonthStart.Year, previousMonthStart.Month);
+
+        // El corte no puede exceder los dias del mes mas corto: comparar el 31 de marzo contra
+        // un 31 de febrero que no existe dejaria la serie anterior sin ese punto.
+        var cutoff = isCurrentMonth ? todayLocal.Day : daysInCurrent;
+        cutoff = Math.Min(cutoff, Math.Min(daysInCurrent, daysInPrevious));
+
+        return new DashboardMonthComparison(
+            DateOnly.FromDateTime(currentMonthStart),
+            DateOnly.FromDateTime(previousMonthStart),
+            cutoff,
+            Cumulative(allSales, currentMonthStart, cutoff, categoryFilter, categoryByProduct),
+            Cumulative(allSales, previousMonthStart, cutoff, categoryFilter, categoryByProduct));
+    }
+
+    private static IReadOnlyList<DashboardCumulativePoint> Cumulative(
+        IReadOnlyCollection<Sale> allSales,
+        DateTime monthStart,
+        int cutoffDay,
+        HashSet<Guid>? categoryFilter,
+        IReadOnlyDictionary<Guid, Guid?> categoryByProduct)
+    {
+        var points = new List<DashboardCumulativePoint>(cutoffDay);
+        var count = 0;
+        var units = 0;
+        var amount = 0m;
+
+        for (var day = 1; day <= cutoffDay; day++)
+        {
+            var date = monthStart.AddDays(day - 1);
+            var dayFrom = BusinessCalendar.StartOfDayUtc(date);
+            var dayTo = BusinessCalendar.EndOfDayUtc(date);
+
+            var ofDay = allSales
+                .Where(s => s.CreatedAt >= dayFrom && s.CreatedAt <= dayTo)
+                .ToList();
+
+            var segment = Segment(ofDay, categoryFilter, categoryByProduct);
+            count += segment.Count;
+            units += segment.Units;
+            amount += segment.Amount;
+
+            points.Add(new DashboardCumulativePoint(
+                day, count, units, decimal.Round(amount, 2, MidpointRounding.AwayFromZero)));
+        }
+
+        return points;
+    }
 
     // Mapa productId -> categoryId de los productos que aparecen en las ventas del periodo.
     // Solo se llama cuando hay filtro de categoria: sin filtro no hace falta el catalogo.

@@ -196,9 +196,12 @@ public sealed class GetDashboardSummaryHandlerTests
             new GetDashboardSummaryQuery(new DateTime(2026, 8, 1), new DateTime(2026, 8, 31)),
             CancellationToken.None);
 
-        // El dia local arranca a las 03:00 UTC. Con .Date crudo esto seria 00:00 y el test falla.
-        var (expectedFrom, expectedTo) = BusinessCalendar.ToUtcRange(
-            new DateTime(2026, 8, 1), new DateTime(2026, 8, 31));
+        // El handler pide un rango AMPLIADO: retrocede al inicio del mes anterior para poder
+        // armar la comparativa, y el extremo final sigue siendo el del periodo pedido.
+        // Lo que este test fija es que los dos limites salgan de BusinessCalendar: el dia local
+        // arranca a las 03:00 UTC, con .Date crudo seria 00:00 y el Verify no matchea.
+        var expectedFrom = BusinessCalendar.StartOfDayUtc(new DateTime(2026, 7, 1));
+        var expectedTo = BusinessCalendar.EndOfDayUtc(new DateTime(2026, 8, 31));
 
         saleRepository.Verify(r => r.ListForSalesReportAsync(
             It.IsAny<CompanyId>(),
@@ -525,6 +528,69 @@ public sealed class GetDashboardSummaryHandlerTests
     private sealed class FixedTimeProvider(DateTimeOffset utcNow) : TimeProvider
     {
         public override DateTimeOffset GetUtcNow() => utcNow;
+    }
+
+    // ---- Comparativa contra el mes anterior ----
+
+    [Fact]
+    public async Task Comparativa_CortaLasDosSeriesElMismoDia()
+    {
+        var product = SampleProduct();
+        var handler = BuildHandler(MockUser(), [RetailSale(BranchA, product.Id, 100_000m)], product);
+
+        var result = await handler.Handle(
+            new GetDashboardSummaryQuery(new DateTime(2026, 8, 1), new DateTime(2026, 8, 31)),
+            CancellationToken.None);
+
+        var comparison = result.Value.MonthComparison;
+
+        // El reloj de la suite esta fijado dentro de agosto, asi que el corte es el dia de hoy
+        // y NO agosto completo: comparar un mes entero contra uno a mitad de camino diria
+        // siempre que se viene peor.
+        comparison.CurrentMonth.Should().Be(new DateOnly(2026, 8, 1));
+        comparison.PreviousMonth.Should().Be(new DateOnly(2026, 7, 1));
+        comparison.DaysElapsed.Should().BeLessThan(31);
+        comparison.Current.Should().HaveCount(comparison.DaysElapsed);
+        comparison.Previous.Should().HaveCount(comparison.DaysElapsed);
+    }
+
+    [Fact]
+    public async Task Comparativa_AcumulaEnVezDeMostrarElMovimientoDelDia()
+    {
+        var product = SampleProduct();
+        var handler = BuildHandler(
+            MockUser(),
+            [RetailSale(BranchA, product.Id, 100_000m), RetailSale(BranchA, product.Id, 50_000m)],
+            product);
+
+        var result = await handler.Handle(
+            new GetDashboardSummaryQuery(new DateTime(2026, 8, 1), new DateTime(2026, 8, 31)),
+            CancellationToken.None);
+
+        var current = result.Value.MonthComparison.Current;
+
+        // Serie acumulada: nunca baja, y el ultimo punto es el total del tramo.
+        current.Should().BeInAscendingOrder(p => p.Count);
+        current[^1].Count.Should().Be(2);
+        current[^1].Units.Should().Be(2);
+        current[^1].Amount.Should().Be(150_000m);
+    }
+
+    [Fact]
+    public async Task Comparativa_SinPermisoFinanciero_NoDevuelveImportes()
+    {
+        var product = SampleProduct();
+        var handler = BuildHandler(
+            MockUser(canViewFinancials: false), [RetailSale(BranchA, product.Id, 100_000m)], product);
+
+        var result = await handler.Handle(
+            new GetDashboardSummaryQuery(new DateTime(2026, 8, 1), new DateTime(2026, 8, 31)),
+            CancellationToken.None);
+
+        result.Value.MonthComparison.Current.Should().OnlyContain(p => p.Amount == 0m);
+        result.Value.MonthComparison.Previous.Should().OnlyContain(p => p.Amount == 0m);
+        // Las cantidades se conservan: el vendedor sigue viendo su volumen.
+        result.Value.MonthComparison.Current[^1].Count.Should().Be(1);
     }
 
     // ---- Filtro por categoria ----
