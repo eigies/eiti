@@ -10,8 +10,10 @@ namespace eiti.Application.Features.Dashboard.Queries.GetDashboardSummary;
 // No implementa IRequirePermissions a proposito: la ruta /dashboard hoy solo exige estar
 // autenticado, y hay perfiles ("Cajero") sin sales.access que deben poder entrar igual.
 // Lo sensible son los importes, y eso lo gatea DashboardViewFinancials dentro del handler.
+// CategoryIds vacio o null = sin filtro de categoria (todo el catalogo).
 public sealed record GetDashboardSummaryQuery(
     DateTime DateFrom,
     DateTime DateTo,
-    Guid? BranchId = null
+    Guid? BranchId = null,
+    IReadOnlyCollection<Guid>? CategoryIds = null
 ) : IRequest<Result<GetDashboardSummaryResponse>>;

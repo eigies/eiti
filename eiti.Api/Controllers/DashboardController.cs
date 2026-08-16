@@ -24,10 +24,11 @@ public sealed class DashboardController : ControllerBase
         [FromQuery] DateTime dateFrom,
         [FromQuery] DateTime dateTo,
         [FromQuery] Guid? branchId,
+        [FromQuery] Guid[]? categoryIds,
         CancellationToken cancellationToken = default)
     {
         var result = await _sender.Send(
-            new GetDashboardSummaryQuery(dateFrom, dateTo, branchId),
+            new GetDashboardSummaryQuery(dateFrom, dateTo, branchId, categoryIds),
             cancellationToken);
         return result.ToActionResult();
     }
