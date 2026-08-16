@@ -18,6 +18,11 @@ public sealed class GetDashboardSummaryHandlerTests
     private static readonly CompanyId Company = CompanyId.New();
     private static readonly BranchId BranchA = BranchId.New();
     private static readonly BranchId BranchB = BranchId.New();
+    private static readonly DateTime FixedTodayLocal = new(2026, 8, 15);
+    private static readonly DateTime FixedCreatedAtUtc =
+        BusinessCalendar.StartOfDayUtc(FixedTodayLocal).AddHours(12);
+    private static readonly TimeProvider Clock = new FixedTimeProvider(
+        new DateTimeOffset(FixedCreatedAtUtc));
 
     private static Mock<ICurrentUserService> MockUser(
         bool canViewAll = true,
@@ -38,17 +43,17 @@ public sealed class GetDashboardSummaryHandlerTests
         Product.Create(Company, "BAT-001", "BAT-001", "Contoso", "Bateria", null, 100_000m, 70_000m, null);
 
     private static Sale RetailSale(BranchId branchId, ProductId productId, decimal price) =>
-        Sale.Create(Company, branchId, null, false, SaleStatus.Paid,
+        Backdate(Sale.Create(Company, branchId, null, false, SaleStatus.Paid,
             [SaleDetail.Create(productId, 1, price)],
             [SalePayment.Create(SalePaymentMethod.Cash, price, null)],
-            allowOverpayment: true);
+            allowOverpayment: true), FixedCreatedAtUtc);
 
     private static Sale CcSale(BranchId branchId, CustomerId customerId, ProductId productId, decimal price) =>
-        Sale.CreateCc(Company, branchId, customerId, [SaleDetail.Create(productId, 1, price)]);
+        Backdate(Sale.CreateCc(Company, branchId, customerId,
+            [SaleDetail.Create(productId, 1, price)]), FixedCreatedAtUtc);
 
-    // Sale.Create fija CreatedAt = DateTime.UtcNow y no expone una fabrica para elegir la fecha.
-    // Solo para probar la ventana ampliada de BuildDays (ver SerieDeSieteDias_TraeVentasDe...),
-    // se ajusta CreatedAt por reflection despues de crear la venta.
+    // Sale.Create no expone una fabrica para elegir la fecha. Los fixtures se fijan al reloj del
+    // handler por reflection para que esta suite siga siendo valida despues de agosto de 2026.
     private static Sale Backdate(Sale sale, DateTime createdAt)
     {
         typeof(Sale).GetProperty(nameof(Sale.CreatedAt))!.SetValue(sale, createdAt);
@@ -89,7 +94,7 @@ public sealed class GetDashboardSummaryHandlerTests
             .ReturnsAsync(Array.Empty<Customer>());
 
         return new GetDashboardSummaryHandler(
-            user.Object, saleRepository.Object, productRepository.Object, customerRepository.Object);
+            user.Object, saleRepository.Object, productRepository.Object, customerRepository.Object, Clock);
     }
 
     [Fact]
@@ -154,16 +159,12 @@ public sealed class GetDashboardSummaryHandlerTests
         result.Value.Month.Total.Count.Should().Be(1);
     }
 
-    // Este test verifica el ruteo mes/hoy, NO la conversion de zona horaria: la venta se crea
-    // con CreatedAt = UtcNow y el handler resuelve "hoy" desde UtcNow, asi que una version con
-    // el bug de .Date crudo pasaria igual. La matematica del huso esta cubierta en
-    // BusinessCalendarTests, y que el handler la use se verifica en
-    // ElRangoDelMes_SeConvierteConBusinessCalendar_NoConFechaCruda.
+    // El reloj y la venta estan fijados al mismo dia local; la matematica del huso esta cubierta
+    // en BusinessCalendarTests y el uso del rango se verifica en el test siguiente.
     [Fact]
     public async Task VentasDeHoy_QuedanEnLaColumnaHoy()
     {
         var product = SampleProduct();
-        // Sale.Create pone CreatedAt = UtcNow, o sea que las ventas del set son "de hoy".
         var handler = BuildHandler(MockUser(), [RetailSale(BranchA, product.Id, 100_000m)], product);
 
         var result = await handler.Handle(
@@ -189,7 +190,7 @@ public sealed class GetDashboardSummaryHandlerTests
         // Sin ventas no hay detalles que resolver: el handler nunca llega a pedir productos.
         var handler = new GetDashboardSummaryHandler(
             MockUser().Object, saleRepository.Object, new Mock<IProductRepository>().Object,
-            new Mock<ICustomerRepository>().Object);
+            new Mock<ICustomerRepository>().Object, Clock);
 
         await handler.Handle(
             new GetDashboardSummaryQuery(new DateTime(2026, 8, 1), new DateTime(2026, 8, 31)),
@@ -222,7 +223,7 @@ public sealed class GetDashboardSummaryHandlerTests
         var handler = new GetDashboardSummaryHandler(
             MockUser(canViewAll: false, allowedBranches: [BranchA.Value]).Object,
             saleRepository.Object, new Mock<IProductRepository>().Object,
-            new Mock<ICustomerRepository>().Object);
+            new Mock<ICustomerRepository>().Object, Clock);
 
         await handler.Handle(
             new GetDashboardSummaryQuery(new DateTime(2026, 8, 1), new DateTime(2026, 8, 31)),
@@ -237,11 +238,7 @@ public sealed class GetDashboardSummaryHandlerTests
             It.IsAny<CancellationToken>()), Times.Once);
     }
 
-    // Este test verifica que la serie tenga 7 puntos y que el mas nuevo tenga la venta, NO la
-    // conversion de zona horaria: la venta se crea con CreatedAt = UtcNow y BuildDays arranca
-    // el bucketing desde "hoy" resuelto con UtcNow, asi que una version con el bug de .Date
-    // crudo pasaria igual salvo en la franja horaria en que el dia local y el dia UTC difieren.
-    // La matematica del huso esta cubierta en BusinessCalendarTests.
+    // El reloj fijo hace que la serie sea determinista sin depender del dia en que corre la suite.
     [Fact]
     public async Task SerieDeSieteDias_SiempreTieneSieteDias_YLosVaciosEnCero()
     {
@@ -307,6 +304,7 @@ public sealed class GetDashboardSummaryHandlerTests
         var partiallyPaidOnHold = Sale.Create(Company, BranchA, null, false, SaleStatus.OnHold,
             [SaleDetail.Create(product.Id, 1, 100_000m)],
             [SalePayment.Create(SalePaymentMethod.Cash, 30_000m, null)]);
+        Backdate(partiallyPaidOnHold, FixedCreatedAtUtc);
         var sales = new List<Sale>
         {
             RetailSale(BranchA, product.Id, 100_000m),
@@ -347,7 +345,7 @@ public sealed class GetDashboardSummaryHandlerTests
     public async Task CanceladasDeHoy_SalenDeLaConsultaAparte()
     {
         var product = SampleProduct();
-        var todayLocal = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, BusinessCalendar.TimeZone).Date;
+        var todayLocal = FixedTodayLocal;
         var expectedFrom = BusinessCalendar.StartOfDayUtc(todayLocal);
         var expectedTo = BusinessCalendar.EndOfDayUtc(todayLocal);
 
@@ -375,7 +373,7 @@ public sealed class GetDashboardSummaryHandlerTests
         var handler = new GetDashboardSummaryHandler(
             MockUser(canViewAll: false, allowedBranches: [BranchA.Value]).Object,
             saleRepository.Object, productRepository.Object,
-            new Mock<ICustomerRepository>().Object);
+            new Mock<ICustomerRepository>().Object, Clock);
 
         var result = await handler.Handle(
             new GetDashboardSummaryQuery(new DateTime(2026, 8, 1), new DateTime(2026, 8, 31)),
@@ -400,7 +398,7 @@ public sealed class GetDashboardSummaryHandlerTests
     public async Task SerieDeSieteDias_TraeVentasDeAntesDelRangoPedido_SiCaenDentroDeLaVentanaDelGrafico()
     {
         var product = SampleProduct();
-        var todayLocal = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, BusinessCalendar.TimeZone).Date;
+        var todayLocal = FixedTodayLocal;
 
         // "Ayer" cae dentro de la ventana de 7 dias del grafico (hoy-6..hoy) pero ANTES del
         // rango pedido (mas abajo, solo "hoy"). Sin el fetch ampliado a ListForSalesReportAsync
@@ -432,7 +430,7 @@ public sealed class GetDashboardSummaryHandlerTests
 
         var handler = new GetDashboardSummaryHandler(
             MockUser().Object, saleRepository.Object,
-            new Mock<IProductRepository>().Object, new Mock<ICustomerRepository>().Object);
+            new Mock<IProductRepository>().Object, new Mock<ICustomerRepository>().Object, Clock);
 
         // Rango pedido = solo "hoy": fuerza a que "ayer" quede afuera de from..to pero adentro
         // de la ventana de 7 dias del grafico.
@@ -485,7 +483,7 @@ public sealed class GetDashboardSummaryHandlerTests
             .ReturnsAsync([customer]);
 
         var handler = new GetDashboardSummaryHandler(
-            MockUser().Object, saleRepository.Object, productRepository.Object, customerRepository.Object);
+            MockUser().Object, saleRepository.Object, productRepository.Object, customerRepository.Object, Clock);
 
         var result = await handler.Handle(
             new GetDashboardSummaryQuery(new DateTime(2026, 8, 1), new DateTime(2026, 8, 31)),
@@ -493,5 +491,39 @@ public sealed class GetDashboardSummaryHandlerTests
 
         result.Value.RecentSales.Should().ContainSingle();
         result.Value.RecentSales[0].CustomerName.Should().Be("Juana Perez");
+    }
+
+    [Fact]
+    public async Task SinPermisoFinanciero_LosImportesSalenEnCero_PeroLasCantidadesNo()
+    {
+        var product = SampleProduct();
+        var sales = new List<Sale>
+        {
+            RetailSale(BranchA, product.Id, 100_000m),
+            CcSale(BranchA, CustomerId.New(), product.Id, 40_000m)
+        };
+        var handler = BuildHandler(MockUser(canViewFinancials: false), sales, product);
+
+        var result = await handler.Handle(
+            new GetDashboardSummaryQuery(new DateTime(2026, 8, 1), new DateTime(2026, 8, 31)),
+            CancellationToken.None);
+
+        result.Value.Month.Total.Count.Should().Be(2);
+        result.Value.Month.Retail.Count.Should().Be(1);
+        result.Value.Month.Total.Amount.Should().Be(0m);
+        result.Value.Month.Retail.Amount.Should().Be(0m);
+        result.Value.Month.CurrentAccount.Amount.Should().Be(0m);
+        result.Value.Today.Total.Amount.Should().Be(0m);
+        result.Value.Collections.PaidAmount.Should().Be(0m);
+        result.Value.Collections.PendingAmount.Should().Be(0m);
+        result.Value.Collections.AvgTicket.Should().Be(0m);
+        result.Value.Days.Should().OnlyContain(
+            d => d.RetailAmount == 0m && d.CurrentAccountAmount == 0m);
+        result.Value.RecentSales.Should().OnlyContain(s => s.TotalAmount == 0m);
+    }
+
+    private sealed class FixedTimeProvider(DateTimeOffset utcNow) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => utcNow;
     }
 }

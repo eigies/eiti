@@ -20,7 +20,7 @@ public sealed record DashboardPeriodTotals(
 public sealed record DashboardSegment(int Count, decimal Amount);
 
 public sealed record DashboardDayPoint(
-    DateTime Date,
+    DateOnly Date,
     int RetailCount,
     decimal RetailAmount,
     int CurrentAccountCount,

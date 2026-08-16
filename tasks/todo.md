@@ -40,3 +40,26 @@ Espejar el patrón existente de `DeliveryAddress` para no duplicar lógica. Nuev
 - Build backend (Application con deps) OK; migración generada; ng build dev OK. Specs no afectados.
 - Requiere deploy de BACKEND (Railway, Database.Migrate agrega la columna) + FRONT (Vercel).
 - PENDIENTE: QA visual del usuario.
+
+---
+
+# Rediseño del dashboard — continuación 2026-08-15
+
+- [x] Baseline: backend 225 tests; frontend build development.
+- [x] Task 5: impedir que los importes viajen sin permiso financiero.
+- [x] Task 6: publicar `GET /api/dashboard/summary` y verificar backend.
+- [x] Tasks 7-8: modelos, servicio HTTP y preferencias del frontend.
+- [x] Task 9: reescritura visual y funcional del dashboard.
+- [x] Task 10 local: suite, build y revisión final; sin deploy.
+
+## Review
+
+- Backend: 234/234 tests; `eiti.Infrastructure` compila con 0 warnings y 0 errores.
+- Frontend: 200/200 specs; build development correcto.
+- Dashboard revisado con datos representativos en dark/light y breakpoints desktop/tablet/móvil.
+- Review independiente resuelto: fechas calendario sin corrimiento UTC; detalle propio del dashboard
+  con canceladas y controles de sucursal/importes; filtro de estado sobre hoy; restauracion de
+  `canViewAllBranches`; reloj inyectable en tests; respuestas fuera de orden ignoradas; detalle
+  limitado en servidor a un dia dentro de la ventana visible de los ultimos siete dias.
+- Sin commit, merge, tag, push ni deploy, por pedido del usuario.
+- Pendiente externo: Railway CLI no está autenticado, por lo que no se pudo ejecutar el SELECT temporal contra PostgreSQL real.

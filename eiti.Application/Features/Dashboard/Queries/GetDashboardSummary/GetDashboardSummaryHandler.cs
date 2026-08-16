@@ -20,17 +20,20 @@ public sealed class GetDashboardSummaryHandler
     private readonly ISaleRepository _saleRepository;
     private readonly IProductRepository _productRepository;
     private readonly ICustomerRepository _customerRepository;
+    private readonly TimeProvider _timeProvider;
 
     public GetDashboardSummaryHandler(
         ICurrentUserService currentUserService,
         ISaleRepository saleRepository,
         IProductRepository productRepository,
-        ICustomerRepository customerRepository)
+        ICustomerRepository customerRepository,
+        TimeProvider timeProvider)
     {
         _currentUserService = currentUserService;
         _saleRepository = saleRepository;
         _productRepository = productRepository;
         _customerRepository = customerRepository;
+        _timeProvider = timeProvider;
     }
 
     public async Task<Result<GetDashboardSummaryResponse>> Handle(
@@ -42,6 +45,8 @@ public sealed class GetDashboardSummaryHandler
 
         var companyId = _currentUserService.CompanyId!;
         var canViewAllBranches = _currentUserService.CanViewAllBranches;
+        var canViewFinancials = _currentUserService.HasPermission(
+            PermissionCodes.DashboardViewFinancials);
         var allowedBranchIds = canViewAllBranches ? null : _currentUserService.AllowedBranchIds;
 
         // Que el selector no ofrezca una sucursal no alcanza: se valida en el server.
@@ -86,13 +91,41 @@ public sealed class GetDashboardSummaryHandler
         var todayStatus = BuildTodayStatus(todaySales, cancelledToday);
         var recentSales = await BuildRecentSalesAsync(sales, companyId, cancellationToken);
 
-        return Result<GetDashboardSummaryResponse>.Success(new GetDashboardSummaryResponse(
-            month, today, days, topProducts, collections, todayStatus, recentSales));
+        var response = new GetDashboardSummaryResponse(
+            month, today, days, topProducts, collections, todayStatus, recentSales);
+
+        return Result<GetDashboardSummaryResponse>.Success(
+            canViewFinancials ? response : StripAmounts(response));
     }
 
+    // La plata no se esconde solo en el front: sin permiso no sale del servidor ni queda
+    // visible en el network tab. Las cantidades y los datos operativos se conservan.
+    private static GetDashboardSummaryResponse StripAmounts(GetDashboardSummaryResponse source) =>
+        source with
+        {
+            Month = StripTotals(source.Month),
+            Today = StripTotals(source.Today),
+            Days = source.Days
+                .Select(d => d with { RetailAmount = 0m, CurrentAccountAmount = 0m })
+                .ToList(),
+            Collections = new DashboardCollections(
+                0m, source.Collections.PaidCount, 0m, source.Collections.PendingCount, 0m),
+            RecentSales = source.RecentSales
+                .Select(s => s with { TotalAmount = 0m })
+                .ToList()
+        };
+
+    private static DashboardPeriodTotals StripTotals(DashboardPeriodTotals totals) =>
+        new(
+            totals.Total with { Amount = 0m },
+            totals.Retail with { Amount = 0m },
+            totals.CurrentAccount with { Amount = 0m });
+
     // El "hoy" del usuario, no el del servidor: se toma la fecha local segun BusinessCalendar.
-    private static DateTime TodayLocal() =>
-        TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, BusinessCalendar.TimeZone).Date;
+    private DateTime TodayLocal() =>
+        TimeZoneInfo.ConvertTimeFromUtc(
+            _timeProvider.GetUtcNow().UtcDateTime,
+            BusinessCalendar.TimeZone).Date;
 
     private static DashboardPeriodTotals BuildTotals(IReadOnlyCollection<Sale> sales)
     {
@@ -126,7 +159,7 @@ public sealed class GetDashboardSummaryHandler
             var cc = ofDay.Where(s => s.IsCuentaCorriente).ToList();
 
             points.Add(new DashboardDayPoint(
-                day,
+                DateOnly.FromDateTime(day),
                 retail.Count,
                 decimal.Round(retail.Sum(s => s.TotalAmount), 2, MidpointRounding.AwayFromZero),
                 cc.Count,

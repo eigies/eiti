@@ -49,6 +49,15 @@ public interface ISaleRepository
         IReadOnlyCollection<Guid>? allowedBranchIds,
         CancellationToken cancellationToken = default);
 
+    // Detalle liviano del dashboard. Incluye canceladas y no carga colecciones relacionadas.
+    Task<IReadOnlyList<Sale>> ListForDashboardAsync(
+        CompanyId companyId,
+        DateTime from,
+        DateTime to,
+        Guid? branchId,
+        IReadOnlyCollection<Guid>? allowedBranchIds,
+        CancellationToken cancellationToken = default);
+
     // Reporte de canjes: mismos filtros que el reporte de ventas pero con Include(TradeIns) en vez de
     // Details, y solo ventas que efectivamente recibieron algo en canje. AsNoTracking.
     Task<IReadOnlyList<Sale>> ListForTradeInReportAsync(
