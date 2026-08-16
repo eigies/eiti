@@ -16,8 +16,15 @@ public sealed record DashboardPeriodTotals(
     DashboardSegment Retail,
     DashboardSegment CurrentAccount);
 
-// Amount = facturacion de las ventas activas, NO lo cobrado. Lo cobrado vive en Collections.
-public sealed record DashboardSegment(int Count, decimal Amount);
+// Count  = operaciones. Con filtro de categoria, ventas que incluyen al menos una unidad
+//          de esas categorias (una venta con bateria + accesorio cuenta una vez).
+// Units  = unidades vendidas. Es lo que compara contra el reporte de ventas, que tambien
+//          cuenta unidades. Sin filtro son todas las lineas; con filtro, solo las de esas
+//          categorias.
+// Amount = facturacion, NO lo cobrado (eso vive en Collections). Sin filtro es el total de
+//          la venta e incluye descuentos y recargos; con filtro es la suma de las lineas
+//          de las categorias elegidas.
+public sealed record DashboardSegment(int Count, int Units, decimal Amount);
 
 public sealed record DashboardDayPoint(
     DateOnly Date,

@@ -526,4 +526,105 @@ public sealed class GetDashboardSummaryHandlerTests
     {
         public override DateTimeOffset GetUtcNow() => utcNow;
     }
+
+    // ---- Filtro por categoria ----
+    // El dashboard contaba ventas y el reporte contaba unidades, asi que nunca coincidian:
+    // 280 ventas contra 272 baterias. Ahora el segmento devuelve las dos cosas y se puede
+    // acotar a las categorias que al usuario le interesan.
+
+    private static readonly Guid CategoriaBateria = Guid.NewGuid();
+    private static readonly Guid CategoriaAccesorios = Guid.NewGuid();
+
+    private static Product ProductoDeCategoria(string code, string name, Guid? categoryId) =>
+        Product.Create(Company, code, code, "Contoso", name, null, 100_000m, 70_000m, null,
+            categoryId: categoryId);
+
+    // Una venta con dos baterias y un accesorio: 3 unidades en total, 2 de bateria.
+    private static Sale VentaMixta(ProductId bateria, ProductId accesorio) =>
+        Backdate(Sale.Create(Company, BranchA, null, false, SaleStatus.Paid,
+            [SaleDetail.Create(bateria, 2, 100_000m), SaleDetail.Create(accesorio, 1, 20_000m)],
+            [SalePayment.Create(SalePaymentMethod.Cash, 220_000m, null)],
+            allowOverpayment: true), FixedCreatedAtUtc);
+
+    [Fact]
+    public async Task SinFiltroDeCategoria_CuentaVentasYUnidadesDeTodoElCatalogo()
+    {
+        var bateria = ProductoDeCategoria("BAT-1", "Bateria", CategoriaBateria);
+        var accesorio = ProductoDeCategoria("ACC-1", "Accesorio", CategoriaAccesorios);
+        var handler = BuildHandler(
+            MockUser(), [VentaMixta(bateria.Id, accesorio.Id)], bateria, accesorio);
+
+        var result = await handler.Handle(
+            new GetDashboardSummaryQuery(new DateTime(2026, 8, 1), new DateTime(2026, 8, 31)),
+            CancellationToken.None);
+
+        result.Value.Month.Total.Count.Should().Be(1);
+        result.Value.Month.Total.Units.Should().Be(3);
+        result.Value.Month.Total.Amount.Should().Be(220_000m);
+    }
+
+    [Fact]
+    public async Task ConFiltroDeCategoria_SoloCuentaLasUnidadesDeEsasCategorias()
+    {
+        var bateria = ProductoDeCategoria("BAT-1", "Bateria", CategoriaBateria);
+        var accesorio = ProductoDeCategoria("ACC-1", "Accesorio", CategoriaAccesorios);
+        var handler = BuildHandler(
+            MockUser(), [VentaMixta(bateria.Id, accesorio.Id)], bateria, accesorio);
+
+        var result = await handler.Handle(
+            new GetDashboardSummaryQuery(
+                new DateTime(2026, 8, 1), new DateTime(2026, 8, 31),
+                CategoryIds: [CategoriaBateria]),
+            CancellationToken.None);
+
+        // La venta lleva bateria, asi que cuenta una vez aunque tambien tenga un accesorio.
+        result.Value.Month.Total.Count.Should().Be(1);
+        // Solo las 2 baterias, no las 3 unidades.
+        result.Value.Month.Total.Units.Should().Be(2);
+        // Solo el importe de la linea de bateria.
+        result.Value.Month.Total.Amount.Should().Be(200_000m);
+    }
+
+    [Fact]
+    public async Task ConFiltroDeCategoria_LaVentaSinEsaCategoriaNoCuenta()
+    {
+        var bateria = ProductoDeCategoria("BAT-1", "Bateria", CategoriaBateria);
+        var accesorio = ProductoDeCategoria("ACC-1", "Accesorio", CategoriaAccesorios);
+        var soloAccesorio = Backdate(Sale.Create(Company, BranchA, null, false, SaleStatus.Paid,
+            [SaleDetail.Create(accesorio.Id, 4, 20_000m)],
+            [SalePayment.Create(SalePaymentMethod.Cash, 80_000m, null)],
+            allowOverpayment: true), FixedCreatedAtUtc);
+
+        var handler = BuildHandler(MockUser(), [soloAccesorio], bateria, accesorio);
+
+        var result = await handler.Handle(
+            new GetDashboardSummaryQuery(
+                new DateTime(2026, 8, 1), new DateTime(2026, 8, 31),
+                CategoryIds: [CategoriaBateria]),
+            CancellationToken.None);
+
+        result.Value.Month.Total.Count.Should().Be(0);
+        result.Value.Month.Total.Units.Should().Be(0);
+        result.Value.Month.Total.Amount.Should().Be(0m);
+    }
+
+    [Fact]
+    public async Task ConFiltroDeCategoria_ElTopDeProductosTambienSeAcota()
+    {
+        var bateria = ProductoDeCategoria("BAT-1", "Bateria", CategoriaBateria);
+        var accesorio = ProductoDeCategoria("ACC-1", "Accesorio", CategoriaAccesorios);
+        var handler = BuildHandler(
+            MockUser(), [VentaMixta(bateria.Id, accesorio.Id)], bateria, accesorio);
+
+        var result = await handler.Handle(
+            new GetDashboardSummaryQuery(
+                new DateTime(2026, 8, 1), new DateTime(2026, 8, 31),
+                CategoryIds: [CategoriaBateria]),
+            CancellationToken.None);
+
+        // Si el top ignorara el filtro, el accesorio apareceria en la lista.
+        result.Value.TopProducts.Should().HaveCount(1);
+        result.Value.TopProducts[0].ProductId.Should().Be(bateria.Id.Value);
+        result.Value.TopProducts[0].Units.Should().Be(2);
+    }
 }

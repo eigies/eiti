@@ -27,7 +27,7 @@ public sealed class DashboardControllerTests
             .ReturnsAsync(Result<GetDashboardSummaryResponse>.Success(response));
         var controller = new DashboardController(sender.Object);
 
-        var action = await controller.Summary(dateFrom, dateTo, branchId, CancellationToken.None);
+        var action = await controller.Summary(dateFrom, dateTo, branchId, null, CancellationToken.None);
 
         action.Should().BeOfType<OkObjectResult>()
             .Which.Value.Should().BeSameAs(response);
@@ -59,13 +59,13 @@ public sealed class DashboardControllerTests
     private static GetDashboardSummaryResponse EmptyResponse() =>
         new(
             new DashboardPeriodTotals(
-                new DashboardSegment(0, 0m),
-                new DashboardSegment(0, 0m),
-                new DashboardSegment(0, 0m)),
+                new DashboardSegment(0, 0, 0m),
+                new DashboardSegment(0, 0, 0m),
+                new DashboardSegment(0, 0, 0m)),
             new DashboardPeriodTotals(
-                new DashboardSegment(0, 0m),
-                new DashboardSegment(0, 0m),
-                new DashboardSegment(0, 0m)),
+                new DashboardSegment(0, 0, 0m),
+                new DashboardSegment(0, 0, 0m),
+                new DashboardSegment(0, 0, 0m)),
             [],
             [],
             new DashboardCollections(0m, 0, 0m, 0, 0m),

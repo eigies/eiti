@@ -73,20 +73,30 @@ public sealed class GetDashboardSummaryHandler
         // serie de 7 dias tenga datos reales cuando esos dias caen antes del inicio del periodo.
         var sales = allSales.Where(s => s.CreatedAt >= from && s.CreatedAt <= to).ToList();
 
+        // Filtro de categoria: se resuelve producto -> categoria una sola vez y se reutiliza
+        // para los totales, la serie y el top. Si no hay filtro, no se consulta el catalogo.
+        var categoryFilter = request.CategoryIds is { Count: > 0 }
+            ? request.CategoryIds.ToHashSet()
+            : null;
+        var categoryByProduct = categoryFilter is null
+            ? new Dictionary<Guid, Guid?>()
+            : await BuildCategoryLookupAsync(allSales, companyId, cancellationToken);
+
         // ListForSalesReportAsync excluye las canceladas por diseno; el conteo de canceladas
         // para el pulso del dia sale de CountCancelledAsync, una consulta COUNT aparte.
-        var month = BuildTotals(sales);
+        var month = BuildTotals(sales, categoryFilter, categoryByProduct);
 
         var todayFrom = BusinessCalendar.StartOfDayUtc(todayLocal);
         var todayTo = BusinessCalendar.EndOfDayUtc(todayLocal);
         var todaySales = sales.Where(s => s.CreatedAt >= todayFrom && s.CreatedAt <= todayTo).ToList();
-        var today = BuildTotals(todaySales);
+        var today = BuildTotals(todaySales, categoryFilter, categoryByProduct);
 
         var cancelledToday = await _saleRepository.CountCancelledAsync(
             companyId, todayFrom, todayTo, request.BranchId, allowedBranchIds, cancellationToken);
 
-        var days = BuildDays(allSales, todayLocal);
-        var topProducts = await BuildTopProductsAsync(sales, companyId, cancellationToken);
+        var days = BuildDays(allSales, todayLocal, categoryFilter, categoryByProduct);
+        var topProducts = await BuildTopProductsAsync(
+            sales, companyId, categoryFilter, categoryByProduct, cancellationToken);
         var collections = BuildCollections(sales);
         var todayStatus = BuildTodayStatus(todaySales, cancelledToday);
         var recentSales = await BuildRecentSalesAsync(sales, companyId, cancellationToken);
@@ -127,24 +137,95 @@ public sealed class GetDashboardSummaryHandler
             _timeProvider.GetUtcNow().UtcDateTime,
             BusinessCalendar.TimeZone).Date;
 
-    private static DashboardPeriodTotals BuildTotals(IReadOnlyCollection<Sale> sales)
+    // Mapa productId -> categoryId de los productos que aparecen en las ventas del periodo.
+    // Solo se llama cuando hay filtro de categoria: sin filtro no hace falta el catalogo.
+    private async Task<Dictionary<Guid, Guid?>> BuildCategoryLookupAsync(
+        IReadOnlyCollection<Sale> sales, CompanyId companyId, CancellationToken ct)
+    {
+        var productIds = sales
+            .SelectMany(s => s.Details)
+            .Select(d => d.ProductId)
+            .Distinct()
+            .ToList();
+
+        if (productIds.Count == 0)
+            return new Dictionary<Guid, Guid?>();
+
+        return (await _productRepository.GetByIdsAsync(productIds, companyId, ct))
+            .ToDictionary(p => p.Id.Value, p => p.CategoryId);
+    }
+
+    private static DashboardPeriodTotals BuildTotals(
+        IReadOnlyCollection<Sale> sales,
+        HashSet<Guid>? categoryFilter,
+        IReadOnlyDictionary<Guid, Guid?> categoryByProduct)
     {
         var retail = sales.Where(s => !s.IsCuentaCorriente).ToList();
         var currentAccount = sales.Where(s => s.IsCuentaCorriente).ToList();
 
         return new DashboardPeriodTotals(
-            Segment(sales),
-            Segment(retail),
-            Segment(currentAccount));
+            Segment(sales, categoryFilter, categoryByProduct),
+            Segment(retail, categoryFilter, categoryByProduct),
+            Segment(currentAccount, categoryFilter, categoryByProduct));
     }
 
-    private static DashboardSegment Segment(IReadOnlyCollection<Sale> sales) =>
-        new(sales.Count, decimal.Round(sales.Sum(s => s.TotalAmount), 2, MidpointRounding.AwayFromZero));
+    // Una venta cuenta si aporta al menos una unidad de las categorias elegidas. Las unidades
+    // y el importe suman solo las lineas que matchean, asi el numero es comparable con el
+    // reporte de ventas filtrado por categoria.
+    private static bool MatchesCategory(
+        SaleDetail detail,
+        HashSet<Guid> categoryFilter,
+        IReadOnlyDictionary<Guid, Guid?> categoryByProduct)
+        => categoryByProduct.TryGetValue(detail.ProductId.Value, out var categoryId)
+            && categoryId.HasValue
+            && categoryFilter.Contains(categoryId.Value);
+
+    private static DashboardSegment Segment(
+        IReadOnlyCollection<Sale> sales,
+        HashSet<Guid>? categoryFilter,
+        IReadOnlyDictionary<Guid, Guid?> categoryByProduct)
+    {
+        if (categoryFilter is null)
+        {
+            // Sin filtro: el importe es el total de la venta (incluye descuentos y recargos
+            // generales, que no cuelgan de ninguna linea) y las unidades son todas.
+            return new DashboardSegment(
+                sales.Count,
+                sales.Sum(s => s.Details.Sum(d => d.Quantity)),
+                decimal.Round(sales.Sum(s => s.TotalAmount), 2, MidpointRounding.AwayFromZero));
+        }
+
+        var count = 0;
+        var units = 0;
+        var amount = 0m;
+
+        foreach (var sale in sales)
+        {
+            var matching = sale.Details
+                .Where(d => MatchesCategory(d, categoryFilter, categoryByProduct))
+                .ToList();
+
+            if (matching.Count == 0)
+                continue;
+
+            count++;
+            units += matching.Sum(d => d.Quantity);
+            amount += matching.Sum(d => d.TotalAmount);
+        }
+
+        return new DashboardSegment(
+            count, units, decimal.Round(amount, 2, MidpointRounding.AwayFromZero));
+    }
 
     // Siempre 7 puntos, del mas viejo al mas nuevo. Los dias sin ventas van en cero,
     // no ausentes: el grafico necesita el eje completo.
+    // El filtro de categoria tambien manda aca: si no, el grafico contaria ventas que el
+    // bloque de arriba no cuenta y los numeros no cerrarian entre si.
     private static IReadOnlyList<DashboardDayPoint> BuildDays(
-        IReadOnlyCollection<Sale> sales, DateTime todayLocal)
+        IReadOnlyCollection<Sale> sales,
+        DateTime todayLocal,
+        HashSet<Guid>? categoryFilter,
+        IReadOnlyDictionary<Guid, Guid?> categoryByProduct)
     {
         var points = new List<DashboardDayPoint>(ChartDays);
 
@@ -155,22 +236,28 @@ public sealed class GetDashboardSummaryHandler
             var dayTo = BusinessCalendar.EndOfDayUtc(day);
             var ofDay = sales.Where(s => s.CreatedAt >= dayFrom && s.CreatedAt <= dayTo).ToList();
 
-            var retail = ofDay.Where(s => !s.IsCuentaCorriente).ToList();
-            var cc = ofDay.Where(s => s.IsCuentaCorriente).ToList();
+            var retail = Segment(
+                ofDay.Where(s => !s.IsCuentaCorriente).ToList(), categoryFilter, categoryByProduct);
+            var cc = Segment(
+                ofDay.Where(s => s.IsCuentaCorriente).ToList(), categoryFilter, categoryByProduct);
 
             points.Add(new DashboardDayPoint(
                 DateOnly.FromDateTime(day),
                 retail.Count,
-                decimal.Round(retail.Sum(s => s.TotalAmount), 2, MidpointRounding.AwayFromZero),
+                retail.Amount,
                 cc.Count,
-                decimal.Round(cc.Sum(s => s.TotalAmount), 2, MidpointRounding.AwayFromZero)));
+                cc.Amount));
         }
 
         return points;
     }
 
     private async Task<IReadOnlyList<DashboardTopProduct>> BuildTopProductsAsync(
-        IReadOnlyCollection<Sale> sales, CompanyId companyId, CancellationToken ct)
+        IReadOnlyCollection<Sale> sales,
+        CompanyId companyId,
+        HashSet<Guid>? categoryFilter,
+        IReadOnlyDictionary<Guid, Guid?> categoryByProduct,
+        CancellationToken ct)
     {
         var accumulator = new Dictionary<Guid, (int Units, HashSet<Guid> SaleIds)>();
 
@@ -178,6 +265,12 @@ public sealed class GetDashboardSummaryHandler
         {
             foreach (var detail in sale.Details)
             {
+                if (categoryFilter is not null
+                    && !MatchesCategory(detail, categoryFilter, categoryByProduct))
+                {
+                    continue;
+                }
+
                 var key = detail.ProductId.Value;
                 if (!accumulator.TryGetValue(key, out var acc))
                 {
