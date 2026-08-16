@@ -70,5 +70,7 @@ public sealed class DashboardControllerTests
             [],
             new DashboardCollections(0m, 0, 0m, 0, 0m),
             new DashboardTodayStatus(0, 0, 0, 0),
-            []);
+            [],
+            new DashboardMonthComparison(
+                new DateOnly(2026, 8, 1), new DateOnly(2026, 7, 1), 0, [], []));
 }

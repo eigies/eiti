@@ -7,7 +7,27 @@ public sealed record GetDashboardSummaryResponse(
     IReadOnlyList<DashboardTopProduct> TopProducts,
     DashboardCollections Collections,
     DashboardTodayStatus TodayStatus,
-    IReadOnlyList<DashboardRecentSale> RecentSales);
+    IReadOnlyList<DashboardRecentSale> RecentSales,
+    DashboardMonthComparison MonthComparison);
+
+// Acumulado del mes contra el mismo tramo del mes anterior.
+//
+// Las dos series se cortan en el MISMO dia del mes: hoy 16 de agosto, julio tambien llega
+// hasta el 16. Comparar un mes completo contra uno a mitad de camino haria parecer siempre
+// que se viene peor, que es la forma mas facil de que un grafico mienta.
+public sealed record DashboardMonthComparison(
+    DateOnly CurrentMonth,
+    DateOnly PreviousMonth,
+    int DaysElapsed,
+    IReadOnlyList<DashboardCumulativePoint> Current,
+    IReadOnlyList<DashboardCumulativePoint> Previous);
+
+// Valores ACUMULADOS al cierre de ese dia del mes, no el movimiento del dia.
+public sealed record DashboardCumulativePoint(
+    int DayOfMonth,
+    int Count,
+    int Units,
+    decimal Amount);
 
 // Minorista = venta normal; CuentaCorriente = IsCuentaCorriente. Misma definicion que
 // SalesReport y WholesaleByCustomer. Las canceladas quedan afuera de los tres segmentos.
