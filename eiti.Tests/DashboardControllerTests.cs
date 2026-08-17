@@ -67,6 +67,7 @@ public sealed class DashboardControllerTests
                 new DashboardSegment(0, 0, 0m),
                 new DashboardSegment(0, 0, 0m)),
             [],
+            new DashboardProductRanking([], [], []),
             [],
             new DashboardCollections(0m, 0, 0m, 0, 0m),
             new DashboardTodayStatus(0, 0, 0, 0),

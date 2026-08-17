@@ -4,7 +4,8 @@ public sealed record GetDashboardSummaryResponse(
     DashboardPeriodTotals Month,
     DashboardPeriodTotals Today,
     IReadOnlyList<DashboardDayPoint> Days,
-    IReadOnlyList<DashboardTopProduct> TopProducts,
+    DashboardProductRanking TopProducts,
+    IReadOnlyList<DashboardDayRanking> DayRankings,
     DashboardCollections Collections,
     DashboardTodayStatus TodayStatus,
     IReadOnlyList<DashboardRecentSale> RecentSales,
@@ -49,8 +50,10 @@ public sealed record DashboardSegment(int Count, int Units, decimal Amount);
 public sealed record DashboardDayPoint(
     DateOnly Date,
     int RetailCount,
+    int RetailUnits,
     decimal RetailAmount,
     int CurrentAccountCount,
+    int CurrentAccountUnits,
     decimal CurrentAccountAmount);
 
 public sealed record DashboardTopProduct(
@@ -59,6 +62,19 @@ public sealed record DashboardTopProduct(
     string Brand,
     int Units,
     int SalesCount);
+
+// El ranking viene partido por segmento porque el chip Minorista/CC del grafico es local al
+// front: sin las tres listas, cambiar de segmento seguiria mostrando el ranking de todo.
+public sealed record DashboardProductRanking(
+    IReadOnlyList<DashboardTopProduct> Total,
+    IReadOnlyList<DashboardTopProduct> Retail,
+    IReadOnlyList<DashboardTopProduct> CurrentAccount);
+
+// Un ranking por cada dia de la serie, para que seleccionar un dia acote tambien el ranking
+// y no solo la lista de ventas. Mismos dias que Days.
+public sealed record DashboardDayRanking(
+    DateOnly Date,
+    DashboardProductRanking Products);
 
 public sealed record DashboardCollections(
     decimal PaidAmount,
