@@ -42,15 +42,18 @@ public sealed class GetDashboardSummaryHandlerTests
     private static Product SampleProduct() =>
         Product.Create(Company, "BAT-001", "BAT-001", "Contoso", "Bateria", null, 100_000m, 70_000m, null);
 
-    private static Sale RetailSale(BranchId branchId, ProductId productId, decimal price) =>
+    private static Sale RetailSale(
+        BranchId branchId, ProductId productId, decimal price, int quantity = 1) =>
         Backdate(Sale.Create(Company, branchId, null, false, SaleStatus.Paid,
-            [SaleDetail.Create(productId, 1, price)],
-            [SalePayment.Create(SalePaymentMethod.Cash, price, null)],
+            [SaleDetail.Create(productId, quantity, price)],
+            [SalePayment.Create(SalePaymentMethod.Cash, price * quantity, null)],
             allowOverpayment: true), FixedCreatedAtUtc);
 
-    private static Sale CcSale(BranchId branchId, CustomerId customerId, ProductId productId, decimal price) =>
+    private static Sale CcSale(
+        BranchId branchId, CustomerId customerId, ProductId productId, decimal price,
+        int quantity = 1) =>
         Backdate(Sale.CreateCc(Company, branchId, customerId,
-            [SaleDetail.Create(productId, 1, price)]), FixedCreatedAtUtc);
+            [SaleDetail.Create(productId, quantity, price)]), FixedCreatedAtUtc);
 
     // Sale.Create no expone una fabrica para elegir la fecha. Los fixtures se fijan al reloj del
     // handler por reflection para que esta suite siga siendo valida despues de agosto de 2026.
@@ -281,14 +284,91 @@ public sealed class GetDashboardSummaryHandlerTests
             new GetDashboardSummaryQuery(new DateTime(2026, 8, 1), new DateTime(2026, 8, 31)),
             CancellationToken.None);
 
-        result.Value.TopProducts.Should().HaveCount(2);
-        result.Value.TopProducts[0].ProductId.Should().Be(winner.Id.Value);
-        result.Value.TopProducts[0].Units.Should().Be(2);
-        result.Value.TopProducts[0].SalesCount.Should().Be(2);
-        result.Value.TopProducts[0].Name.Should().Be("Bateria");
-        result.Value.TopProducts[1].ProductId.Should().Be(loser.Id.Value);
-        result.Value.TopProducts[1].Units.Should().Be(1);
-        result.Value.TopProducts[1].Name.Should().Be("Cable");
+        result.Value.TopProducts.Total.Should().HaveCount(2);
+        result.Value.TopProducts.Total[0].ProductId.Should().Be(winner.Id.Value);
+        result.Value.TopProducts.Total[0].Units.Should().Be(2);
+        result.Value.TopProducts.Total[0].SalesCount.Should().Be(2);
+        result.Value.TopProducts.Total[0].Name.Should().Be("Bateria");
+        result.Value.TopProducts.Total[1].ProductId.Should().Be(loser.Id.Value);
+        result.Value.TopProducts.Total[1].Units.Should().Be(1);
+        result.Value.TopProducts.Total[1].Name.Should().Be("Cable");
+    }
+
+    // La barra del grafico puede mostrar ventas o unidades. Con una venta de 3 unidades los dos
+    // numeros se separan, que es justo el caso que confundia contra el reporte de ventas.
+    [Fact]
+    public async Task SerieDeSieteDias_LlevaVentasYUnidadesPorSeparado()
+    {
+        var product = SampleProduct();
+        var handler = BuildHandler(
+            MockUser(), [RetailSale(BranchA, product.Id, 100_000m, quantity: 3)], product);
+
+        var result = await handler.Handle(
+            new GetDashboardSummaryQuery(new DateTime(2026, 8, 1), new DateTime(2026, 8, 31)),
+            CancellationToken.None);
+
+        result.Value.Days[^1].RetailCount.Should().Be(1);
+        result.Value.Days[^1].RetailUnits.Should().Be(3);
+        result.Value.Days[0].RetailUnits.Should().Be(0);
+    }
+
+    // El chip Minorista/CC tiene que mover tambien el ranking: si las tres listas fueran iguales,
+    // cambiar de segmento seguiria mostrando los productos de todo.
+    [Fact]
+    public async Task Ranking_SePartePorSegmento()
+    {
+        var bateria = SampleProduct();
+        var cable = Product.Create(
+            Company, "CAB-001", "CAB-001", "Contoso", "Cable", null, 20_000m, 12_000m, null);
+        var sales = new List<Sale>
+        {
+            RetailSale(BranchA, bateria.Id, 100_000m),
+            CcSale(BranchA, CustomerId.New(), cable.Id, 20_000m)
+        };
+        var handler = BuildHandler(MockUser(), sales, bateria, cable);
+
+        var result = await handler.Handle(
+            new GetDashboardSummaryQuery(new DateTime(2026, 8, 1), new DateTime(2026, 8, 31)),
+            CancellationToken.None);
+
+        var ranking = result.Value.TopProducts;
+        ranking.Total.Should().HaveCount(2);
+        ranking.Retail.Should().ContainSingle()
+            .Which.ProductId.Should().Be(bateria.Id.Value);
+        ranking.CurrentAccount.Should().ContainSingle()
+            .Which.ProductId.Should().Be(cable.Id.Value);
+    }
+
+    // Seleccionar un dia tiene que acotar el ranking a ese dia, no solo la lista de ventas.
+    [Fact]
+    public async Task RankingPorDia_SoloCuentaLasVentasDeEseDia()
+    {
+        var bateria = SampleProduct();
+        var cable = Product.Create(
+            Company, "CAB-001", "CAB-001", "Contoso", "Cable", null, 20_000m, 12_000m, null);
+        var sales = new List<Sale>
+        {
+            RetailSale(BranchA, bateria.Id, 100_000m),
+            Backdate(
+                RetailSale(BranchA, cable.Id, 20_000m),
+                BusinessCalendar.StartOfDayUtc(FixedTodayLocal.AddDays(-3)).AddHours(12))
+        };
+        var handler = BuildHandler(MockUser(), sales, bateria, cable);
+
+        var result = await handler.Handle(
+            new GetDashboardSummaryQuery(new DateTime(2026, 8, 1), new DateTime(2026, 8, 31)),
+            CancellationToken.None);
+
+        var rankings = result.Value.DayRankings;
+        rankings.Should().HaveCount(7);
+        rankings.Should().BeInAscendingOrder(d => d.Date);
+
+        // Hoy: solo la bateria. Tres dias atras: solo el cable. El resto, vacio.
+        rankings[^1].Products.Total.Should().ContainSingle()
+            .Which.ProductId.Should().Be(bateria.Id.Value);
+        rankings[^4].Products.Total.Should().ContainSingle()
+            .Which.ProductId.Should().Be(cable.Id.Value);
+        rankings[^2].Products.Total.Should().BeEmpty();
     }
 
     [Fact]
@@ -431,9 +511,17 @@ public sealed class GetDashboardSummaryHandlerTests
                 It.IsAny<Guid?>(), It.IsAny<IReadOnlyCollection<Guid>?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(0);
 
+        // El ranking por dia mira la ventana ampliada, asi que este handler tambien resuelve
+        // nombres de productos: un mock sin Setup devolveria null y romperia antes de asertar.
+        var productRepository = new Mock<IProductRepository>();
+        productRepository
+            .Setup(r => r.GetByIdsAsync(
+                It.IsAny<IEnumerable<ProductId>>(), It.IsAny<CompanyId>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IReadOnlyList<Product>)[]);
+
         var handler = new GetDashboardSummaryHandler(
             MockUser().Object, saleRepository.Object,
-            new Mock<IProductRepository>().Object, new Mock<ICustomerRepository>().Object, Clock);
+            productRepository.Object, new Mock<ICustomerRepository>().Object, Clock);
 
         // Rango pedido = solo "hoy": fuerza a que "ayer" quede afuera de from..to pero adentro
         // de la ventana de 7 dias del grafico.
@@ -689,8 +777,8 @@ public sealed class GetDashboardSummaryHandlerTests
             CancellationToken.None);
 
         // Si el top ignorara el filtro, el accesorio apareceria en la lista.
-        result.Value.TopProducts.Should().HaveCount(1);
-        result.Value.TopProducts[0].ProductId.Should().Be(bateria.Id.Value);
-        result.Value.TopProducts[0].Units.Should().Be(2);
+        result.Value.TopProducts.Total.Should().HaveCount(1);
+        result.Value.TopProducts.Total[0].ProductId.Should().Be(bateria.Id.Value);
+        result.Value.TopProducts.Total[0].Units.Should().Be(2);
     }
 }

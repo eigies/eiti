@@ -105,8 +105,9 @@ public sealed class GetDashboardSummaryHandler
             companyId, todayFrom, todayTo, request.BranchId, allowedBranchIds, cancellationToken);
 
         var days = BuildDays(allSales, todayLocal, categoryFilter, categoryByProduct);
-        var topProducts = await BuildTopProductsAsync(
-            sales, companyId, categoryFilter, categoryByProduct, cancellationToken);
+        var (topProducts, dayRankings) = await BuildRankingsAsync(
+            sales, allSales, todayLocal, companyId, categoryFilter, categoryByProduct,
+            cancellationToken);
         var collections = BuildCollections(sales);
         var todayStatus = BuildTodayStatus(todaySales, cancelledToday);
         var recentSales = await BuildRecentSalesAsync(sales, companyId, cancellationToken);
@@ -116,7 +117,7 @@ public sealed class GetDashboardSummaryHandler
             categoryFilter, categoryByProduct);
 
         var response = new GetDashboardSummaryResponse(
-            month, today, days, topProducts, collections, todayStatus, recentSales,
+            month, today, days, topProducts, dayRankings, collections, todayStatus, recentSales,
             monthComparison);
 
         return Result<GetDashboardSummaryResponse>.Success(
@@ -334,20 +335,78 @@ public sealed class GetDashboardSummaryHandler
             points.Add(new DashboardDayPoint(
                 DateOnly.FromDateTime(day),
                 retail.Count,
+                retail.Units,
                 retail.Amount,
                 cc.Count,
+                cc.Units,
                 cc.Amount));
         }
 
         return points;
     }
 
-    private async Task<IReadOnlyList<DashboardTopProduct>> BuildTopProductsAsync(
+    // Ranking del periodo (partido por segmento) y un ranking por cada dia de la serie.
+    //
+    // Se arman primero en crudo (id + unidades + tickets) y recien al final se resuelven los
+    // nombres de TODOS los rankings en una sola consulta: son hasta 8 rankings x 3 segmentos,
+    // y pedir el catalogo por cada uno seria una tormenta de queries por carga del dashboard.
+    private async Task<(DashboardProductRanking Period, IReadOnlyList<DashboardDayRanking> Days)>
+        BuildRankingsAsync(
+            IReadOnlyCollection<Sale> periodSales,
+            IReadOnlyCollection<Sale> allSales,
+            DateTime todayLocal,
+            CompanyId companyId,
+            HashSet<Guid>? categoryFilter,
+            IReadOnlyDictionary<Guid, Guid?> categoryByProduct,
+            CancellationToken ct)
+    {
+        var periodRaw = RankBySegment(periodSales, categoryFilter, categoryByProduct);
+
+        var daysRaw = new List<(DateOnly Date, RawRanking Ranking)>(ChartDays);
+        for (var offset = ChartDays - 1; offset >= 0; offset--)
+        {
+            var day = todayLocal.AddDays(-offset);
+            var dayFrom = BusinessCalendar.StartOfDayUtc(day);
+            var dayTo = BusinessCalendar.EndOfDayUtc(day);
+            var ofDay = allSales.Where(s => s.CreatedAt >= dayFrom && s.CreatedAt <= dayTo).ToList();
+
+            daysRaw.Add((
+                DateOnly.FromDateTime(day),
+                RankBySegment(ofDay, categoryFilter, categoryByProduct)));
+        }
+
+        var productIds = periodRaw.All()
+            .Concat(daysRaw.SelectMany(d => d.Ranking.All()))
+            .Select(entry => entry.ProductId)
+            .Distinct()
+            .Select(id => new ProductId(id))
+            .ToList();
+
+        var products = productIds.Count == 0
+            ? new Dictionary<Guid, Product>()
+            : (await _productRepository.GetByIdsAsync(productIds, companyId, ct))
+                .ToDictionary(p => p.Id.Value, p => p);
+
+        return (
+            Resolve(periodRaw, products),
+            daysRaw
+                .Select(d => new DashboardDayRanking(d.Date, Resolve(d.Ranking, products)))
+                .ToList());
+    }
+
+    private static RawRanking RankBySegment(
         IReadOnlyCollection<Sale> sales,
-        CompanyId companyId,
         HashSet<Guid>? categoryFilter,
-        IReadOnlyDictionary<Guid, Guid?> categoryByProduct,
-        CancellationToken ct)
+        IReadOnlyDictionary<Guid, Guid?> categoryByProduct) =>
+        new(
+            Rank(sales, categoryFilter, categoryByProduct),
+            Rank(sales.Where(s => !s.IsCuentaCorriente).ToList(), categoryFilter, categoryByProduct),
+            Rank(sales.Where(s => s.IsCuentaCorriente).ToList(), categoryFilter, categoryByProduct));
+
+    private static IReadOnlyList<RawEntry> Rank(
+        IReadOnlyCollection<Sale> sales,
+        HashSet<Guid>? categoryFilter,
+        IReadOnlyDictionary<Guid, Guid?> categoryByProduct)
     {
         var accumulator = new Dictionary<Guid, (int Units, HashSet<Guid> SaleIds)>();
 
@@ -373,40 +432,52 @@ public sealed class GetDashboardSummaryHandler
             }
         }
 
-        if (accumulator.Count == 0)
-            return Array.Empty<DashboardTopProduct>();
-
-        // Se recorta a los TopProductsCount ganadores ANTES de pedir nombres: GetByCompanyIdAsync
-        // trae el catalogo entero al change tracker en cada carga del dashboard, GetByIdsAsync
-        // trae solo los que se van a mostrar.
-        var top = accumulator
+        // Se recorta a los TopProductsCount ganadores ANTES de pedir nombres. El desempate por
+        // ProductId no es cosmetico: sin el, dos productos empatados entran o quedan afuera del
+        // top segun como enumere el diccionario, y el ranking cambiaria entre dos cargas iguales.
+        return accumulator
             .OrderByDescending(kvp => kvp.Value.Units)
             .ThenByDescending(kvp => kvp.Value.SaleIds.Count)
+            .ThenBy(kvp => kvp.Key)
             .Take(TopProductsCount)
+            .Select(kvp => new RawEntry(kvp.Key, kvp.Value.Units, kvp.Value.SaleIds.Count))
             .ToList();
+    }
 
-        var productIds = top.Select(kvp => new ProductId(kvp.Key)).ToList();
-        var products = (await _productRepository.GetByIdsAsync(productIds, companyId, ct))
-            .ToDictionary(p => p.Id.Value, p => p);
+    private static DashboardProductRanking Resolve(
+        RawRanking ranking, IReadOnlyDictionary<Guid, Product> products) =>
+        new(
+            Resolve(ranking.Total, products),
+            Resolve(ranking.Retail, products),
+            Resolve(ranking.CurrentAccount, products));
 
-        return top
-            .Select(kvp =>
+    private static IReadOnlyList<DashboardTopProduct> Resolve(
+        IReadOnlyList<RawEntry> entries, IReadOnlyDictionary<Guid, Product> products) =>
+        entries
+            .Select(entry =>
             {
-                products.TryGetValue(kvp.Key, out var product);
+                products.TryGetValue(entry.ProductId, out var product);
                 return new DashboardTopProduct(
-                    kvp.Key,
+                    entry.ProductId,
                     product?.Name ?? "Producto eliminado",
                     product?.Brand ?? "Sin marca",
-                    kvp.Value.Units,
-                    kvp.Value.SaleIds.Count);
+                    entry.Units,
+                    entry.SalesCount);
             })
-            // Desempate final por nombre: sin esto, dos productos empatados en unidades y
-            // cantidad de ventas quedan en un orden que depende de la enumeracion del
-            // diccionario, no del dato.
+            // Desempate final por nombre, ya con los nombres resueltos.
             .OrderByDescending(p => p.Units)
             .ThenByDescending(p => p.SalesCount)
             .ThenBy(p => p.Name, StringComparer.Ordinal)
             .ToList();
+
+    private sealed record RawEntry(Guid ProductId, int Units, int SalesCount);
+
+    private sealed record RawRanking(
+        IReadOnlyList<RawEntry> Total,
+        IReadOnlyList<RawEntry> Retail,
+        IReadOnlyList<RawEntry> CurrentAccount)
+    {
+        public IEnumerable<RawEntry> All() => Total.Concat(Retail).Concat(CurrentAccount);
     }
 
     // Cobrado y pendiente salen del ESTADO de la venta, no de sus pagos: Sale.MonetaryPaidAmount
