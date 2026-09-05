@@ -39,6 +39,7 @@ public sealed class ApplicationDbContext : DbContext
     public DbSet<CashMovement> CashMovements { get; set; }
     public DbSet<Customer> Customers { get; set; }
     public DbSet<CustomerPayment> CustomerPayments => Set<CustomerPayment>();
+    public DbSet<CustomerCreditNote> CustomerCreditNotes => Set<CustomerCreditNote>();
     public DbSet<Company> Companies { get; set; }
     public DbSet<CompanyOnboarding> CompanyOnboarding { get; set; }
     public DbSet<Product> Products { get; set; }
@@ -65,6 +66,7 @@ public sealed class ApplicationDbContext : DbContext
     public DbSet<PasswordResetToken> PasswordResetTokens { get; set; }
     public DbSet<Supplier> Suppliers => Set<Supplier>();
     public DbSet<SupplierPayment> SupplierPayments => Set<SupplierPayment>();
+    public DbSet<SupplierCreditNote> SupplierCreditNotes => Set<SupplierCreditNote>();
     public DbSet<Purchase> Purchases => Set<Purchase>();
     public DbSet<PurchaseDetail> PurchaseDetails => Set<PurchaseDetail>();
     public DbSet<PurchasePayment> PurchasePayments => Set<PurchasePayment>();

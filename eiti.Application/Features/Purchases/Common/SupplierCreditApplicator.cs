@@ -19,7 +19,8 @@ internal static class SupplierCreditApplicator
         IPurchaseRepository purchaseRepository,
         Guid? excludePurchaseId,
         CancellationToken cancellationToken,
-        Guid? supplierPaymentId = null)
+        Guid? supplierPaymentId = null,
+        Guid? creditNoteId = null)
     {
         var imputaciones = new List<SupplierPaymentImputacion>();
 
@@ -52,7 +53,8 @@ internal static class SupplierCreditApplicator
                 DateTime.UtcNow,
                 null,
                 "Saldo a favor aplicado automáticamente",
-                supplierPaymentId: supplierPaymentId));
+                supplierPaymentId: supplierPaymentId,
+                creditNoteId: creditNoteId));
 
             imputaciones.Add(new SupplierPaymentImputacion(
                 purchase.Id, purchase.Code, purchase.InvoiceNumber, applied));

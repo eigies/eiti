@@ -2,6 +2,7 @@ using eiti.Application.Abstractions.Repositories;
 using eiti.Application.Abstractions.Services;
 using eiti.Application.Common;
 using eiti.Application.Features.Purchases.Common;
+using eiti.Domain.Common;
 using eiti.Domain.Purchases;
 using MediatR;
 
@@ -13,6 +14,7 @@ public sealed class GetSupplierAccountHandler
     private readonly ICurrentUserService _currentUserService;
     private readonly ISupplierRepository _supplierRepository;
     private readonly ISupplierPaymentRepository _supplierPaymentRepository;
+    private readonly ISupplierCreditNoteRepository _creditNoteRepository;
     private readonly IPurchaseRepository _purchaseRepository;
     private readonly IChequeRepository _chequeRepository;
 
@@ -20,12 +22,14 @@ public sealed class GetSupplierAccountHandler
         ICurrentUserService currentUserService,
         ISupplierRepository supplierRepository,
         ISupplierPaymentRepository supplierPaymentRepository,
+        ISupplierCreditNoteRepository creditNoteRepository,
         IPurchaseRepository purchaseRepository,
         IChequeRepository chequeRepository)
     {
         _currentUserService = currentUserService;
         _supplierRepository = supplierRepository;
         _supplierPaymentRepository = supplierPaymentRepository;
+        _creditNoteRepository = creditNoteRepository;
         _purchaseRepository = purchaseRepository;
         _chequeRepository = chequeRepository;
     }
@@ -60,7 +64,13 @@ public sealed class GetSupplierAccountHandler
         var saldoPendiente = purchases
             .Where(p => p.Status == PurchaseStatus.Active)
             .Sum(p => p.PendingAmount);
-        var pagadoTotal = deudaTotal - saldoPendiente;
+        // Imputaciones de notas de crédito: bajan el pendiente pero NO son plata pagada.
+        // Como pagadoTotal se deriva por resta, sin descontarlas diría que se pagó de más.
+        var notasCreditoImputadas = purchases
+            .SelectMany(p => p.Payments)
+            .Where(x => x.CreditNoteId.HasValue && x.Status == PurchasePaymentStatus.Active)
+            .Sum(x => x.Amount);
+        var pagadoTotal = deudaTotal - saldoPendiente - notasCreditoImputadas;
 
         // Imputaciones por pago de proveedor: qué facturas cubrió cada pago y por cuánto (solo filas activas).
         var imputacionesByPayment = new Dictionary<Guid, List<SupplierPaymentImputacion>>();
@@ -159,6 +169,50 @@ public sealed class GetSupplierAccountHandler
                 sobrante,
                 pay.Reference,
                 pay.Notes));
+        }
+
+        var creditNotes = await _creditNoteRepository.ListBySupplierAsync(
+            companyId.Value, supplier.Id, cancellationToken);
+
+        var imputacionesByNote = new Dictionary<Guid, List<SupplierPaymentImputacion>>();
+        foreach (var p in purchases)
+        {
+            foreach (var pay in p.Payments.Where(x =>
+                x.CreditNoteId.HasValue && x.Status == PurchasePaymentStatus.Active))
+            {
+                if (!imputacionesByNote.TryGetValue(pay.CreditNoteId!.Value, out var list))
+                {
+                    list = new List<SupplierPaymentImputacion>();
+                    imputacionesByNote[pay.CreditNoteId.Value] = list;
+                }
+
+                list.Add(new SupplierPaymentImputacion(p.Id, p.Code, p.InvoiceNumber, pay.Amount));
+            }
+        }
+
+        foreach (var note in creditNotes.Where(n => n.Status == CreditNoteStatus.Active))
+        {
+            var imputacionesNota = imputacionesByNote.TryGetValue(note.Id, out var l)
+                ? (IReadOnlyList<SupplierPaymentImputacion>)l
+                : [];
+
+            movements.Add(new SupplierAccountMovement(
+                "nota_credito",
+                note.Id,
+                note.Date,
+                note.Reason,
+                note.Code,
+                note.Amount,
+                false,
+                (int)note.Status,
+                "Activa",
+                null,
+                null,
+                imputacionesNota,
+                decimal.Round(
+                    note.Amount - imputacionesNota.Sum(i => i.Amount), 2, MidpointRounding.AwayFromZero),
+                null,
+                note.Reason));
         }
 
         var ordered = movements

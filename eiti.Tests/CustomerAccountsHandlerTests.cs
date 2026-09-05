@@ -180,10 +180,17 @@ public sealed class CustomerAccountsHandlerTests
             .Setup(repository => repository.ListByCustomerAsync(companyId.Value, customer.Id.Value, It.IsAny<CancellationToken>()))
             .ReturnsAsync([cancelledPayment]);
 
+        var creditNoteRepository = new Mock<ICustomerCreditNoteRepository>();
+        creditNoteRepository
+            .Setup(repository => repository.ListByCustomerAsync(
+                It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+
         var handler = new GetCustomerAccountHandler(
             currentUserService.Object,
             customerRepository.Object,
             customerPaymentRepository.Object,
+            creditNoteRepository.Object,
             saleRepository.Object,
             chequeRepository.Object);
 

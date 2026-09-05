@@ -137,6 +137,12 @@ public interface ISaleRepository
         Guid customerPaymentId,
         CancellationToken cancellationToken = default);
 
+    // Ventas con imputaciones activas de una nota de crédito, para poder deshacerlas al anularla. Tracked.
+    Task<IReadOnlyList<Sale>> ListByCreditNoteIdAsync(
+        CompanyId companyId,
+        Guid creditNoteId,
+        CancellationToken cancellationToken = default);
+
     // Saldo CC pendiente por cliente (ventas CC activas con pendiente > 0). Para la lista de cuentas.
     Task<Dictionary<Guid, decimal>> GetPendingCcTotalsByCustomerAsync(
         CompanyId companyId,

@@ -333,6 +333,65 @@ public sealed class CashSession : AggregateRoot<CashSessionId>
             customerPaymentId: customerPaymentId);
     }
 
+    // Notas de crédito: se ven en la sesión del día pero NO mueven efectivo, así que van con
+    // dirección None y ExpectedClosingAmount las suma como 0. Mismo tratamiento que un pago CC
+    // con cheque (RegisterCcNonCashIncome).
+    public void RegisterCustomerCreditNote(decimal amount, Guid creditNoteId, string code, UserId createdByUserId)
+    {
+        EnsureOpen();
+
+        AddMovement(
+            CashMovementType.CustomerCreditNote,
+            CashMovementDirection.None,
+            amount,
+            CashReferenceTypes.CreditNote,
+            creditNoteId,
+            $"Nota de crédito a cliente {code}",
+            createdByUserId);
+    }
+
+    public void RegisterCustomerCreditNoteCancellation(decimal amount, Guid creditNoteId, string code, UserId createdByUserId)
+    {
+        EnsureOpen();
+
+        AddMovement(
+            CashMovementType.CustomerCreditNoteCancellation,
+            CashMovementDirection.None,
+            amount,
+            CashReferenceTypes.CreditNote,
+            creditNoteId,
+            $"Anulación de nota de crédito a cliente {code}",
+            createdByUserId);
+    }
+
+    public void RegisterSupplierCreditNote(decimal amount, Guid creditNoteId, string code, UserId createdByUserId)
+    {
+        EnsureOpen();
+
+        AddMovement(
+            CashMovementType.SupplierCreditNote,
+            CashMovementDirection.None,
+            amount,
+            CashReferenceTypes.CreditNote,
+            creditNoteId,
+            $"Nota de crédito de proveedor {code}",
+            createdByUserId);
+    }
+
+    public void RegisterSupplierCreditNoteCancellation(decimal amount, Guid creditNoteId, string code, UserId createdByUserId)
+    {
+        EnsureOpen();
+
+        AddMovement(
+            CashMovementType.SupplierCreditNoteCancellation,
+            CashMovementDirection.None,
+            amount,
+            CashReferenceTypes.CreditNote,
+            creditNoteId,
+            $"Anulación de nota de crédito de proveedor {code}",
+            createdByUserId);
+    }
+
     public void RegisterSaleCancellation(
         IEnumerable<SalePayment> payments,
         Guid saleId,

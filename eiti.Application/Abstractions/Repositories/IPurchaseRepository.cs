@@ -54,4 +54,10 @@ public interface IPurchaseRepository
         Guid companyId,
         Guid supplierPaymentId,
         CancellationToken ct = default);
+
+    // Compras con imputaciones activas de una nota de crédito, para deshacerlas al anularla. Tracked.
+    Task<List<Purchase>> ListByCreditNoteIdAsync(
+        Guid companyId,
+        Guid creditNoteId,
+        CancellationToken ct = default);
 }

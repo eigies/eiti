@@ -129,6 +129,19 @@ public sealed class PurchaseRepository : IPurchaseRepository
             .ToListAsync(ct);
     }
 
+    public async Task<List<Purchase>> ListByCreditNoteIdAsync(
+        Guid companyId,
+        Guid creditNoteId,
+        CancellationToken ct = default)
+    {
+        return await _context.Purchases
+            .Include(p => p.Details)
+            .Include(p => p.Payments)
+            .Where(p => p.CompanyId == companyId
+                && p.Payments.Any(pay => pay.CreditNoteId == creditNoteId))
+            .ToListAsync(ct);
+    }
+
     public async Task<List<Purchase>> ListPendingBySupplierAsync(
         Guid companyId,
         Guid supplierId,

@@ -59,5 +59,9 @@ public sealed class SaleCcPaymentConfiguration : IEntityTypeConfiguration<SaleCc
 
         builder.Property(p => p.CustomerPaymentId).IsRequired(false);
         builder.HasIndex(p => p.CustomerPaymentId);
+
+        // Indice no opcional: ListByCreditNoteIdAsync filtra por esta columna en cada anulacion.
+        builder.Property(p => p.CreditNoteId).IsRequired(false);
+        builder.HasIndex(p => p.CreditNoteId);
     }
 }

@@ -22,6 +22,10 @@ public sealed class SaleCcPayment : Entity<SaleCcPaymentId>
     // Back-link de las imputaciones FIFO (method = CustomerCredit) con el cobro a nivel cliente que las generó.
     public Guid? CustomerPaymentId { get; private set; }
 
+    // Back-link con la nota de crédito que generó esta imputación. Hermano de CustomerPaymentId:
+    // solo uno de los dos se setea. Sin esto, anular una NC no podría deshacer exactamente lo suyo.
+    public Guid? CreditNoteId { get; private set; }
+
     private SaleCcPayment()
     {
     }
@@ -39,7 +43,8 @@ public sealed class SaleCcPayment : Entity<SaleCcPaymentId>
         decimal? cardSurchargePct = null,
         decimal? cardSurchargeAmt = null,
         decimal? totalCobrado = null,
-        Guid? customerPaymentId = null)
+        Guid? customerPaymentId = null,
+        Guid? creditNoteId = null)
         : base(id)
     {
         if (amount <= 0)
@@ -66,6 +71,7 @@ public sealed class SaleCcPayment : Entity<SaleCcPaymentId>
         CardSurchargeAmt = cardSurchargeAmt;
         TotalCobrado = totalCobrado;
         CustomerPaymentId = customerPaymentId;
+        CreditNoteId = creditNoteId;
     }
 
     public static SaleCcPayment Create(
@@ -80,9 +86,10 @@ public sealed class SaleCcPayment : Entity<SaleCcPaymentId>
         decimal? cardSurchargePct = null,
         decimal? cardSurchargeAmt = null,
         decimal? totalCobrado = null,
-        Guid? customerPaymentId = null)
+        Guid? customerPaymentId = null,
+        Guid? creditNoteId = null)
     {
-        return new SaleCcPayment(SaleCcPaymentId.New(), saleId, method, amount, date, notes, groupId, cardBankId, cardCuotas, cardSurchargePct, cardSurchargeAmt, totalCobrado, customerPaymentId);
+        return new SaleCcPayment(SaleCcPaymentId.New(), saleId, method, amount, date, notes, groupId, cardBankId, cardCuotas, cardSurchargePct, cardSurchargeAmt, totalCobrado, customerPaymentId, creditNoteId);
     }
 
     public void SetCardData(int bankId, int cuotas, decimal surchargePct, decimal surchargeAmt)

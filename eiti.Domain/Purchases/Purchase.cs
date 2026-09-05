@@ -97,6 +97,25 @@ public sealed class Purchase
         }
     }
 
+    // Cancela las imputaciones que generó una nota de crédito y recalcula el estado.
+    // Filtra por CreditNoteId para no tocar las de un pago ni las de otra NC.
+    // Devuelve el total desimputado, para que el caller sepa cuánto crédito revertir.
+    public decimal RevertCreditNote(Guid creditNoteId)
+    {
+        var rows = _payments
+            .Where(p => p.CreditNoteId == creditNoteId && p.Status == PurchasePaymentStatus.Active)
+            .ToList();
+
+        var total = 0m;
+        foreach (var row in rows)
+        {
+            total += row.Amount;
+            CancelPayment(row.Id);
+        }
+
+        return total;
+    }
+
     public void Cancel()
     {
         if (Status == PurchaseStatus.Cancelled)

@@ -23,7 +23,7 @@ public sealed record GetCustomerAccountResponse(
     IReadOnlyList<CustomerAccountMovement> Movements);
 
 public sealed record CustomerAccountMovement(
-    string Type,            // "venta" | "cobro"
+    string Type,            // "venta" | "cobro" | "nota_credito"
     Guid Id,
     DateTime Date,
     string Description,

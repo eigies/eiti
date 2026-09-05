@@ -3,6 +3,7 @@ using eiti.Application.Abstractions.Services;
 using eiti.Application.Common;
 using eiti.Application.Features.Customers.Common;
 using eiti.Domain.Customers;
+using eiti.Domain.Common;
 using eiti.Domain.Sales;
 using MediatR;
 
@@ -14,6 +15,7 @@ public sealed class GetCustomerAccountHandler
     private readonly ICurrentUserService _currentUserService;
     private readonly ICustomerRepository _customerRepository;
     private readonly ICustomerPaymentRepository _customerPaymentRepository;
+    private readonly ICustomerCreditNoteRepository _creditNoteRepository;
     private readonly ISaleRepository _saleRepository;
     private readonly IChequeRepository _chequeRepository;
 
@@ -21,12 +23,14 @@ public sealed class GetCustomerAccountHandler
         ICurrentUserService currentUserService,
         ICustomerRepository customerRepository,
         ICustomerPaymentRepository customerPaymentRepository,
+        ICustomerCreditNoteRepository creditNoteRepository,
         ISaleRepository saleRepository,
         IChequeRepository chequeRepository)
     {
         _currentUserService = currentUserService;
         _customerRepository = customerRepository;
         _customerPaymentRepository = customerPaymentRepository;
+        _creditNoteRepository = creditNoteRepository;
         _saleRepository = saleRepository;
         _chequeRepository = chequeRepository;
     }
@@ -176,6 +180,55 @@ public sealed class GetCustomerAccountHandler
                 pay.Reference,
                 pay.Notes,
                 pay.CreatedAt));
+        }
+
+        // Notas de crédito. Los totales no necesitan tocarse: la imputacion ya baja
+        // CcPendingAmount (y con eso saldoPendiente), y cobradoTotal excluye el metodo
+        // CustomerCredit, asi que la NC no cuenta como dinero cobrado. Que es lo correcto:
+        // no entro un peso.
+        var creditNotes = await _creditNoteRepository.ListByCustomerAsync(
+            companyId.Value, customer.Id.Value, cancellationToken);
+
+        var imputacionesByNote = new Dictionary<Guid, List<CustomerPaymentImputacion>>();
+        foreach (var s in sales)
+        {
+            foreach (var row in s.CcPayments.Where(p =>
+                p.CreditNoteId.HasValue && p.Status == SaleCcPaymentStatus.Active))
+            {
+                if (!imputacionesByNote.TryGetValue(row.CreditNoteId!.Value, out var list))
+                {
+                    list = new List<CustomerPaymentImputacion>();
+                    imputacionesByNote[row.CreditNoteId.Value] = list;
+                }
+
+                list.Add(new CustomerPaymentImputacion(s.Id.Value, s.Code ?? string.Empty, row.Amount));
+            }
+        }
+
+        foreach (var note in creditNotes.Where(n => n.Status == CreditNoteStatus.Active))
+        {
+            var imputacionesNota = imputacionesByNote.TryGetValue(note.Id, out var l)
+                ? (IReadOnlyList<CustomerPaymentImputacion>)l
+                : [];
+
+            movements.Add(new CustomerAccountMovement(
+                "nota_credito",
+                note.Id,
+                note.Date,
+                note.Reason,
+                note.Code,
+                note.Amount,
+                false,
+                (int)note.Status,
+                "Activa",
+                null,
+                null,
+                imputacionesNota,
+                decimal.Round(
+                    note.Amount - imputacionesNota.Sum(i => i.Amount), 2, MidpointRounding.AwayFromZero),
+                null,
+                note.Reason,
+                note.CreatedAt));
         }
 
         var ordered = movements

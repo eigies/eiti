@@ -60,6 +60,7 @@ public static class DependencyInjection
         services.AddScoped<ICompanyOnboardingRepository, CompanyOnboardingRepository>();
         services.AddScoped<ICustomerRepository, CustomerRepository>();
         services.AddScoped<ICustomerPaymentRepository, CustomerPaymentRepository>();
+        services.AddScoped<ICustomerCreditNoteRepository, CustomerCreditNoteRepository>();
         services.AddScoped<IEmployeeRepository, EmployeeRepository>();
         services.AddScoped<IDriverProfileRepository, DriverProfileRepository>();
         services.AddScoped<IFleetLogRepository, FleetLogRepository>();
@@ -75,6 +76,7 @@ public static class DependencyInjection
         services.AddScoped<IPasswordResetTokenRepository, PasswordResetTokenRepository>();
         services.AddScoped<ISupplierRepository, SupplierRepository>();
         services.AddScoped<ISupplierPaymentRepository, SupplierPaymentRepository>();
+        services.AddScoped<ISupplierCreditNoteRepository, SupplierCreditNoteRepository>();
         services.AddScoped<IPurchaseRepository, PurchaseRepository>();
         services.AddScoped<IPayrollDeductionConceptRepository, PayrollDeductionConceptRepository>();
         services.AddScoped<IPayrollAdvanceRepository, PayrollAdvanceRepository>();

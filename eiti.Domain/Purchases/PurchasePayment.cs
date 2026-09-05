@@ -10,6 +10,10 @@ public sealed class PurchasePayment
     public Guid? ChequeId { get; private set; }
     // Si la fila es una imputación FIFO generada por un pago de proveedor, apunta a ese SupplierPayment.
     public Guid? SupplierPaymentId { get; private set; }
+
+    // Si la fila es una imputación FIFO generada por una nota de crédito, apunta a esa NC.
+    // Hermano de SupplierPaymentId: solo uno de los dos se setea.
+    public Guid? CreditNoteId { get; private set; }
     public string? Reference { get; private set; }
     public string? Notes { get; private set; }
     public DateTime Date { get; private set; }
@@ -27,7 +31,8 @@ public sealed class PurchasePayment
         string? reference,
         string? notes,
         Guid? chequeId,
-        Guid? supplierPaymentId)
+        Guid? supplierPaymentId,
+        Guid? creditNoteId)
     {
         if (amount <= 0)
             throw new ArgumentException("Payment amount must be greater than zero.", nameof(amount));
@@ -38,6 +43,7 @@ public sealed class PurchasePayment
         Status = PurchasePaymentStatus.Active;
         ChequeId = chequeId;
         SupplierPaymentId = supplierPaymentId;
+        CreditNoteId = creditNoteId;
         Date = date;
         Reference = NormalizeOptional(reference, 120);
         Notes = NormalizeOptional(notes, 500);
@@ -51,9 +57,10 @@ public sealed class PurchasePayment
         string? reference,
         string? notes,
         Guid? chequeId = null,
-        Guid? supplierPaymentId = null)
+        Guid? supplierPaymentId = null,
+        Guid? creditNoteId = null)
     {
-        return new PurchasePayment(Guid.NewGuid(), method, amount, date, reference, notes, chequeId, supplierPaymentId);
+        return new PurchasePayment(Guid.NewGuid(), method, amount, date, reference, notes, chequeId, supplierPaymentId, creditNoteId);
     }
 
     public void Cancel()

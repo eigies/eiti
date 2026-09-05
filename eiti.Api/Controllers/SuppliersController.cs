@@ -10,6 +10,8 @@ using eiti.Application.Features.Suppliers.Queries.ListSuppliers;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using eiti.Application.Features.Suppliers.Commands.CreateSupplierCreditNote;
+using eiti.Application.Features.Suppliers.Commands.CancelSupplierCreditNote;
 
 namespace eiti.Api.Controllers;
 
@@ -104,7 +106,38 @@ public sealed class SuppliersController : ControllerBase
         var result = await _sender.Send(new CancelSupplierPaymentCommand(id, paymentId), cancellationToken);
         return result.ToActionResult();
     }
+
+    [HttpPost("{id:guid}/credit-notes")]
+    public async Task<IActionResult> CreateSupplierCreditNote(
+        Guid id,
+        [FromBody] CreateSupplierCreditNoteRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _sender.Send(
+            new CreateSupplierCreditNoteCommand(id, request.Amount, request.Reason, request.Date, request.PurchaseId),
+            cancellationToken);
+
+        return result.ToActionResult();
+    }
+
+    [HttpDelete("{id:guid}/credit-notes/{creditNoteId:guid}")]
+    public async Task<IActionResult> CancelSupplierCreditNote(
+        Guid id,
+        Guid creditNoteId,
+        CancellationToken cancellationToken)
+    {
+        var result = await _sender.Send(
+            new CancelSupplierCreditNoteCommand(id, creditNoteId), cancellationToken);
+
+        return result.ToActionResult();
+    }
 }
+
+public sealed record CreateSupplierCreditNoteRequest(
+    decimal Amount,
+    string Reason,
+    DateTime Date,
+    Guid? PurchaseId = null);
 
 public sealed record AddSupplierPaymentRequest(
     int Method,

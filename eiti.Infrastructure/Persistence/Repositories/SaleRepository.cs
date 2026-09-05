@@ -451,6 +451,19 @@ public sealed class SaleRepository : ISaleRepository
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyList<Sale>> ListByCreditNoteIdAsync(
+        CompanyId companyId,
+        Guid creditNoteId,
+        CancellationToken cancellationToken = default)
+    {
+        return await _context.Sales
+            .Include(sale => sale.Details)
+            .Include(sale => sale.CcPayments)
+            .Where(sale => sale.CompanyId == companyId
+                && sale.CcPayments.Any(p => p.CreditNoteId == creditNoteId))
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task<Dictionary<Guid, decimal>> GetPendingCcTotalsByCustomerAsync(
         CompanyId companyId,
         CancellationToken cancellationToken = default)
