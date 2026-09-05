@@ -7,6 +7,8 @@ public static class PermissionCodes
     public const string SalesUpdate = "sales.update";
     public const string SalesDelete = "sales.delete";
     public const string SalesPay = "sales.pay";
+    public const string SalesCreditNoteCreate = "sales.credit_note.create";
+    public const string SalesCreditNoteCancel = "sales.credit_note.cancel";
 
     public const string QuotesAccess = "quotes.access";
     public const string QuotesCreate = "quotes.create";
@@ -76,6 +78,8 @@ public static class PermissionCodes
     public const string PurchasesUpdate = "purchases.update";
     public const string PurchasesPay = "purchases.pay";
     public const string PurchasesCancel = "purchases.cancel";
+    public const string PurchasesCreditNoteCreate = "purchases.credit_note.create";
+    public const string PurchasesCreditNoteCancel = "purchases.credit_note.cancel";
 
     public const string ProductsCostPriceAlert = "products.cost_price_alert";
 
