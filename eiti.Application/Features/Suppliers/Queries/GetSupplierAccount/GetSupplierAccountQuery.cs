@@ -23,7 +23,7 @@ public sealed record GetSupplierAccountResponse(
     IReadOnlyList<SupplierAccountMovement> Movements);
 
 public sealed record SupplierAccountMovement(
-    string Type,            // "compra" | "pago"
+    string Type,            // "compra" | "pago" | "nota_credito"
     Guid Id,
     DateTime Date,
     string Description,

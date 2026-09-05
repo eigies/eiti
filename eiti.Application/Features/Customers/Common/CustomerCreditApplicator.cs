@@ -18,7 +18,8 @@ internal static class CustomerCreditApplicator
         CompanyId companyId,
         ISaleRepository saleRepository,
         CancellationToken cancellationToken,
-        Guid? customerPaymentId = null)
+        Guid? customerPaymentId = null,
+        Guid? creditNoteId = null)
     {
         var imputaciones = new List<CustomerPaymentImputacion>();
         var salesNowPaid = new List<Guid>();
@@ -48,7 +49,8 @@ internal static class CustomerCreditApplicator
                 applied,
                 DateTime.UtcNow,
                 customerPaymentId ?? Guid.Empty,
-                "Saldo a favor aplicado automáticamente");
+                "Saldo a favor aplicado automáticamente",
+                creditNoteId);
 
             imputaciones.Add(new CustomerPaymentImputacion(sale.Id.Value, sale.Code ?? string.Empty, applied));
 

@@ -1,6 +1,8 @@
 using eiti.Api.Extensions;
 using eiti.Application.Features.Customers.Commands.AddCustomerPayment;
 using eiti.Application.Features.Customers.Commands.ApplyCustomerCredit;
+using eiti.Application.Features.Customers.Commands.CreateCustomerCreditNote;
+using eiti.Application.Features.Customers.Commands.CancelCustomerCreditNote;
 using eiti.Application.Features.Customers.Commands.CancelCustomerPayment;
 using eiti.Application.Features.Customers.Commands.CreateCustomer;
 using eiti.Application.Features.Customers.Commands.DeleteCustomer;
@@ -146,7 +148,38 @@ public sealed class CustomersController : ControllerBase
         var result = await _sender.Send(new ApplyCustomerCreditCommand(id), cancellationToken);
         return result.ToActionResult();
     }
+
+    [HttpPost("{id:guid}/credit-notes")]
+    public async Task<IActionResult> CreateCustomerCreditNote(
+        Guid id,
+        [FromBody] CreateCustomerCreditNoteRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _sender.Send(
+            new CreateCustomerCreditNoteCommand(id, request.Amount, request.Reason, request.Date, request.SaleId),
+            cancellationToken);
+
+        return result.ToActionResult();
+    }
+
+    [HttpDelete("{id:guid}/credit-notes/{creditNoteId:guid}")]
+    public async Task<IActionResult> CancelCustomerCreditNote(
+        Guid id,
+        Guid creditNoteId,
+        CancellationToken cancellationToken)
+    {
+        var result = await _sender.Send(
+            new CancelCustomerCreditNoteCommand(id, creditNoteId), cancellationToken);
+
+        return result.ToActionResult();
+    }
 }
+
+public sealed record CreateCustomerCreditNoteRequest(
+    decimal Amount,
+    string Reason,
+    DateTime Date,
+    Guid? SaleId = null);
 
 public sealed record AddCustomerPaymentRequest(
     int Method,
