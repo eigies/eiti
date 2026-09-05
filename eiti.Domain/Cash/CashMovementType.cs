@@ -19,5 +19,11 @@ public enum CashMovementType
     PayrollExpense = 15,
     PayrollExpenseCancellation = 16,
     PayrollAdvanceExpense = 17,
-    PayrollAdvanceExpenseCancellation = 18
+    PayrollAdvanceExpenseCancellation = 18,
+
+    // Notas de crédito: se ven en la sesión pero no mueven efectivo (Direction.None).
+    CustomerCreditNote = 19,
+    CustomerCreditNoteCancellation = 20,
+    SupplierCreditNote = 21,
+    SupplierCreditNoteCancellation = 22
 }

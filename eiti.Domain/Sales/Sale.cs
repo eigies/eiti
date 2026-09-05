@@ -325,7 +325,7 @@ public sealed class Sale : AggregateRoot<SaleId>
     // venta CC pendiente, registrando un SaleCcPayment con método CustomerCredit y back-link al CustomerPayment
     // que generó el crédito. NO toca la caja (el efectivo ya se movió en el cobro real). Devuelve true si la
     // venta pasó a Paid con esta imputación (para que el handler confirme el stock).
-    public bool ApplyCustomerCredit(decimal amount, DateTime date, Guid customerPaymentId, string? notes)
+    public bool ApplyCustomerCredit(decimal amount, DateTime date, Guid customerPaymentId, string? notes, Guid? creditNoteId = null)
     {
         if (!IsCuentaCorriente)
         {
@@ -346,7 +346,8 @@ public sealed class Sale : AggregateRoot<SaleId>
             date,
             notes,
             groupId: null,
-            customerPaymentId: customerPaymentId);
+            customerPaymentId: customerPaymentId,
+            creditNoteId: creditNoteId);
         _ccPayments.Add(payment);
 
         if (!wasPaid && NormalizeAmount(CcSettledTotal) >= NormalizeAmount(TotalAmount))
@@ -370,6 +371,41 @@ public sealed class Sale : AggregateRoot<SaleId>
 
         var rows = _ccPayments
             .Where(p => p.CustomerPaymentId == customerPaymentId && p.Status == SaleCcPaymentStatus.Active)
+            .ToList();
+
+        if (rows.Count == 0)
+        {
+            return false;
+        }
+
+        var wasPaid = SaleStatus == SaleStatus.Paid;
+
+        foreach (var row in rows)
+        {
+            row.Cancel();
+        }
+
+        if (wasPaid && NormalizeAmount(CcSettledTotal) < NormalizeAmount(TotalAmount))
+        {
+            RevertToOnHoldFromCc();
+            return true;
+        }
+
+        return false;
+    }
+
+    // Espejo de RevertCustomerCredit filtrando por CreditNoteId: cada origen deshace SOLO lo suyo.
+    // Sin este filtro propio, anular una NC tocaría también las imputaciones de un cobro o de otra NC.
+    // Devuelve true si revirtió desde Paid (para que el handler devuelva el stock a reservado).
+    public bool RevertCreditNote(Guid creditNoteId)
+    {
+        if (!IsCuentaCorriente)
+        {
+            throw new InvalidOperationException("CC payments can only be cancelled on Cuenta Corriente sales.");
+        }
+
+        var rows = _ccPayments
+            .Where(p => p.CreditNoteId == creditNoteId && p.Status == SaleCcPaymentStatus.Active)
             .ToList();
 
         if (rows.Count == 0)

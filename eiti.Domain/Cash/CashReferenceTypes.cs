@@ -13,4 +13,5 @@ public static class CashReferenceTypes
     public const string Deposit = "Deposit";
     public const string PayrollLiquidation = "PayrollLiquidation";
     public const string PayrollAdvance = "PayrollAdvance";
+    public const string CreditNote = "CreditNote";
 }
