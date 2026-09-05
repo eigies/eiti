@@ -226,6 +226,36 @@ public sealed class SupplierCreditNoteHandlersTests
         note.Status.Should().Be(CreditNoteStatus.Cancelled);
     }
 
+    // Encontrado en e2e: si el proveedor YA tenia saldo a favor, el applicator consume todo
+    // el saldo (el viejo + el de la NC) y lo imputa tagueado con esta nota. Al anular hay que
+    // devolver lo desimputado y sacar SOLO lo que aporto la nota; con la resta ingenua
+    // (note.Amount - imputedTotal) el saldo preexistente se evaporaba.
+    [Fact]
+    public async Task Anulacion_ConSaldoPreexistente_NoDestruyeElCreditoViejo()
+    {
+        var f = new Fixture();
+        var compra = f.PendingPurchase(10_000m, "COMP-001");
+        var note = f.Note(4_000m);
+
+        // El proveedor tenia 2.000 a favor de antes; la NC suma 4.000 y se imputan los 6.000.
+        compra.AddPayment(PurchasePayment.Create(
+            PurchasePaymentMethod.SupplierCredit, 6_000m, DateTime.UtcNow, null, null,
+            creditNoteId: note.Id));
+
+        f.Notes.Setup(r => r.GetByIdAsync(note.Id, f.CompanyId.Value, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(note);
+        f.Purchases.Setup(r => r.ListByCreditNoteIdAsync(f.CompanyId.Value, note.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<Purchase> { compra });
+
+        var result = await f.CancelHandler().Handle(
+            new CancelSupplierCreditNoteCommand(f.Supplier.Id, note.Id), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        // 6.000 desimputados vuelven al saldo, menos los 4.000 que aporto la nota = 2.000,
+        // que es exactamente el saldo que el proveedor tenia antes de emitirla.
+        f.Supplier.CreditBalance.Should().Be(2_000m);
+    }
+
     [Fact]
     public async Task Anulacion_RevierteElCreditoNoConsumido()
     {

@@ -95,10 +95,12 @@ public sealed class CancelCustomerCreditNoteHandler
             .Where(p => p.CreditNoteId == note.Id && p.Status == SaleCcPaymentStatus.Active)
             .Sum(p => p.Amount);
 
-        // La guarda va antes de cualquier mutación: si el crédito ya se gastó en otro lado,
-        // revertirlo dejaría CreditBalance en negativo.
-        var creditToRevert = Math.Max(0m, note.Amount - imputedTotal);
-        if (creditToRevert > customer.CreditBalance)
+        // Desimputar devuelve `imputedTotal` al saldo disponible; de ahí hay que sacar lo que
+        // aportó ESTA nota. La resta ingenua (note.Amount - imputedTotal) destruía el saldo
+        // que el cliente ya tenía antes de emitirla: el applicator consume todo el saldo,
+        // no solo el de la nota, así que las imputaciones tagueadas pueden superar su importe.
+        var restored = customer.CreditBalance + imputedTotal;
+        if (restored < note.Amount)
             return Result<CancelCustomerCreditNoteResponse>.Failure(
                 CancelCustomerCreditNoteErrors.CreditAlreadyConsumed);
 
@@ -135,8 +137,10 @@ public sealed class CancelCustomerCreditNoteHandler
             }
         }
 
-        if (creditToRevert > 0m)
-            customer.ConsumeCredit(creditToRevert);
+        if (imputedTotal > 0m)
+            customer.AddCredit(imputedTotal);
+
+        customer.ConsumeCredit(note.Amount);
 
         _customerRepository.Update(customer);
 

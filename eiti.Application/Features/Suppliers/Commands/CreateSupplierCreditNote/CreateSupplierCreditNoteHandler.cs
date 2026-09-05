@@ -106,6 +106,9 @@ public sealed class CreateSupplierCreditNoteHandler
 
         await _creditNoteRepository.AddAsync(note, cancellationToken);
 
+        // El saldo previo se guarda para poder decir cuanto aporto ESTA nota: el applicator
+        // consume todo el saldo disponible, no solo el de la nota.
+        var creditBefore = supplier.CreditBalance;
         supplier.AddCredit(note.Amount);
 
         // Imputación FIFO con back-link a la NC: sin creditNoteId, anularla no podría deshacerla.
@@ -119,7 +122,10 @@ public sealed class CreateSupplierCreditNoteHandler
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-        var imputado = imputaciones.Sum(i => i.Amount);
+        // Sobrante = lo de la nota que NO se imputo y quedo a favor. Se mide contra el saldo
+        // previo: `note.Amount - imputado` daba negativo cuando ya habia saldo, porque las
+        // imputaciones incluyen el credito viejo.
+        var sobrante = Math.Max(0m, supplier.CreditBalance - creditBefore);
 
         return Result<CreateSupplierCreditNoteResponse>.Success(new CreateSupplierCreditNoteResponse(
             note.Id,
@@ -127,6 +133,6 @@ public sealed class CreateSupplierCreditNoteHandler
             note.Amount,
             supplier.CreditBalance,
             imputaciones,
-            decimal.Round(note.Amount - imputado, 2, MidpointRounding.AwayFromZero)));
+            decimal.Round(sobrante, 2, MidpointRounding.AwayFromZero)));
     }
 }
