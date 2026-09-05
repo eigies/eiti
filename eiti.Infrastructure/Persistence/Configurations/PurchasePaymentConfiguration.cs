@@ -19,6 +19,7 @@ public sealed class PurchasePaymentConfiguration : IEntityTypeConfiguration<Purc
         builder.Property(p => p.Status).HasConversion<int>().IsRequired();
         builder.Property(p => p.ChequeId).IsRequired(false);
         builder.Property(p => p.SupplierPaymentId).IsRequired(false);
+        builder.Property(p => p.CreditNoteId).IsRequired(false);
         builder.Property(p => p.Reference).HasMaxLength(120).IsRequired(false);
         builder.Property(p => p.Notes).HasMaxLength(500).IsRequired(false);
         builder.Property(p => p.Date).IsRequired();
@@ -26,5 +27,6 @@ public sealed class PurchasePaymentConfiguration : IEntityTypeConfiguration<Purc
 
         builder.HasIndex(p => p.PurchaseId);
         builder.HasIndex(p => p.SupplierPaymentId);
+        builder.HasIndex(p => p.CreditNoteId);
     }
 }
