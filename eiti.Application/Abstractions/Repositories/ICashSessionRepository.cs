@@ -23,6 +23,17 @@ public interface ICashSessionRepository
         DateTime? to = null,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Sesiones de toda la empresa (o de las sucursales indicadas) que se solapan con el rango
+    /// [fromUtc, toUtc], con sus movimientos incluidos, en una sola consulta.
+    /// </summary>
+    Task<IReadOnlyList<CashSession>> ListByCompanyAsync(
+        CompanyId companyId,
+        DateTime fromUtc,
+        DateTime toUtc,
+        IReadOnlyCollection<Guid>? branchIds = null,
+        CancellationToken cancellationToken = default);
+
     Task<CashSession?> GetOpenForBranchAsync(
         BranchId branchId,
         CashDrawerId cashDrawerId,

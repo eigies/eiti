@@ -17,6 +17,10 @@ public interface ICashDrawerRepository
         CompanyId companyId,
         CancellationToken cancellationToken = default);
 
+    Task<IReadOnlyList<CashDrawer>> ListByCompanyAsync(
+        CompanyId companyId,
+        CancellationToken cancellationToken = default);
+
     Task<bool> NameExistsAsync(
         BranchId branchId,
         string name,
