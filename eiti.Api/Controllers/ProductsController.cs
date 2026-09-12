@@ -52,9 +52,10 @@ public sealed class ProductsController : ControllerBase
     public async Task<IActionResult> ListPagedProducts(
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 10,
+        [FromQuery] string? query = null,
         CancellationToken cancellationToken = default)
     {
-        var result = await _sender.Send(new ListPagedProductsQuery(page, pageSize), cancellationToken);
+        var result = await _sender.Send(new ListPagedProductsQuery(page, pageSize, query), cancellationToken);
         return result.ToActionResult();
     }
 
