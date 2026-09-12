@@ -1,5 +1,6 @@
 using eiti.Api.Extensions;
 using eiti.Application.Features.Reports.Queries.CashMovementsReport;
+using eiti.Application.Features.Reports.Queries.CashSessionsReport;
 using eiti.Application.Features.Reports.Queries.CustomerDebtors;
 using eiti.Application.Features.Reports.Queries.DailySalesControl;
 using eiti.Application.Features.Reports.Queries.ListAuditLog;
@@ -157,6 +158,17 @@ public sealed class ReportsController : ControllerBase
         CancellationToken cancellationToken = default)
     {
         var result = await _sender.Send(new CashMovementsReportQuery(dateFrom, dateTo), cancellationToken);
+        return result.ToActionResult();
+    }
+
+    [HttpGet("cash/sessions")]
+    public async Task<IActionResult> CashSessions(
+        [FromQuery] DateTime dateFrom,
+        [FromQuery] DateTime dateTo,
+        [FromQuery] Guid? branchId,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await _sender.Send(new CashSessionsReportQuery(dateFrom, dateTo, branchId), cancellationToken);
         return result.ToActionResult();
     }
 }

@@ -46,9 +46,15 @@ public sealed class ListPagedProductsHandler
             ? DefaultPageSize
             : Math.Min(request.PageSize, MaxPageSize);
 
-        var products = await _productRepository.GetByCompanyIdAsync(
-            _currentUserService.CompanyId,
-            cancellationToken);
+        var query = request.Query?.Trim();
+        var products = string.IsNullOrEmpty(query)
+            ? await _productRepository.GetByCompanyIdAsync(
+                _currentUserService.CompanyId,
+                cancellationToken)
+            : await _productRepository.SearchByCompanyAsync(
+                _currentUserService.CompanyId,
+                query,
+                cancellationToken);
 
         var stocks = await _branchProductStockRepository.ListByCompanyAsync(
             _currentUserService.CompanyId,

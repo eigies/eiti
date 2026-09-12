@@ -122,6 +122,15 @@ internal static class CashSessionMapper
             .ToList();
     }
 
+    /// <summary>
+    /// Desglose por medio de pago de una sesión (mismo cálculo que usa el detalle de historial).
+    /// Expuesto para que otros reportes lo reusen sin duplicar la lógica.
+    /// </summary>
+    public static IReadOnlyList<PaymentMethodBreakdownItem> BuildPaymentBreakdown(
+        IEnumerable<CashMovement> movements,
+        IReadOnlyList<SalePayment> payments)
+        => BuildBreakdown(movements, payments);
+
     private static IReadOnlyList<PaymentMethodBreakdownItem> BuildBreakdown(
         IEnumerable<CashMovement> movements,
         IReadOnlyList<SalePayment> payments)

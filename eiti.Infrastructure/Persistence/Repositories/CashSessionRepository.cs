@@ -68,6 +68,35 @@ public sealed class CashSessionRepository : ICashSessionRepository
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyList<CashSession>> ListByCompanyAsync(
+        CompanyId companyId,
+        DateTime fromUtc,
+        DateTime toUtc,
+        IReadOnlyCollection<Guid>? branchIds = null,
+        CancellationToken cancellationToken = default)
+    {
+        var query = _context.CashSessions
+            .Include(session => session.Movements)
+            .Where(session => session.CompanyId == companyId);
+
+        if (branchIds is not null)
+        {
+            // Comparar el value object entero (no .Value dentro del arbol de expresion). Mismo patron
+            // que ListMovementsByCompanyAsync / SaleRepository.
+            var allowed = branchIds.Select(id => new BranchId(id)).ToList();
+            query = query.Where(session => allowed.Contains(session.BranchId));
+        }
+
+        // Overlap: la sesion intersecta el rango si OpenedAt <= to AND (ClosedAt es null OR ClosedAt >= from)
+        query = query.Where(session =>
+            session.OpenedAt <= toUtc &&
+            (session.ClosedAt == null || session.ClosedAt >= fromUtc));
+
+        return await query
+            .OrderByDescending(session => session.OpenedAt)
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task<IReadOnlyList<CashSession>> GetAllStaleOpenAsync(
         CompanyId companyId,
         DateTime openedBefore,

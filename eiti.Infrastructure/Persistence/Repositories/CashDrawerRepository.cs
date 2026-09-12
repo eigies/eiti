@@ -36,6 +36,16 @@ public sealed class CashDrawerRepository : ICashDrawerRepository
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyList<CashDrawer>> ListByCompanyAsync(
+        CompanyId companyId,
+        CancellationToken cancellationToken = default)
+    {
+        return await _context.CashDrawers
+            .Where(drawer => drawer.CompanyId == companyId)
+            .OrderBy(drawer => drawer.Name)
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task<bool> NameExistsAsync(
         BranchId branchId,
         string name,

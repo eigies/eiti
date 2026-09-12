@@ -49,6 +49,43 @@ public sealed class ProductRepository : IProductRepository
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyList<Product>> SearchByCompanyAsync(
+        CompanyId companyId,
+        string query,
+        CancellationToken cancellationToken = default)
+    {
+        var words = query
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(word => word.ToLowerInvariant())
+            .Distinct()
+            .ToList();
+
+        if (words.Count == 0)
+            return await GetByCompanyIdAsync(companyId, cancellationToken);
+
+        var products = _context.Products.Where(product => product.CompanyId == companyId);
+
+        foreach (var word in words)
+        {
+            var pattern = $"%{EscapeLike(word)}%";
+            products = products.Where(product =>
+                EF.Functions.ILike(EF.Functions.Unaccent(product.Name), EF.Functions.Unaccent(pattern), "\\")
+                || EF.Functions.ILike(EF.Functions.Unaccent(product.Code), EF.Functions.Unaccent(pattern), "\\")
+                || EF.Functions.ILike(EF.Functions.Unaccent(product.Sku), EF.Functions.Unaccent(pattern), "\\")
+                || EF.Functions.ILike(EF.Functions.Unaccent(product.Brand), EF.Functions.Unaccent(pattern), "\\"));
+        }
+
+        var exact = query.Trim().ToLowerInvariant();
+
+        return await products
+            .OrderByDescending(product => product.Code.ToLower() == exact || product.Sku.ToLower() == exact)
+            .ThenBy(product => product.Name)
+            .ToListAsync(cancellationToken);
+    }
+
+    private static string EscapeLike(string value) =>
+        value.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");
+
     public async Task<bool> NameExistsAsync(
         CompanyId companyId,
         string name,

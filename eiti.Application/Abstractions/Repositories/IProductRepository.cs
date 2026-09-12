@@ -19,6 +19,15 @@ public interface IProductRepository
         CompanyId companyId,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Products whose Name/Code/Sku/Brand contain every word of <paramref name="query"/>
+    /// (case- and accent-insensitive). Exact Code/Sku matches come first, then by Name.
+    /// </summary>
+    Task<IReadOnlyList<Product>> SearchByCompanyAsync(
+        CompanyId companyId,
+        string query,
+        CancellationToken cancellationToken = default);
+
     Task<bool> NameExistsAsync(
         CompanyId companyId,
         string name,
