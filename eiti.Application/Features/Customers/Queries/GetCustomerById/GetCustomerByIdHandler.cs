@@ -50,6 +50,8 @@ public sealed class GetCustomerByIdHandler : IRequestHandler<GetCustomerByIdQuer
                 customer.DocumentType?.ToString(),
                 customer.DocumentNumber,
                 customer.TaxId,
+                customer.IvaCondition.HasValue ? (int)customer.IvaCondition.Value : null,
+                customer.IvaCondition?.ToString(),
                 customer.AddressId?.Value,
                 address is null
                     ? null

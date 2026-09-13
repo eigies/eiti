@@ -61,6 +61,10 @@ public sealed class CustomerConfiguration : IEntityTypeConfiguration<Customer>
             .HasMaxLength(20)
             .IsRequired(false);
 
+        builder.Property(customer => customer.IvaCondition)
+            .HasConversion<int?>()
+            .IsRequired(false);
+
         builder.Property(customer => customer.AddressId)
             .HasConversion(
                 id => id == null ? (Guid?)null : id.Value,

@@ -80,6 +80,18 @@ public sealed class UpdateCustomerHandler : IRequestHandler<UpdateCustomerComman
             documentType = (DocumentType)request.DocumentType.Value;
         }
 
+        IvaCondition? ivaCondition = null;
+        if (request.IvaCondition.HasValue)
+        {
+            if (!Enum.IsDefined(typeof(IvaCondition), request.IvaCondition.Value))
+            {
+                return Result<UpdateCustomerResponse>.Failure(
+                    Error.Validation("Customer.Update.InvalidIvaCondition", "La condición de IVA es inválida."));
+            }
+
+            ivaCondition = (IvaCondition)request.IvaCondition.Value;
+        }
+
         var normalizedDocument = CreateCustomerHandler.Normalize(request.DocumentNumber);
         var normalizedTaxId = CreateCustomerHandler.Normalize(request.TaxId);
 
@@ -150,6 +162,7 @@ public sealed class UpdateCustomerHandler : IRequestHandler<UpdateCustomerComman
                 documentType,
                 normalizedDocument,
                 normalizedTaxId,
+                ivaCondition,
                 address?.Id ?? customer.AddressId);
             customer.UpdateEmail(email);
         }
@@ -175,6 +188,8 @@ public sealed class UpdateCustomerHandler : IRequestHandler<UpdateCustomerComman
                 customer.DocumentType?.ToString(),
                 customer.DocumentNumber,
                 customer.TaxId,
+                customer.IvaCondition.HasValue ? (int)customer.IvaCondition.Value : null,
+                customer.IvaCondition?.ToString(),
                 customer.AddressId?.Value,
                 address is null
                     ? null
