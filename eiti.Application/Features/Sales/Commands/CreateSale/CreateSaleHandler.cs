@@ -4,6 +4,7 @@ using eiti.Application.Abstractions.Services;
 using eiti.Application.Common;
 using eiti.Application.Common.Authorization;
 using eiti.Application.Features.Banks.Common;
+using eiti.Application.Features.Sales.Common;
 using eiti.Domain.Banks;
 using eiti.Domain.Branches;
 using eiti.Domain.Cash;
@@ -31,6 +32,7 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
     private readonly IAddressRepository _addressRepository;
     private readonly IBankRepository _bankRepository;
     private readonly IChequeRepository _chequeRepository;
+    private readonly ISaleInvoicingService _saleInvoicingService;
     private readonly IUnitOfWork _unitOfWork;
 
     public CreateSaleHandler(
@@ -46,6 +48,7 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
         IAddressRepository addressRepository,
         IBankRepository bankRepository,
         IChequeRepository chequeRepository,
+        ISaleInvoicingService saleInvoicingService,
         IUnitOfWork unitOfWork)
     {
         _currentUserService = currentUserService;
@@ -60,6 +63,7 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
         _addressRepository = addressRepository;
         _bankRepository = bankRepository;
         _chequeRepository = chequeRepository;
+        _saleInvoicingService = saleInvoicingService;
         _unitOfWork = unitOfWork;
     }
 
@@ -499,6 +503,8 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
         await _saleRepository.AddAsync(sale, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
+        await TryInvoiceAsync(sale, request.RequestInvoicing, cancellationToken);
+
         var customerAddress = await BuildCustomerAddress(customer, cancellationToken);
 
         return Result<CreateSaleResponse>.Success(
@@ -555,6 +561,31 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
         return customer.DocumentType is null || string.IsNullOrWhiteSpace(customer.DocumentNumber)
             ? null
             : $"{customer.DocumentType} {customer.DocumentNumber}";
+    }
+
+    /// <summary>
+    /// Factura la venta si corresponde: por config de empresa/sucursal, o porque el usuario tildó
+    /// "Facturar". La venta YA está guardada cuando se llama: la facturación nunca la bloquea ni la
+    /// revierte. Si el servicio fiscal falla, la venta queda con estado Rechazado y el usuario
+    /// reintenta desde el detalle.
+    /// </summary>
+    private async Task TryInvoiceAsync(Sale sale, bool requestInvoicing, CancellationToken cancellationToken)
+    {
+        if (!_saleInvoicingService.IsEnabled || sale.SaleStatus == SaleStatus.Cancel)
+        {
+            return;
+        }
+
+        var shouldInvoice = requestInvoicing ||
+            await _saleInvoicingService.IsAutomaticAsync(sale.CompanyId, sale.BranchId, cancellationToken);
+
+        if (!shouldInvoice)
+        {
+            return;
+        }
+
+        await _saleInvoicingService.InvoiceAsync(sale, cancellationToken);
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
     }
 
     private async Task<string?> BuildCustomerAddress(Customer? customer, CancellationToken cancellationToken)

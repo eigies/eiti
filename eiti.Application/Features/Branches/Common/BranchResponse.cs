@@ -5,6 +5,7 @@ public sealed record BranchResponse(
     string Name,
     string? Code,
     string? Address,
+    bool? AutomaticInvoicing,
     int SalesCount,
     decimal CashValue,
     DateTime CreatedAt,

@@ -39,6 +39,9 @@ public sealed record ListSalesItemResponse(
     bool IsModified,
     bool IsCuentaCorriente,
     SaleSourceChannel? SourceChannel,
+    int InvoicingStatus,
+    long? FiscalNumber,
+    int? FiscalPointOfSale,
     IReadOnlyList<ListSalesDetailItemResponse> Details,
     IReadOnlyList<ListSalesPaymentItemResponse> Payments,
     IReadOnlyList<ListSalesTradeInItemResponse> TradeIns);

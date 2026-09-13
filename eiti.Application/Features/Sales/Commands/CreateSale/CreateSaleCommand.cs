@@ -18,7 +18,9 @@ public sealed record CreateSaleCommand(
     SaleSourceChannel? SourceChannel = null,
     string? DeliveryAddress = null,
     decimal GeneralDiscountPercent = 0,
-    string? ContactPhone = null
+    string? ContactPhone = null,
+    // Opt-in por venta. Se ignora si la empresa/sucursal ya factura automáticamente.
+    bool RequestInvoicing = false
 ) : IRequest<Result<CreateSaleResponse>>, IRequirePermissions
 {
     public IReadOnlyCollection<string> RequiredPermissions => [PermissionCodes.SalesCreate];

@@ -9,6 +9,7 @@ public static class PermissionCodes
     public const string SalesPay = "sales.pay";
     public const string SalesCreditNoteCreate = "sales.credit_note.create";
     public const string SalesCreditNoteCancel = "sales.credit_note.cancel";
+    public const string SalesInvoice = "sales.invoice";
 
     public const string QuotesAccess = "quotes.access";
     public const string QuotesCreate = "quotes.create";

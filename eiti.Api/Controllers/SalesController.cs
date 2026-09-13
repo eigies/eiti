@@ -4,9 +4,11 @@ using eiti.Application.Features.Sales.Commands.CancelSale;
 using eiti.Application.Features.Sales.Commands.CreateCcSale;
 using eiti.Application.Features.Sales.Commands.CreateSale;
 using eiti.Application.Features.Sales.Commands.DeleteSale;
+using eiti.Application.Features.Sales.Commands.InvoiceSale;
 using eiti.Application.Features.Sales.Commands.SendSaleWhatsApp;
 using eiti.Application.Features.Sales.Commands.UpdateSale;
 using eiti.Application.Features.Sales.Queries.GetSaleById;
+using eiti.Application.Features.Sales.Queries.GetSaleInvoicePdf;
 using eiti.Application.Features.Sales.Queries.ListCcPayments;
 using eiti.Application.Features.Sales.Queries.ListCcSales;
 using eiti.Application.Features.Sales.Queries.ListSales;
@@ -71,6 +73,29 @@ public sealed class SalesController : ControllerBase
         var mode = refundMode.HasValue ? (CcCancellationRefundMode?)refundMode.Value : null;
         var result = await _sender.Send(new CancelSaleCommand(id, mode), cancellationToken);
         return result.ToActionResult();
+    }
+
+    [HttpPost("{id:guid}/invoice")]
+    public async Task<IActionResult> InvoiceSale(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await _sender.Send(new InvoiceSaleCommand(id), cancellationToken);
+        return result.ToActionResult();
+    }
+
+    /// <summary>
+    /// Proxy del PDF del comprobante. El endpoint del servicio fiscal exige la API key de servicio,
+    /// así que el navegador no puede pedirlo directo: pasa por acá, ya autenticado como usuario.
+    /// </summary>
+    [HttpGet("{id:guid}/invoice/pdf")]
+    public async Task<IActionResult> GetInvoicePdf(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await _sender.Send(new GetSaleInvoicePdfQuery(id), cancellationToken);
+        if (result.IsFailure)
+        {
+            return result.ToActionResult();
+        }
+
+        return File(result.Value.Content, "application/pdf", result.Value.FileName);
     }
 
     [HttpDelete("{id:guid}")]

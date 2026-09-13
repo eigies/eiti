@@ -23,6 +23,7 @@ public sealed class ListSalesHandler : IRequestHandler<ListSalesQuery, Result<IR
     private readonly IEmployeeRepository _employeeRepository;
     private readonly IVehicleRepository _vehicleRepository;
     private readonly IAddressRepository _addressRepository;
+    private readonly ISaleFiscalDocumentRepository _fiscalDocuments;
 
     public ListSalesHandler(
         ICurrentUserService currentUserService,
@@ -32,7 +33,8 @@ public sealed class ListSalesHandler : IRequestHandler<ListSalesQuery, Result<IR
         ISaleTransportAssignmentRepository saleTransportAssignmentRepository,
         IEmployeeRepository employeeRepository,
         IVehicleRepository vehicleRepository,
-        IAddressRepository addressRepository)
+        IAddressRepository addressRepository,
+        ISaleFiscalDocumentRepository fiscalDocuments)
     {
         _currentUserService = currentUserService;
         _saleRepository = saleRepository;
@@ -42,6 +44,7 @@ public sealed class ListSalesHandler : IRequestHandler<ListSalesQuery, Result<IR
         _employeeRepository = employeeRepository;
         _vehicleRepository = vehicleRepository;
         _addressRepository = addressRepository;
+        _fiscalDocuments = fiscalDocuments;
     }
 
     public async Task<Result<IReadOnlyList<ListSalesItemResponse>>> Handle(ListSalesQuery request, CancellationToken cancellationToken)
@@ -77,6 +80,14 @@ public sealed class ListSalesHandler : IRequestHandler<ListSalesQuery, Result<IR
         var saleIds = sales.Select(sale => sale.Id).ToList();
         var assignments = await _saleTransportAssignmentRepository.ListBySaleIdsAsync(saleIds, _currentUserService.CompanyId, cancellationToken);
         var assignmentMap = assignments.ToDictionary(item => item.SaleId.Value, item => item);
+
+        // Una venta puede tener varios comprobantes (intentos, anulados, vigente): se agrupan y se
+        // muestra el que corresponde, no el primero que aparezca.
+        var invoiceMap = (await _fiscalDocuments.ListBySaleIdsAsync(saleIds, _currentUserService.CompanyId!, cancellationToken))
+            .GroupBy(document => document.SaleId.Value)
+            .Select(group => new { SaleId = group.Key, Invoice = SaleInvoicingView.From(group.ToList()).Invoice })
+            .Where(item => item.Invoice is not null)
+            .ToDictionary(item => item.SaleId, item => item.Invoice!);
 
         // Productos en un solo query (antes era N+1: un SELECT por producto).
         var products = productIds.Count == 0
@@ -164,6 +175,9 @@ public sealed class ListSalesHandler : IRequestHandler<ListSalesQuery, Result<IR
                         sale.IsModified,
                         sale.IsCuentaCorriente,
                         sale.SourceChannel,
+                        (int)(invoiceMap.TryGetValue(sale.Id.Value, out var invoice) ? invoice.Status : SaleInvoicingStatus.NotInvoiced),
+                        invoiceMap.TryGetValue(sale.Id.Value, out invoice) ? invoice.Number : null,
+                        invoiceMap.TryGetValue(sale.Id.Value, out invoice) ? invoice.PointOfSale : null,
                         sale.Details.Select(detail =>
                         {
                             productMap.TryGetValue(detail.ProductId.Value, out var product);

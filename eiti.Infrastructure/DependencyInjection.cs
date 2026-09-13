@@ -9,6 +9,7 @@ using eiti.Infrastructure.Settings;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Npgsql;
 using Resend;
 
@@ -42,6 +43,7 @@ public static class DependencyInjection
         services.Configure<JwtSettings>(configuration.GetSection(JwtSettings.SectionName));
         services.Configure<WhatsAppDispatchOptions>(configuration.GetSection(WhatsAppDispatchOptions.SectionName));
         services.Configure<EmailSettings>(configuration.GetSection(EmailSettings.SectionName));
+        services.Configure<FiscalizationOptions>(configuration.GetSection(FiscalizationOptions.SectionName));
         services.Configure<ResendClientOptions>(o =>
             o.ApiToken = configuration[$"{EmailSettings.SectionName}:ApiKey"] ?? string.Empty);
         services.AddHttpClient<ResendClient>();
@@ -68,6 +70,7 @@ public static class DependencyInjection
         services.AddScoped<IProductCategoryRepository, ProductCategoryRepository>();
         services.AddScoped<IQuoteRepository, QuoteRepository>();
         services.AddScoped<ISaleRepository, SaleRepository>();
+        services.AddScoped<ISaleFiscalDocumentRepository, SaleFiscalDocumentRepository>();
         services.AddScoped<ISaleTransportAssignmentRepository, SaleTransportAssignmentRepository>();
         services.AddScoped<IStockMovementRepository, StockMovementRepository>();
         services.AddScoped<IUserRepository, UserRepository>();
@@ -90,6 +93,12 @@ public static class DependencyInjection
         services.AddScoped<IJwtTokenGenerator, JwtTokenGenerator>();
         services.AddScoped<IEmailService, EmailService>();
         services.AddHttpClient<IWhatsAppNotificationService, WhatsAppNotificationService>();
+        services.TryAddSingleton(TimeProvider.System);
+        services.AddSingleton<IFiscalCallbackSignatureValidator, FiscalCallbackSignatureValidator>();
+        // Timeout corto: el servicio fiscal resuelve en fast-path o encola. Si tarda más, se toma
+        // como encolado y el callback avisa; la venta nunca queda esperando a ARCA.
+        services.AddHttpClient<IFiscalizationService, FiscalizationService>(client =>
+            client.Timeout = TimeSpan.FromSeconds(15));
 
         return services;
     }

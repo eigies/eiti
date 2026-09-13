@@ -81,6 +81,7 @@ public sealed class ListBranchesHandler : IRequestHandler<ListBranchesQuery, Res
                 branch.Name,
                 branch.Code,
                 branch.Address,
+                branch.AutomaticInvoicing,
                 salesCountByBranch.GetValueOrDefault(branch.Id.Value, 0),
                 cashValue,
                 branch.CreatedAt,

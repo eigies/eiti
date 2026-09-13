@@ -216,6 +216,9 @@ namespace eiti.Infrastructure.Migrations
                         .HasMaxLength(255)
                         .HasColumnType("character varying(255)");
 
+                    b.Property<bool?>("AutomaticInvoicing")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("Code")
                         .HasMaxLength(40)
                         .HasColumnType("character varying(40)");
@@ -516,6 +519,11 @@ namespace eiti.Infrastructure.Migrations
                 {
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid");
+
+                    b.Property<bool>("AutomaticInvoicing")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp without time zone");
@@ -1771,6 +1779,80 @@ namespace eiti.Infrastructure.Migrations
                     b.ToTable("SaleDetails", (string)null);
                 });
 
+            modelBuilder.Entity("eiti.Domain.Sales.SaleFiscalDocument", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AuthorizationCode")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<DateTime?>("AuthorizationExpiry")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<Guid>("CompanyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("DocumentType")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<Guid?>("FiscalDocumentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("IssuedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("integer");
+
+                    b.Property<long?>("Number")
+                        .HasColumnType("bigint");
+
+                    b.Property<int?>("PointOfSale")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("QrUrl")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("RejectionReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<Guid?>("ReversedDocumentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("SaleId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Sequence")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompanyId");
+
+                    b.HasIndex("FiscalDocumentId");
+
+                    b.HasIndex("ReversedDocumentId");
+
+                    b.HasIndex("SaleId", "Kind", "Sequence")
+                        .IsUnique();
+
+                    b.ToTable("SaleFiscalDocuments", (string)null);
+                });
+
             modelBuilder.Entity("eiti.Domain.Sales.SalePayment", b =>
                 {
                     b.Property<Guid>("SaleId")
@@ -2661,6 +2743,15 @@ namespace eiti.Infrastructure.Migrations
 
                     b.HasOne("eiti.Domain.Sales.Sale", null)
                         .WithMany("Details")
+                        .HasForeignKey("SaleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("eiti.Domain.Sales.SaleFiscalDocument", b =>
+                {
+                    b.HasOne("eiti.Domain.Sales.Sale", null)
+                        .WithMany()
                         .HasForeignKey("SaleId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();

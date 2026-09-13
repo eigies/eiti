@@ -67,5 +67,5 @@ public sealed class CreateBranchHandler : IRequestHandler<CreateBranchCommand, R
     }
 
     private static BranchResponse Map(Branch branch) =>
-        new(branch.Id.Value, branch.Name, branch.Code, branch.Address, 0, 0m, branch.CreatedAt, branch.UpdatedAt);
+        new(branch.Id.Value, branch.Name, branch.Code, branch.Address, branch.AutomaticInvoicing, 0, 0m, branch.CreatedAt, branch.UpdatedAt);
 }
