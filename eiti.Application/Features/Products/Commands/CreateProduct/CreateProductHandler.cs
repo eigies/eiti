@@ -102,7 +102,7 @@ public sealed class CreateProductHandler
                 request.Name,
                 request.Description,
                 resolvedPublicPriceResult.Value,
-                request.CostPrice,
+                request.CostPrice ?? 0m,
                 request.UnitPrice,
                 request.AllowsManualValueInSale,
                 request.NoDeliverySurcharge,

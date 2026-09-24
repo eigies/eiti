@@ -11,7 +11,9 @@ public sealed record CreateProductCommand(
     string? Description,
     decimal? Price,
     decimal? PublicPrice,
-    decimal CostPrice,
+    // Nullable por simetria con UpdateProductCommand: quien no ve el costo manda null.
+    // En un alta no hay costo previo que preservar, asi que null se persiste como 0.
+    decimal? CostPrice,
     decimal? UnitPrice,
     bool AllowsManualValueInSale = false,
     decimal? NoDeliverySurcharge = null,

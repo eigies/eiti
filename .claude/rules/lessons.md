@@ -1,5 +1,28 @@
 # Lessons Learned
 
+## Enmascarar un costo con 0 en la API lo borró de la base al siguiente guardado - 2026-09-24
+
+**Síntoma:** Emiliano (Baterías Soler) reporta que "desaparecieron todos los costos de la marca MOURA". Al mirar la base los costos estaban bien: el import del 23/09 16:34 los había restaurado. El daño real estaba en las **ventas**: 26 ventas de MOURA salieron con `SaleDetail.UnitCost = 0`, $5.156.860 facturados con $2.993.652 de costo no imputado, o sea rentabilidad inflada.
+
+**Causa raíz — una cadena de cuatro eslabones, ninguno "roto" por sí solo:**
+
+1. `ListPagedProductsHandler` devolvía `canViewCost ? product.CostPrice : 0m`. Enmascarar con **0** en vez de `null` convierte "no te puedo mostrar esto" en un dato numérico válido.
+2. La grilla de productos cargaba ese 0 en el formulario (`costPrice: product.costPrice ?? 0`).
+3. `saveBulkChanges` manda el request **completo** por cada fila modificada, incluido el costo que el usuario nunca vio.
+4. `UpdateProductCommand.CostPrice` era `decimal` **no nullable** y el validator solo pedía `>= 0`, así que el 0 se persistía.
+
+El 21/09 a las 11:13 el encargado de una sucursal — sin `products.view_cost` — actualizó precios de los 28 MOURA desde la edición masiva. Los 28 `UpdateProductCommand` viajaron con `"CostPrice":0` y pisaron el costo real. La auditoría (`AuditLogs.PayloadJson`) lo muestra al milisegundo: diez requests en el mismo instante, un `forkJoin` del front.
+
+**Por qué no se notó antes y por qué solo MOURA:** `BranchPricing.ResolveCost` es `stock.CostOverride ?? product.CostPrice`. San Martín de los Andes tiene overrides de costo por sucursal cargados, así que quedó inmune; Mataderos y San Cristóbal no los tienen y cayeron al costo global en 0. Un fallback por sucursal enmascara el daño en las sucursales que tienen override y lo concentra en las que no.
+
+**Agravante:** `UpdateSaleHandler` **recalcula el snapshot de costo cada vez que se edita una venta**. Tres ventas creadas antes del borrado (SC-087, SC-088, MAT-3146) se contaminaron al editarlas durante la ventana. Un snapshot que se recalcula no es un snapshot: propaga hacia atrás cualquier corrupción del dato de origen.
+
+**Fix:** `CostPrice` pasó a `decimal?` en `UpdateProductCommand`/`CreateProductCommand` con semántica **"null = no tocar"** (misma que ya usaba bien `ImportBranchPricingHandler` con los overrides; en el alta null se guarda como 0); el enmascarado de los tres handlers de lectura pasó de `0m` a `null`; y el front manda `costPrice: null` cuando no tiene `products.view_cost`. El primero es el backstop real: aunque el front vuelva a mandar un payload sin costo, el back no lo pisa.
+
+**Lo que se descartó a propósito:** se evaluó exigir un permiso nuevo `products.manage` en alta/edición (hoy cualquier usuario autenticado puede editar productos). No habría evitado el incidente —el encargado tenía que poder actualizar precios, era su tarea— y obligaba a un backfill sobre todos los perfiles para no dejar a nadie afuera en el deploy. Es un agujero de autorización real pero aparte: se encara como cambio propio, no colgado de este fix.
+
+**Patrón a recordar:** **nunca enmascarar un dato con un valor del mismo tipo que sea válido en el dominio.** Un costo oculto es `null`, no `0`; un saldo oculto es `null`, no `0`. Si el valor enmascarado puede volver en un PUT, la máscara deja de ser de lectura y se convierte en escritura. Corolario: en un update parcial, **un campo ausente o nulo tiene que significar "no tocar", nunca "poner en cero"** — un `decimal` no nullable en un comando de update es una bomba, porque un JSON sin ese campo llega como 0. Y no mezclar un fix de datos con un cambio de autorización: el segundo tiene su propio radio de impacto. Nada de esto lo agarra el compilador ni los tests: el tipo es correcto, el request es válido y la operación "funciona".
+
 ## El día del usuario no es el día UTC: reportes cortados a las 21:00 - 2026-08-15
 
 **Síntoma:** Gustavo (Baterías Soler) no veía en el reporte de medios de pago un cobro por transferencia de 250.000 y uno con tarjeta de 182.000, y además reportó que "a partir de las 21 se pasa al otro día".
