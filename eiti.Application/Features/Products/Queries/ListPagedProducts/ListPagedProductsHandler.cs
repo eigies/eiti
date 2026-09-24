@@ -105,7 +105,7 @@ public sealed class ListPagedProductsHandler
                     product.Description,
                     product.Price,
                     product.Price,
-                    canViewCost ? product.CostPrice : 0m,
+                    canViewCost ? product.CostPrice : null,
                     product.UnitPrice,
                     product.AllowsManualValueInSale,
                     product.NoDeliverySurcharge,

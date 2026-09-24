@@ -91,7 +91,7 @@ public sealed class ListProductsHandler
                     product.Description,
                     product.Price,
                     product.Price,
-                    canViewCost ? product.CostPrice : 0m,
+                    canViewCost ? product.CostPrice : null,
                     product.UnitPrice,
                     product.AllowsManualValueInSale,
                     product.NoDeliverySurcharge,

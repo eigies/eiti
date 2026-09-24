@@ -40,6 +40,7 @@ public sealed class UpdateProductValidator : AbstractValidator<UpdateProductComm
 
         RuleFor(x => x.CostPrice)
             .GreaterThanOrEqualTo(0)
+            .When(x => x.CostPrice.HasValue)
             .WithMessage("Product cost price cannot be negative.");
 
         RuleFor(x => x.UnitPrice)

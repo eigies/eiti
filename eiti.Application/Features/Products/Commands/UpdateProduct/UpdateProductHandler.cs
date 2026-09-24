@@ -118,7 +118,7 @@ public sealed class UpdateProductHandler
                 request.Name,
                 request.Description,
                 resolvedPublicPriceResult.Value,
-                request.CostPrice,
+                request.CostPrice ?? product.CostPrice,
                 request.UnitPrice,
                 request.AllowsManualValueInSale,
                 request.NoDeliverySurcharge,
