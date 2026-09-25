@@ -110,9 +110,71 @@ public sealed class IncomingTransfersReportHandlerTests
         f.SaleRepository.Verify(r => r.ListWithPaymentsForReportAsync(
             f.CompanyId, It.IsAny<DateTime>(), It.IsAny<DateTime>(), null,
             It.Is<IReadOnlyCollection<Guid>>(ids => ids.SequenceEqual(f.AllowedBranches)), It.IsAny<CancellationToken>()));
-        f.CustomerPaymentRepository.Verify(r => r.ListForPaymentMethodsReportAsync(
+        f.CustomerPaymentRepository.Verify(r => r.ListTransfersByDateAsync(
             f.CompanyId.Value, It.IsAny<DateTime>(), It.IsAny<DateTime>(), null,
             It.Is<IReadOnlyCollection<Guid>>(ids => ids.SequenceEqual(f.AllowedBranches)), It.IsAny<CancellationToken>()));
+    }
+
+    [Fact]
+    public async Task Handle_ShouldDateCcCollectionsByTheirChosenDay_NotByWhenTheyWereLoaded()
+    {
+        var f = new Fixture();
+        var backdated = f.CcCollection(SalePaymentMethod.Transfer, 50000m, MercadoPagoId,
+            date: new DateTime(2026, 9, 5, 0, 0, 0, DateTimeKind.Utc));
+        f.Sales().CcPayments(backdated);
+
+        var result = await f.Handler().Handle(Fixture.Query(), CancellationToken.None);
+
+        var row = result.Value.Rows.Single();
+        row.OccurredAt.Should().Be(new DateTime(2026, 9, 5, 0, 0, 0, DateTimeKind.Utc));
+        row.DateOnly.Should().BeTrue();
+        f.CustomerPaymentRepository.Verify(r => r.ListTransfersByDateAsync(
+            f.CompanyId.Value, new DateTime(2026, 9, 1), new DateTime(2026, 9, 30), null,
+            It.IsAny<IReadOnlyCollection<Guid>?>(), It.IsAny<CancellationToken>()));
+    }
+
+    [Fact]
+    public async Task Handle_ShouldLookBackForSalesCreatedBeforeTheRangeAndKeepThoseCollectedInside()
+    {
+        var f = new Fixture();
+        var sale = f.RetailSale(transferBankId: MercadoPagoId, amount: 100m, code: "V-1");
+        f.Sales(sale);
+
+        var inside = await f.Handler().Handle(Fixture.Query(), CancellationToken.None);
+        var before = await f.Handler().Handle(Fixture.Query(month: 1), CancellationToken.None);
+
+        inside.Value.Rows.Should().ContainSingle();
+        before.Value.Rows.Should().BeEmpty("the sale was collected in September, not in January");
+        f.SaleRepository.Verify(r => r.ListWithPaymentsForReportAsync(
+            f.CompanyId, It.Is<DateTime>(d => d < new DateTime(2026, 8, 5)), It.IsAny<DateTime>(), null,
+            It.IsAny<IReadOnlyCollection<Guid>?>(), It.IsAny<CancellationToken>()));
+    }
+
+    [Fact]
+    public async Task Handle_ShouldFlagBranchScopedResults()
+    {
+        var restricted = new Fixture(canViewAllBranches: false);
+        restricted.Sales();
+        var all = new Fixture();
+        all.Sales();
+
+        (await restricted.Handler().Handle(Fixture.Query(), CancellationToken.None)).Value.BranchScoped.Should().BeTrue();
+        (await all.Handler().Handle(Fixture.Query(), CancellationToken.None)).Value.BranchScoped.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Handle_ShouldReportTransfersWithoutBank_WhenFilteringByBank()
+    {
+        var f = new Fixture();
+        var mp = f.RetailSale(transferBankId: MercadoPagoId, amount: 100m, code: "V-MP");
+        var noBank = f.RetailSale(transferBankId: null, amount: 300m, code: "V-NOBANK");
+        var ccNoBank = f.CcCollection(SalePaymentMethod.Transfer, 400m, null);
+        f.Sales(mp, noBank).CcPayments(ccNoBank);
+
+        var result = await f.Handler().Handle(Fixture.Query(bankId: MercadoPagoId), CancellationToken.None);
+
+        result.Value.UnassignedCount.Should().Be(2);
+        result.Value.UnassignedTotal.Should().Be(700m);
     }
 
     [Theory]
@@ -171,8 +233,8 @@ public sealed class IncomingTransfersReportHandlerTests
             CcPayments();
         }
 
-        public static IncomingTransfersReportQuery Query(int? bankId = null) =>
-            new(new DateTime(2026, 9, 1), new DateTime(2026, 9, 30), bankId);
+        public static IncomingTransfersReportQuery Query(int? bankId = null, int month = 9) =>
+            new(new DateTime(2026, month, 1), new DateTime(2026, month, DateTime.DaysInMonth(2026, month)), bankId);
 
         public Sale RetailSale(int? transferBankId, decimal amount, string code, SalePaymentMethod method = SalePaymentMethod.Transfer)
         {
@@ -201,10 +263,11 @@ public sealed class IncomingTransfersReportHandlerTests
             CashMovement.Create(_session.Id, CashMovementType.TransferIncome, CashMovementDirection.In, amount,
                 "Sale", sale.Id.Value, "Pago por transferencia", UserId);
 
-        public CustomerPayment CcCollection(SalePaymentMethod method, decimal amount, int? bankId, string? reference = null)
+        public CustomerPayment CcCollection(SalePaymentMethod method, decimal amount, int? bankId, string? reference = null,
+            DateTime? date = null)
         {
             var payment = CustomerPayment.Create(CompanyId.Value, Customer.Id.Value, Branch.Id.Value, method, amount,
-                new DateTime(2026, 9, 10), reference, null, UserId.Value);
+                date ?? new DateTime(2026, 9, 10, 0, 0, 0, DateTimeKind.Utc), reference, null, UserId.Value);
             payment.SetTransferBank(bankId);
             return payment;
         }
@@ -227,7 +290,7 @@ public sealed class IncomingTransfersReportHandlerTests
 
         public Fixture CcPayments(params CustomerPayment[] payments)
         {
-            CustomerPaymentRepository.Setup(r => r.ListForPaymentMethodsReportAsync(CompanyId.Value, It.IsAny<DateTime>(),
+            CustomerPaymentRepository.Setup(r => r.ListTransfersByDateAsync(CompanyId.Value, It.IsAny<DateTime>(),
                     It.IsAny<DateTime>(), It.IsAny<Guid?>(), It.IsAny<IReadOnlyCollection<Guid>?>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(payments);
             return this;

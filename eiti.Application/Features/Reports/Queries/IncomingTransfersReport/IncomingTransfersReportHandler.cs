@@ -11,6 +11,9 @@ namespace eiti.Application.Features.Reports.Queries.IncomingTransfersReport;
 public sealed class IncomingTransfersReportHandler
     : IRequestHandler<IncomingTransfersReportQuery, Result<IncomingTransfersReportResponse>>
 {
+    // Una venta reservada/pendiente puede cobrarse hasta este tiempo después de creada.
+    private const int LookbackDays = 60;
+
     private readonly ICurrentUserService _currentUserService;
     private readonly ISaleRepository _saleRepository;
     private readonly ICustomerPaymentRepository _customerPaymentRepository;
@@ -51,13 +54,15 @@ public sealed class IncomingTransfersReportHandler
         bool BankMatches(int? bankId) => request.BankId is null || bankId == request.BankId;
 
         // Ventas minoristas: SalePayment con método transferencia. Las ventas CC se excluyen a
-        // propósito: su dinero entra por el cobro de cuenta corriente (ver lessons.md).
+        // propósito: su dinero entra por el cobro de cuenta corriente (ver lessons.md). Se buscan
+        // ventas creadas hasta LookbackDays antes del rango porque una venta reservada o pendiente
+        // puede cobrarse días después; lo que decide si entra es cuándo se cobró.
         var sales = await _saleRepository.ListWithPaymentsForReportAsync(
-            companyId, from, to, request.BranchId, allowedBranchIds, cancellationToken);
+            companyId, from.AddDays(-LookbackDays), to, request.BranchId, allowedBranchIds, cancellationToken);
         var saleTransfers = sales
             .Where(s => !s.IsCuentaCorriente)
             .SelectMany(s => s.Payments
-                .Where(p => p.Method == SalePaymentMethod.Transfer && BankMatches(p.TransferBankId))
+                .Where(p => p.Method == SalePaymentMethod.Transfer)
                 .Select(p => (Sale: s, Payment: p)))
             .ToList();
 
@@ -71,13 +76,31 @@ public sealed class IncomingTransfersReportHandler
             .Where(m => m.ReferenceId.HasValue)
             .GroupBy(m => (SaleId: m.ReferenceId!.Value, m.Amount))
             .ToDictionary(g => g.Key, g => new Queue<DateTime>(g.Select(m => m.OccurredAt).Order()));
-
-        var collections = (await _customerPaymentRepository.ListForPaymentMethodsReportAsync(
-                companyId.Value, from, to, request.BranchId, allowedBranchIds, cancellationToken))
-            .Where(p => p.Method == SalePaymentMethod.Transfer && BankMatches(p.TransferBankId))
+        var collectedSales = saleTransfers
+            .Select(t => (t.Sale, t.Payment,
+                OccurredAt: movementTimes.TryGetValue((t.Sale.Id.Value, t.Payment.Amount), out var times) && times.Count > 0
+                    ? times.Dequeue()
+                    : t.Sale.PaidAt ?? t.Sale.CreatedAt))
+            .Where(t => t.OccurredAt >= from && t.OccurredAt <= to)
             .ToList();
 
-        var bankIds = saleTransfers.Select(t => t.Payment.TransferBankId)
+        // Cobros de cuenta corriente: por el día que eligió el usuario (Date), no por cuándo se cargaron.
+        var allCollections = (await _customerPaymentRepository.ListTransfersByDateAsync(
+                companyId.Value, request.DateFrom.Date, request.DateTo.Date, request.BranchId, allowedBranchIds, cancellationToken))
+            .Where(c => c.Method == SalePaymentMethod.Transfer)
+            .ToList();
+
+        // Sin banco receptor no se pueden conciliar contra un banco puntual: se informan aparte.
+        var unassigned = request.BankId is null
+            ? []
+            : collectedSales.Where(t => t.Payment.TransferBankId is null).Select(t => t.Payment.Amount)
+                .Concat(allCollections.Where(c => c.TransferBankId is null).Select(c => c.Amount))
+                .ToList();
+
+        var saleRows = collectedSales.Where(t => BankMatches(t.Payment.TransferBankId)).ToList();
+        var collections = allCollections.Where(c => BankMatches(c.TransferBankId)).ToList();
+
+        var bankIds = saleRows.Select(t => t.Payment.TransferBankId)
             .Concat(collections.Select(c => c.TransferBankId))
             .Where(id => id.HasValue)
             .Select(id => id!.Value)
@@ -88,7 +111,7 @@ public sealed class IncomingTransfersReportHandler
             : (await _bankRepository.GetByIdsAsync(bankIds, companyId, cancellationToken))
                 .ToDictionary(b => b.Id, b => b.Name);
 
-        var customerIds = saleTransfers
+        var customerIds = saleRows
             .Where(t => t.Sale.CustomerId is not null)
             .Select(t => t.Sale.CustomerId!.Value)
             .Concat(collections.Select(c => c.CustomerId))
@@ -99,7 +122,7 @@ public sealed class IncomingTransfersReportHandler
             : (await _customerRepository.ListByIdsAsync(companyId, customerIds.Select(id => new CustomerId(id)), cancellationToken))
                 .ToDictionary(c => c.Id.Value, c => c.FullName);
 
-        var branchNames = saleTransfers.Count + collections.Count == 0
+        var branchNames = saleRows.Count + collections.Count == 0
             ? new Dictionary<Guid, string>()
             : (await _branchRepository.ListByCompanyAsync(companyId, cancellationToken))
                 .ToDictionary(b => b.Id.Value, b => b.Name);
@@ -108,11 +131,8 @@ public sealed class IncomingTransfersReportHandler
             key is { } k && names.TryGetValue(k, out var name) ? name : null;
 
         var rows = new List<IncomingTransferRow>();
-        foreach (var (sale, payment) in saleTransfers)
+        foreach (var (sale, payment, occurredAt) in saleRows)
         {
-            var occurredAt = movementTimes.TryGetValue((sale.Id.Value, payment.Amount), out var times) && times.Count > 0
-                ? times.Dequeue()
-                : sale.PaidAt ?? sale.CreatedAt;
             rows.Add(new IncomingTransferRow(
                 occurredAt,
                 payment.Amount,
@@ -126,20 +146,24 @@ public sealed class IncomingTransfersReportHandler
 
         foreach (var collection in collections)
         {
-            // Date suele venir sin hora (el usuario elige el día): en ese caso vale el momento de carga.
-            var occurredAt = collection.Date.TimeOfDay == TimeSpan.Zero ? collection.CreatedAt : collection.Date;
+            // El usuario elige el día del cobro; si no trae hora, es solo una fecha.
+            var dateOnly = collection.Date.TimeOfDay == TimeSpan.Zero;
             rows.Add(new IncomingTransferRow(
-                occurredAt,
+                collection.Date,
                 collection.Amount,
                 "cc_collection",
                 collection.TransferBankId,
                 Lookup(bankNames, collection.TransferBankId),
                 collection.Reference,
                 Lookup(customerNames, (Guid?)collection.CustomerId),
-                Lookup(branchNames, (Guid?)collection.BranchId)));
+                Lookup(branchNames, (Guid?)collection.BranchId),
+                dateOnly));
         }
 
-        return Result<IncomingTransfersReportResponse>.Success(
-            new IncomingTransfersReportResponse(rows.OrderBy(r => r.OccurredAt).ToList()));
+        return Result<IncomingTransfersReportResponse>.Success(new IncomingTransfersReportResponse(
+            rows.OrderBy(r => r.OccurredAt).ToList(),
+            BranchScoped: allowedBranchIds is not null,
+            UnassignedCount: unassigned.Count,
+            UnassignedTotal: unassigned.Sum()));
     }
 }

@@ -34,6 +34,40 @@ public sealed class CustomerPaymentRepository : ICustomerPaymentRepository
         await _db.CustomerPayments.AddAsync(payment, ct);
     }
 
+    public async Task<IReadOnlyList<CustomerPayment>> ListTransfersByDateAsync(
+        Guid companyId,
+        DateTime fromDate,
+        DateTime toDate,
+        Guid? branchId,
+        IReadOnlyCollection<Guid>? allowedBranchIds,
+        CancellationToken ct = default)
+    {
+        // Date guarda el día elegido por el usuario (00:00 UTC); se compara por día calendario.
+        var from = DateTime.SpecifyKind(fromDate.Date, DateTimeKind.Utc);
+        var toExclusive = DateTime.SpecifyKind(toDate.Date.AddDays(1), DateTimeKind.Utc);
+        var query = _db.CustomerPayments
+            .AsNoTracking()
+            .Where(p => p.CompanyId == companyId
+                && p.Status == SaleCcPaymentStatus.Active
+                && p.Method == SalePaymentMethod.Transfer
+                && p.Date >= from
+                && p.Date < toExclusive);
+
+        if (branchId.HasValue)
+        {
+            var bId = branchId.Value;
+            query = query.Where(p => p.BranchId == bId);
+        }
+
+        if (allowedBranchIds is not null && allowedBranchIds.Count > 0)
+        {
+            var allowed = allowedBranchIds.ToList();
+            query = query.Where(p => allowed.Contains(p.BranchId));
+        }
+
+        return await query.ToListAsync(ct);
+    }
+
     public async Task<IReadOnlyList<CustomerPayment>> ListForPaymentMethodsReportAsync(
         Guid companyId,
         DateTime from,
