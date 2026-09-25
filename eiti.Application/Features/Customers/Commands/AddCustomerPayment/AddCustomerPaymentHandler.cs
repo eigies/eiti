@@ -126,6 +126,18 @@ public sealed class AddCustomerPaymentHandler : IRequestHandler<AddCustomerPayme
             }
         }
 
+        // Banco receptor de la transferencia (opcional por compatibilidad; lo usa la conciliación).
+        if (method == SalePaymentMethod.Transfer && command.TransferBankId.HasValue)
+        {
+            var transferBank = await _bankRepository.GetByIdAsync(command.TransferBankId.Value, companyId, cancellationToken);
+            if (!BankUsageRules.Supports(transferBank, BankUsage.Transfer))
+            {
+                return Result<AddCustomerPaymentResponse>.Failure(AddCustomerPaymentErrors.TransferBankInvalid);
+            }
+
+            payment.SetTransferBank(transferBank!.Id);
+        }
+
         // Cheque recibido del cliente: entra a cartera referenciando el cobro.
         if (method == SalePaymentMethod.Check && command.Cheque is not null)
         {

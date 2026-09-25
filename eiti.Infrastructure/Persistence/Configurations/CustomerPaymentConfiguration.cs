@@ -31,6 +31,7 @@ public sealed class CustomerPaymentConfiguration : IEntityTypeConfiguration<Cust
         builder.Property(p => p.CardSurchargePct).HasColumnType("decimal(5,2)").IsRequired(false);
         builder.Property(p => p.CardSurchargeAmt).HasColumnType("decimal(18,2)").IsRequired(false);
         builder.Property(p => p.TotalCobrado).HasColumnType("decimal(18,2)").IsRequired(false);
+        builder.Property(p => p.TransferBankId).IsRequired(false);
 
         builder.HasIndex(p => new { p.CompanyId, p.CustomerId });
         builder.HasIndex(p => p.Status);
