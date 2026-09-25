@@ -28,6 +28,9 @@ public sealed class CustomerPayment
     public decimal? CardSurchargeAmt { get; private set; }
     public decimal? TotalCobrado { get; private set; }
 
+    // Banco/billetera que recibió la transferencia (conciliación contra extractos).
+    public int? TransferBankId { get; private set; }
+
     private CustomerPayment()
     {
     }
@@ -81,6 +84,8 @@ public sealed class CustomerPayment
         return new CustomerPayment(
             Guid.NewGuid(), companyId, customerId, branchId, method, amount, date, reference, notes, chequeId, createdByUserId);
     }
+
+    public void SetTransferBank(int? bankId) => TransferBankId = bankId;
 
     public void SetCardData(int bankId, int cuotas, decimal surchargePct, decimal surchargeAmt)
     {

@@ -179,7 +179,8 @@ public sealed class GetCustomerAccountHandler
                 sobrante,
                 pay.Reference,
                 pay.Notes,
-                pay.CreatedAt));
+                pay.CreatedAt,
+                pay.TransferBankId));
         }
 
         // Notas de crédito. Los totales no necesitan tocarse: la imputacion ya baja
