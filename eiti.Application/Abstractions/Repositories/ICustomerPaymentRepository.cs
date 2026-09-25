@@ -13,6 +13,16 @@ public interface ICustomerPaymentRepository
     // Cobros de cuenta corriente activos del período, para el reporte de medios de pago.
     // Filtra por CreatedAt (misma referencia temporal que Sale.CreatedAt en el resto del reporte)
     // y excluye los anulados. AsNoTracking.
+    // Cobros por transferencia activos cuyo día elegido (Date) cae entre fromDate y toDate, ambos
+    // inclusive. Para conciliar extractos: el cobro puede cargarse días después de acreditarse.
+    Task<IReadOnlyList<CustomerPayment>> ListTransfersByDateAsync(
+        Guid companyId,
+        DateTime fromDate,
+        DateTime toDate,
+        Guid? branchId,
+        IReadOnlyCollection<Guid>? allowedBranchIds,
+        CancellationToken ct = default);
+
     Task<IReadOnlyList<CustomerPayment>> ListForPaymentMethodsReportAsync(
         Guid companyId,
         DateTime from,

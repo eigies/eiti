@@ -3,6 +3,7 @@ using eiti.Application.Features.Reports.Queries.CashMovementsReport;
 using eiti.Application.Features.Reports.Queries.CashSessionsReport;
 using eiti.Application.Features.Reports.Queries.CustomerDebtors;
 using eiti.Application.Features.Reports.Queries.DailySalesControl;
+using eiti.Application.Features.Reports.Queries.IncomingTransfersReport;
 using eiti.Application.Features.Reports.Queries.ListAuditLog;
 using eiti.Application.Features.Reports.Queries.PaymentMethodsReport;
 using eiti.Application.Features.Reports.Queries.SalesReport;
@@ -147,6 +148,20 @@ public sealed class ReportsController : ControllerBase
     {
         var result = await _sender.Send(
             new PaymentMethodsReportQuery(dateFrom, dateTo, branchId, saleType),
+            cancellationToken);
+        return result.ToActionResult();
+    }
+
+    [HttpGet("payments/incoming-transfers")]
+    public async Task<IActionResult> IncomingTransfers(
+        [FromQuery] DateTime dateFrom,
+        [FromQuery] DateTime dateTo,
+        [FromQuery] int? bankId,
+        [FromQuery] Guid? branchId,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await _sender.Send(
+            new IncomingTransfersReportQuery(dateFrom, dateTo, bankId, branchId),
             cancellationToken);
         return result.ToActionResult();
     }

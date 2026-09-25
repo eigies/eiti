@@ -78,9 +78,84 @@ public sealed class AddCustomerPaymentHandlerTests
         result.Error!.Code.Should().Be("Customers.AddPayment.ChequeBankInvalid");
     }
 
+    [Fact]
+    public async Task Handle_ShouldStoreReceivingBank_WhenTransferPaymentHasTransferBank()
+    {
+        var companyId = CompanyId.New();
+        var bank = Bank.Create(companyId, "Mercadopago", useForCard: false, useForTransfer: true, useForCheque: false);
+        var bankRepository = new Mock<IBankRepository>();
+        bankRepository
+            .Setup(repository => repository.GetByIdAsync(bank.Id, companyId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(bank);
+        var added = new List<CustomerPayment>();
+        var (handler, customer) = CreateHandler(companyId, bankRepository.Object, added);
+
+        var result = await handler.Handle(
+            new AddCustomerPaymentCommand(
+                customer.Id.Value,
+                (int)SalePaymentMethod.Transfer,
+                100m,
+                DateTime.UtcNow.Date,
+                null,
+                null,
+                TransferBankId: bank.Id),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue(result.Error?.Description);
+        added.Should().ContainSingle().Which.TransferBankId.Should().Be(bank.Id);
+    }
+
+    [Fact]
+    public async Task Handle_ShouldRejectTransferPayment_WhenBankIsNotEnabledForTransfer()
+    {
+        var companyId = CompanyId.New();
+        var bank = Bank.Create(companyId, "Solo tarjetas", useForCard: true, useForTransfer: false, useForCheque: false);
+        var bankRepository = new Mock<IBankRepository>();
+        bankRepository
+            .Setup(repository => repository.GetByIdAsync(bank.Id, companyId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(bank);
+        var (handler, customer) = CreateHandler(companyId, bankRepository.Object);
+
+        var result = await handler.Handle(
+            new AddCustomerPaymentCommand(
+                customer.Id.Value,
+                (int)SalePaymentMethod.Transfer,
+                100m,
+                DateTime.UtcNow.Date,
+                null,
+                null,
+                TransferBankId: bank.Id),
+            CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error!.Code.Should().Be("Customers.AddPayment.TransferBankInvalid");
+    }
+
+    [Fact]
+    public async Task Handle_ShouldAcceptTransferPaymentWithoutBank_ForBackwardCompatibility()
+    {
+        var companyId = CompanyId.New();
+        var added = new List<CustomerPayment>();
+        var (handler, customer) = CreateHandler(companyId, new Mock<IBankRepository>().Object, added);
+
+        var result = await handler.Handle(
+            new AddCustomerPaymentCommand(
+                customer.Id.Value,
+                (int)SalePaymentMethod.Transfer,
+                100m,
+                DateTime.UtcNow.Date,
+                null,
+                null),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue(result.Error?.Description);
+        added.Should().ContainSingle().Which.TransferBankId.Should().BeNull();
+    }
+
     private static (AddCustomerPaymentHandler Handler, Customer Customer) CreateHandler(
         CompanyId companyId,
-        IBankRepository bankRepository)
+        IBankRepository bankRepository,
+        List<CustomerPayment>? added = null)
     {
         var userId = UserId.New();
         var branch = Branch.Create(companyId, "Sucursal Centro", "SC", "San Martin 123");
@@ -121,6 +196,7 @@ public sealed class AddCustomerPaymentHandlerTests
 
         customerPaymentRepository
             .Setup(repository => repository.AddAsync(It.IsAny<CustomerPayment>(), It.IsAny<CancellationToken>()))
+            .Callback<CustomerPayment, CancellationToken>((payment, _) => added?.Add(payment))
             .Returns(Task.CompletedTask);
 
         chequeRepository
