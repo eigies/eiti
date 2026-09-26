@@ -136,6 +136,19 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
             }
         }
 
+        // Si el usuario pidió factura y al cliente le falta el CUIT, se corta ANTES de guardar:
+        // si no, la venta queda creada con la factura rechazada y hay que arreglarla después.
+        // La facturación automática por config no bloquea la venta; ahí el rechazo queda
+        // registrado en la venta con el mismo motivo.
+        if (request.RequestInvoicing && _saleInvoicingService.IsEnabled)
+        {
+            var receiverError = SaleInvoicingReceiverRules.Validate(customer);
+            if (receiverError is not null)
+            {
+                return Result<CreateSaleResponse>.Failure(CreateSaleErrors.InvoicingReceiverInvalid(receiverError));
+            }
+        }
+
         var groupedDetails = request.Details
             .GroupBy(detail => detail.ProductId)
             .Select(group => new

@@ -91,6 +91,7 @@ public sealed class SaleInvoicingService : ISaleInvoicingService
         // llegó a emitirlo y se perdió la respuesta, lo devuelve en vez de emitir un segundo
         // comprobante. Solo se abre un intento nuevo cuando el anterior quedó rechazado.
         var document = SaleFiscalDocumentRules.InFlight(documents, SaleFiscalDocumentKind.Invoice);
+        var customer = await LoadCustomerAsync(sale, cancellationToken);
 
         if (document is null)
         {
@@ -99,13 +100,24 @@ public sealed class SaleInvoicingService : ISaleInvoicingService
                 sale.Id,
                 SaleFiscalDocumentRules.NextSequence(documents, SaleFiscalDocumentKind.Invoice));
             await _fiscalDocuments.AddAsync(document, cancellationToken);
+
+            // Solo se valida al abrir un intento NUEVO. Un intento en vuelo pudo haberse emitido:
+            // ese se re-envía siempre, para que el servicio devuelva lo que ya autorizó.
+            // El intento queda Rechazado con el motivo, igual que un rechazo del fisco: el
+            // usuario lo ve en la venta, completa el dato y reintenta.
+            var receiverError = SaleInvoicingReceiverRules.Validate(customer);
+            if (receiverError is not null)
+            {
+                document.Reject(null, receiverError);
+                return new SaleInvoicingOutcome(false, SaleInvoicingStatus.Rejected, document, receiverError);
+            }
         }
 
         var request = new FiscalDocumentRequest(
             RequestId: document.RequestId,
             TenantId: sale.CompanyId.Value,
             RequestedType: FiscalRequestedDocumentType.Auto,
-            Receiver: await BuildReceiverAsync(sale, cancellationToken),
+            Receiver: BuildReceiver(customer),
             Amounts: BuildAmounts(sale),
             Date: DateOnly.FromDateTime(sale.CreatedAt));
 
@@ -147,7 +159,7 @@ public sealed class SaleInvoicingService : ISaleInvoicingService
             RequestId: creditNote.RequestId,
             TenantId: sale.CompanyId.Value,
             RequestedType: FiscalRequestedDocumentType.CreditNote,
-            Receiver: await BuildReceiverAsync(sale, cancellationToken),
+            Receiver: BuildReceiver(await LoadCustomerAsync(sale, cancellationToken)),
             Amounts: BuildAmounts(sale),
             Date: DateOnly.FromDateTime(DateTime.UtcNow),
             PointOfSale: invoice.PointOfSale,
@@ -230,18 +242,17 @@ public sealed class SaleInvoicingService : ISaleInvoicingService
         return new FiscalAmounts(net, [new FiscalVatAmount(rate, net, vatAmount)], 0m, total);
     }
 
+    private async Task<Customer?> LoadCustomerAsync(Sale sale, CancellationToken cancellationToken) =>
+        sale.CustomerId is null
+            ? null
+            : await _customerRepository.GetByIdAsync(sale.CustomerId, sale.CompanyId, cancellationToken);
+
     /// <summary>
     /// Sin cliente devuelve null: el servicio lo toma como Consumidor Final sin identificar
     /// (Factura B, DocTipo 99). Es la venta de mostrador y es el caso más común.
     /// </summary>
-    private async Task<FiscalReceiver?> BuildReceiverAsync(Sale sale, CancellationToken cancellationToken)
+    private static FiscalReceiver? BuildReceiver(Customer? customer)
     {
-        if (sale.CustomerId is null)
-        {
-            return null;
-        }
-
-        var customer = await _customerRepository.GetByIdAsync(sale.CustomerId, sale.CompanyId, cancellationToken);
         if (customer is null)
         {
             return null;
@@ -270,14 +281,5 @@ public sealed class SaleInvoicingService : ISaleInvoicingService
         return new FiscalReceiver(vatCondition, documentType, documentType is null ? null : documentNumber, customer.FullName);
     }
 
-    private static string? OnlyDigits(string? value)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            return null;
-        }
-
-        var digits = new string(value.Where(char.IsDigit).ToArray());
-        return digits.Length == 0 ? null : digits;
-    }
+    private static string? OnlyDigits(string? value) => SaleInvoicingReceiverRules.OnlyDigits(value);
 }

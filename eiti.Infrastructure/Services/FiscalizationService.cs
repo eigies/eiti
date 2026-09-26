@@ -298,6 +298,18 @@ public sealed class FiscalizationService : IFiscalizationService
             payload.Qr);
     }
 
+    /// <summary>
+    /// Rechazos del servicio que el vendedor puede resolver solo. El servicio contesta en términos
+    /// técnicos y en inglés; lo que llega a la venta tiene que decir qué dato completar.
+    /// </summary>
+    private static readonly Dictionary<string, string> KnownErrorMessages = new(StringComparer.Ordinal)
+    {
+        ["Arca.ReceiverCuitRequired"] =
+            "El cliente es Responsable Inscripto o Monotributista: para facturarle hay que cargar su CUIT en la ficha del cliente.",
+        ["Arca.ReceiverIdentificationRequired"] =
+            "El monto supera el tope de ARCA para facturar a un consumidor final sin identificar. Asigná un cliente a la venta con su DNI o CUIT cargado y volvé a facturar."
+    };
+
     private static string ExtractErrorMessage(string body, int statusCode)
     {
         if (string.IsNullOrWhiteSpace(body))
@@ -308,6 +320,13 @@ public sealed class FiscalizationService : IFiscalizationService
         try
         {
             using var document = JsonDocument.Parse(body);
+            if (document.RootElement.TryGetProperty("code", out var code) &&
+                code.ValueKind == JsonValueKind.String &&
+                KnownErrorMessages.TryGetValue(code.GetString()!, out var known))
+            {
+                return known;
+            }
+
             if (document.RootElement.TryGetProperty("description", out var description))
             {
                 return description.GetString() ?? body;
