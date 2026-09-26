@@ -205,6 +205,65 @@ public sealed class FiscalizationService : IFiscalizationService
         }
     }
 
+    public async Task<FiscalPrintableDocumentResult> GetPrintableDocumentAsync(Guid tenantId, Guid documentId, CancellationToken cancellationToken = default)
+    {
+        var options = _options.Value;
+        if (!options.IsConfigured)
+        {
+            return new FiscalPrintableDocumentResult(false, ErrorMessage: "El servicio de facturación no está configurado.");
+        }
+
+        try
+        {
+            using var httpRequest = new HttpRequestMessage(
+                HttpMethod.Get,
+                BuildUri(options, $"api/fiscal-documents/{documentId}?tenantId={tenantId}"));
+            httpRequest.Headers.Add("X-Api-Key", options.ApiKey);
+
+            using var response = await _httpClient.SendAsync(httpRequest, cancellationToken);
+            var body = await response.Content.ReadAsStringAsync(cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning(
+                    "Could not read printable fiscal document {DocumentId}. Status: {StatusCode}",
+                    documentId,
+                    (int)response.StatusCode);
+                return new FiscalPrintableDocumentResult(false, ErrorMessage: ExtractErrorMessage(body, (int)response.StatusCode));
+            }
+
+            var payload = JsonSerializer.Deserialize<PrintableDocumentPayload>(body, JsonOptions);
+            // Solo un comprobante autorizado se imprime: sin CAE no es un documento fiscal.
+            if (payload is not { Status: "authorized", Type: not null, Number: not null, AuthorizationCode: not null,
+                    ValidUntil: not null, Qr: not null, Issuer: not null, Amounts: not null })
+            {
+                return new FiscalPrintableDocumentResult(false, ErrorMessage: "El comprobante no está autorizado o le faltan datos para imprimirlo.");
+            }
+
+            return new FiscalPrintableDocumentResult(true, new FiscalPrintableDocument(
+                payload.Type,
+                payload.PointOfSale,
+                payload.Number.Value,
+                payload.Date,
+                payload.AuthorizationCode,
+                payload.ValidUntil.Value,
+                payload.Qr,
+                payload.Issuer,
+                payload.Amounts,
+                payload.Receiver,
+                payload.AssociatedDocument));
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        {
+            _logger.LogWarning(ex, "Could not reach the fiscalization service to print {DocumentId}.", documentId);
+            return new FiscalPrintableDocumentResult(false, ErrorMessage: "No se pudo contactar al servicio de facturación.");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error while reading printable fiscal document {DocumentId}.", documentId);
+            return new FiscalPrintableDocumentResult(false, ErrorMessage: "Error inesperado al consultar el comprobante.");
+        }
+    }
+
     private static Uri BuildUri(FiscalizationOptions options, string relativePath) =>
         new(new Uri(options.BaseUrl!.TrimEnd('/') + "/"), relativePath);
 
@@ -281,4 +340,20 @@ public sealed class FiscalizationService : IFiscalizationService
         string? Qr,
         bool IsQueued,
         bool IsDuplicate);
+
+    // Respuesta de GET /api/fiscal-documents/{id}: los campos del alta más emisor, fecha, importes,
+    // receptor y comprobante asociado (los del pedido que se autorizó).
+    private sealed record PrintableDocumentPayload(
+        string? Status,
+        string? Type,
+        int PointOfSale,
+        long? Number,
+        string? AuthorizationCode,
+        DateOnly? ValidUntil,
+        string? Qr,
+        DateOnly Date,
+        FiscalIssuer? Issuer,
+        FiscalAmounts? Amounts,
+        FiscalReceiver? Receiver,
+        FiscalAssociatedDocument? AssociatedDocument);
 }

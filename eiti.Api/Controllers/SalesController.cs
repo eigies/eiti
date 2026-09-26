@@ -9,6 +9,8 @@ using eiti.Application.Features.Sales.Commands.SendSaleWhatsApp;
 using eiti.Application.Features.Sales.Commands.UpdateSale;
 using eiti.Application.Features.Sales.Queries.GetSaleById;
 using eiti.Application.Features.Sales.Queries.GetSaleInvoicePdf;
+using eiti.Application.Features.Sales.Queries.GetSaleInvoicePrint;
+using eiti.Domain.Sales;
 using eiti.Application.Features.Sales.Queries.ListCcPayments;
 using eiti.Application.Features.Sales.Queries.ListCcSales;
 using eiti.Application.Features.Sales.Queries.ListSales;
@@ -96,6 +98,22 @@ public sealed class SalesController : ControllerBase
         }
 
         return File(result.Value.Content, "application/pdf", result.Value.FileName);
+    }
+
+    /// <summary>Datos para que el front arme el PDF de la factura con el diseño de EITI.</summary>
+    [HttpGet("{id:guid}/invoice/print")]
+    public async Task<IActionResult> GetInvoicePrint(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await _sender.Send(new GetSaleInvoicePrintQuery(id, SaleFiscalDocumentKind.Invoice), cancellationToken);
+        return result.ToActionResult();
+    }
+
+    /// <summary>Datos para que el front arme el PDF de la nota de crédito que anuló la factura.</summary>
+    [HttpGet("{id:guid}/credit-note/print")]
+    public async Task<IActionResult> GetCreditNotePrint(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await _sender.Send(new GetSaleInvoicePrintQuery(id, SaleFiscalDocumentKind.CreditNote), cancellationToken);
+        return result.ToActionResult();
     }
 
     [HttpDelete("{id:guid}")]

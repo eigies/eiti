@@ -30,6 +30,16 @@ public interface IFiscalizationService
         Guid tenantId,
         Guid documentId,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Datos para que EITI imprima el comprobante con su propio diseño (logo, marca de agua, ítems).
+    /// Emisor, receptor, importes y comprobante asociado vienen del servicio: son los que se
+    /// enviaron a autorizar y avala el CAE, aunque después cambien los datos del cliente en EITI.
+    /// </summary>
+    Task<FiscalPrintableDocumentResult> GetPrintableDocumentAsync(
+        Guid tenantId,
+        Guid documentId,
+        CancellationToken cancellationToken = default);
 }
 
 /// <summary>Qué comprobante se pide. <c>Auto</c> deja que el servicio resuelva A o B según el receptor.</summary>
@@ -112,3 +122,30 @@ public sealed record FiscalPdfResult(
     bool IsSuccess,
     byte[]? Content = null,
     string? ErrorMessage = null);
+
+public sealed record FiscalPrintableDocumentResult(
+    bool IsSuccess,
+    FiscalPrintableDocument? Document = null,
+    string? ErrorMessage = null);
+
+/// <summary>Comprobante autorizado, con todo lo que hace falta para imprimirlo.</summary>
+public sealed record FiscalPrintableDocument(
+    string Type,
+    int PointOfSale,
+    long Number,
+    DateOnly Date,
+    string AuthorizationCode,
+    DateOnly AuthorizationExpiry,
+    string QrUrl,
+    FiscalIssuer Issuer,
+    FiscalAmounts Amounts,
+    FiscalReceiver? Receiver,
+    FiscalAssociatedDocument? AssociatedDocument);
+
+/// <summary>Emisor según el perfil fiscal del servicio. EITI no guarda datos fiscales del emisor.</summary>
+public sealed record FiscalIssuer(
+    string LegalName,
+    string Cuit,
+    FiscalReceiverVatCondition VatCondition,
+    string? Iibb,
+    DateOnly ActivityStartDate);
