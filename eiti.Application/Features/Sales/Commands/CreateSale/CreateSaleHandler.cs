@@ -142,7 +142,7 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
         // registrado en la venta con el mismo motivo.
         if (request.RequestInvoicing && _saleInvoicingService.IsEnabled)
         {
-            var receiverError = SaleInvoicingReceiverRules.Validate(customer);
+            var receiverError = SaleInvoicingReceiverRules.Validate(customer, request.InvoiceLetter);
             if (receiverError is not null)
             {
                 return Result<CreateSaleResponse>.Failure(CreateSaleErrors.InvoicingReceiverInvalid(receiverError));

@@ -15,18 +15,37 @@ public static class SaleInvoicingReceiverRules
 {
     private static readonly int[] CuitWeights = [5, 4, 3, 2, 7, 6, 5, 4, 3, 2];
 
-    /// <summary>Null si se puede facturar al cliente; si no, el motivo para mostrarle al usuario.</summary>
-    public static string? Validate(Customer? customer)
+    /// <summary>
+    /// Null si se puede facturar al cliente; si no, el motivo para mostrarle al usuario.
+    /// Con <paramref name="letter"/> además se exige que la letra elegida sea la que le corresponde:
+    /// A para Responsable Inscripto o Monotributista, B para el resto. ARCA rechaza las dos combinaciones
+    /// cruzadas (RG 5616), así que dejarlas pasar solo terminaría en una factura rechazada.
+    /// </summary>
+    public static string? Validate(Customer? customer, InvoiceLetter? letter = null)
     {
+        var requiresLetterA = customer?.IvaCondition is IvaCondition.ResponsableInscripto or IvaCondition.Monotributo;
+
+        if (letter == InvoiceLetter.A && !requiresLetterA)
+        {
+            return customer is null
+                ? "Para hacer Factura A elegí el cliente o dalo de alta con su CUIT y su condición frente al IVA."
+                : $"{customer.FullName} no está cargado como Responsable Inscripto ni Monotributista: le corresponde Factura B. Para hacer Factura A actualizá su condición frente al IVA.";
+        }
+
         // Sin cliente es Consumidor Final sin identificar: siempre se puede (hasta el tope de ARCA).
-        if (customer?.IvaCondition is not (IvaCondition.ResponsableInscripto or IvaCondition.Monotributo))
+        if (!requiresLetterA)
         {
             return null;
         }
 
-        var condition = customer.IvaCondition == IvaCondition.ResponsableInscripto
+        var condition = customer!.IvaCondition == IvaCondition.ResponsableInscripto
             ? "Responsable Inscripto"
             : "Monotributista";
+
+        if (letter == InvoiceLetter.B)
+        {
+            return $"{customer.FullName} es {condition}: le corresponde Factura A.";
+        }
 
         var cuit = OnlyDigits(customer.TaxId);
         if (cuit is null)

@@ -60,6 +60,32 @@ public sealed class SaleInvoicingReceiverTests
         SaleInvoicingReceiverRules.Validate(Customer(IvaCondition.Monotributo, "20397583857")).Should().BeNull();
     }
 
+    [Fact]
+    public void Letter_a_needs_a_registered_or_monotribute_customer()
+    {
+        SaleInvoicingReceiverRules.Validate(null, InvoiceLetter.A)
+            .Should().Be("Para hacer Factura A elegí el cliente o dalo de alta con su CUIT y su condición frente al IVA.");
+        SaleInvoicingReceiverRules.Validate(Customer(IvaCondition.ConsumidorFinal, null), InvoiceLetter.A)
+            .Should().StartWith("Juan Perez no está cargado como Responsable Inscripto ni Monotributista");
+        SaleInvoicingReceiverRules.Validate(Customer(IvaCondition.Monotributo, ValidCuit), InvoiceLetter.A).Should().BeNull();
+    }
+
+    [Fact]
+    public void Letter_a_still_needs_the_cuit()
+    {
+        SaleInvoicingReceiverRules.Validate(Customer(IvaCondition.ResponsableInscripto, null), InvoiceLetter.A)
+            .Should().Contain("hay que cargar su CUIT");
+    }
+
+    [Fact]
+    public void Letter_b_is_rejected_for_a_registered_customer()
+    {
+        SaleInvoicingReceiverRules.Validate(Customer(IvaCondition.ResponsableInscripto, ValidCuit), InvoiceLetter.B)
+            .Should().Be("Juan Perez es Responsable Inscripto: le corresponde Factura A.");
+        SaleInvoicingReceiverRules.Validate(null, InvoiceLetter.B).Should().BeNull();
+        SaleInvoicingReceiverRules.Validate(Customer(IvaCondition.Exento, null), InvoiceLetter.B).Should().BeNull();
+    }
+
     [Theory]
     [InlineData("20397583857", true)]
     [InlineData("30500010912", true)]
@@ -157,6 +183,37 @@ public sealed class SaleInvoicingReceiverTests
         result.IsFailure.Should().BeTrue();
         result.Error.Code.Should().Be("Sales.Create.InvoicingReceiverInvalid");
         result.Error.Description.Should().Contain("hay que cargar su CUIT");
+        sales.Verify(x => x.AddAsync(It.IsAny<Sale>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task A_counter_sale_asking_for_invoice_a_without_customer_is_not_created()
+    {
+        var branch = Branch.Create(_companyId, "Sucursal Centro", "SC", "San Martin 123");
+        var product = Product.Create(_companyId, "BAT-001", "BAT-001", "Contoso", "Bateria nueva", null, 100m, 70m, null);
+        var currentUser = new Mock<ICurrentUserService>();
+        currentUser.SetupGet(x => x.IsAuthenticated).Returns(true);
+        currentUser.SetupGet(x => x.CompanyId).Returns(_companyId);
+        var branches = new Mock<IBranchRepository>();
+        branches.Setup(x => x.GetByIdAsync(branch.Id, _companyId, It.IsAny<CancellationToken>())).ReturnsAsync(branch);
+        var sales = new Mock<ISaleRepository>();
+        var invoicing = new Mock<ISaleInvoicingService>();
+        invoicing.SetupGet(x => x.IsEnabled).Returns(true);
+
+        var handler = new CreateSaleHandler(
+            currentUser.Object, branches.Object, new Mock<ICustomerRepository>().Object, new Mock<IProductRepository>().Object,
+            new Mock<IBranchProductStockRepository>().Object, new Mock<IStockMovementRepository>().Object, sales.Object,
+            new Mock<ICashDrawerRepository>().Object, new Mock<ICashSessionRepository>().Object, new Mock<IAddressRepository>().Object,
+            new Mock<IBankRepository>().Object, new Mock<IChequeRepository>().Object, invoicing.Object, new Mock<IUnitOfWork>().Object);
+
+        var result = await handler.Handle(
+            new CreateSaleCommand(branch.Id.Value, null, 1, false, null,
+                [new CreateSaleDetailItemRequest(product.Id.Value, 1)], [], [], RequestInvoicing: true, InvoiceLetter: InvoiceLetter.A),
+            CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("Sales.Create.InvoicingReceiverInvalid");
+        result.Error.Description.Should().StartWith("Para hacer Factura A");
         sales.Verify(x => x.AddAsync(It.IsAny<Sale>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 

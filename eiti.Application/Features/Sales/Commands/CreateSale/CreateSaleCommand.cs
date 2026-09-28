@@ -1,5 +1,6 @@
 using eiti.Application.Common;
 using eiti.Application.Common.Authorization;
+using eiti.Application.Features.Sales.Common;
 using eiti.Domain.Sales;
 using MediatR;
 
@@ -20,7 +21,9 @@ public sealed record CreateSaleCommand(
     decimal GeneralDiscountPercent = 0,
     string? ContactPhone = null,
     // Opt-in por venta. Se ignora si la empresa/sucursal ya factura automáticamente.
-    bool RequestInvoicing = false
+    bool RequestInvoicing = false,
+    // Letra que eligió el vendedor. Con factura pedida, la venta se frena si no coincide con el cliente.
+    InvoiceLetter? InvoiceLetter = null
 ) : IRequest<Result<CreateSaleResponse>>, IRequirePermissions
 {
     public IReadOnlyCollection<string> RequiredPermissions => [PermissionCodes.SalesCreate];

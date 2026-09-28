@@ -1,3 +1,4 @@
+using eiti.Application.Features.Sales.Common;
 using eiti.Domain.Sales;
 using FluentValidation;
 
@@ -15,6 +16,11 @@ public sealed class CreateSaleValidator : AbstractValidator<CreateSaleCommand>
             .Must(channel => Enum.IsDefined(typeof(SaleSourceChannel), channel!.Value))
             .When(x => x.SourceChannel.HasValue)
             .WithMessage("El canal de origen no es válido.");
+
+        RuleFor(x => x.InvoiceLetter)
+            .Must(letter => Enum.IsDefined(typeof(InvoiceLetter), letter!.Value))
+            .When(x => x.InvoiceLetter.HasValue)
+            .WithMessage("El tipo de factura no es válido.");
 
         RuleFor(x => x.IdSaleStatus)
             .InclusiveBetween(1, 3).WithMessage("A valid sale status is required.");
