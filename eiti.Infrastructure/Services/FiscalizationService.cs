@@ -73,7 +73,9 @@ public sealed class FiscalizationService : IFiscalizationService
                 total = request.Amounts.Total
             },
             date = request.Date.ToString("yyyy-MM-dd"),
-            callbackUrl = options.CallbackUrl,
+            // appsettings trae CallbackUrl = "" por defecto: vacío es "sin callback" y viaja null.
+            // Un "" le llega al servicio como URL relativa y lo rechaza.
+            callbackUrl = string.IsNullOrWhiteSpace(options.CallbackUrl) ? null : options.CallbackUrl,
             associatedDocument = request.AssociatedDocument is null
                 ? null
                 : new
