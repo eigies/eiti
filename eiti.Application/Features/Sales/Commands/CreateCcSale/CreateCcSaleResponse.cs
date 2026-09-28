@@ -1,3 +1,5 @@
+using eiti.Application.Features.Sales.Commands.CreateSale;
+
 namespace eiti.Application.Features.Sales.Commands.CreateCcSale;
 
 public sealed record CreateCcSaleResponse(
@@ -21,7 +23,9 @@ public sealed record CreateCcSaleResponse(
     IReadOnlyList<CreateCcSaleDetailItemResponse> Details,
     decimal TradeInAmount,
     decimal CcPendingAmount,
-    IReadOnlyList<CreateCcSaleTradeInItemResponse> TradeIns);
+    IReadOnlyList<CreateCcSaleTradeInItemResponse> TradeIns,
+    // Null cuando la venta no se facturó (no se pidió y la sucursal no factura sola).
+    CreateSaleInvoicingResponse? Invoicing = null);
 
 public sealed record CreateCcSaleDetailItemResponse(
     Guid ProductId,

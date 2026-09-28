@@ -516,7 +516,8 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
         await _saleRepository.AddAsync(sale, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-        var invoicing = await TryInvoiceAsync(sale, request.RequestInvoicing, cancellationToken);
+        var invoicing = await SaleInvoicingFlow.TryInvoiceAsync(
+            _saleInvoicingService, _unitOfWork, sale, request.RequestInvoicing, cancellationToken);
 
         var customerAddress = await BuildCustomerAddress(customer, cancellationToken);
 
@@ -567,15 +568,7 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
                     GetProductBrand(productMap, tradeIn.ProductId.Value),
                     tradeIn.Quantity,
                     tradeIn.Amount)).ToList(),
-                invoicing is null
-                    ? null
-                    : new CreateSaleInvoicingResponse(
-                        (int)invoicing.Status,
-                        invoicing.Status.ToString(),
-                        invoicing.Document?.DocumentType,
-                        invoicing.Document?.PointOfSale,
-                        invoicing.Document?.Number,
-                        invoicing.Message)));
+                CreateSaleInvoicingResponse.From(invoicing)));
     }
 
     private static string? BuildCustomerDocument(Customer customer)
@@ -583,32 +576,6 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
         return customer.DocumentType is null || string.IsNullOrWhiteSpace(customer.DocumentNumber)
             ? null
             : $"{customer.DocumentType} {customer.DocumentNumber}";
-    }
-
-    /// <summary>
-    /// Factura la venta si corresponde: por config de empresa/sucursal, o porque el usuario tildó
-    /// "Facturar". La venta YA está guardada cuando se llama: la facturación nunca la bloquea ni la
-    /// revierte. Si el servicio fiscal falla, la venta queda con estado Rechazado y el usuario
-    /// reintenta desde el detalle.
-    /// </summary>
-    private async Task<SaleInvoicingOutcome?> TryInvoiceAsync(Sale sale, bool requestInvoicing, CancellationToken cancellationToken)
-    {
-        if (!_saleInvoicingService.IsEnabled || sale.SaleStatus == SaleStatus.Cancel)
-        {
-            return null;
-        }
-
-        var shouldInvoice = requestInvoicing ||
-            await _saleInvoicingService.IsAutomaticAsync(sale.CompanyId, sale.BranchId, cancellationToken);
-
-        if (!shouldInvoice)
-        {
-            return null;
-        }
-
-        var outcome = await _saleInvoicingService.InvoiceAsync(sale, cancellationToken);
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
-        return outcome;
     }
 
     private async Task<string?> BuildCustomerAddress(Customer? customer, CancellationToken cancellationToken)

@@ -1,3 +1,4 @@
+using eiti.Application.Features.Sales.Common;
 using FluentValidation;
 
 namespace eiti.Application.Features.Sales.Commands.CreateCcSale;
@@ -14,6 +15,11 @@ public sealed class CreateCcSaleValidator : AbstractValidator<CreateCcSaleComman
 
         RuleFor(x => x.Details)
             .NotEmpty().WithMessage("At least one sale detail is required.");
+
+        RuleFor(x => x.InvoiceLetter)
+            .Must(letter => Enum.IsDefined(typeof(InvoiceLetter), letter!.Value))
+            .When(x => x.InvoiceLetter.HasValue)
+            .WithMessage("El tipo de factura no es válido.");
 
         RuleForEach(x => x.Details)
             .ChildRules(detail =>

@@ -1,3 +1,4 @@
+using eiti.Application.Features.Sales.Common;
 namespace eiti.Application.Features.Sales.Commands.CreateSale;
 
 public sealed record CreateSaleResponse(
@@ -43,7 +44,19 @@ public sealed record CreateSaleInvoicingResponse(
     string? DocumentType,
     int? PointOfSale,
     long? Number,
-    string? Message);
+    string? Message)
+{
+    public static CreateSaleInvoicingResponse? From(SaleInvoicingOutcome? outcome) =>
+        outcome is null
+            ? null
+            : new CreateSaleInvoicingResponse(
+                (int)outcome.Status,
+                outcome.Status.ToString(),
+                outcome.Document?.DocumentType,
+                outcome.Document?.PointOfSale,
+                outcome.Document?.Number,
+                outcome.Message);
+}
 
 public sealed record CreateSaleDetailItemResponse(
     Guid ProductId,
