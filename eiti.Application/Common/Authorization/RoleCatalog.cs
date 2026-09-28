@@ -20,6 +20,7 @@ public static class RoleCatalog
                 PermissionCodes.SalesPay,
                 PermissionCodes.SalesCreditNoteCreate,
                 PermissionCodes.SalesCreditNoteCancel,
+                PermissionCodes.SalesInvoice,
                 PermissionCodes.CashAccess,
                 PermissionCodes.CashOpen,
                 PermissionCodes.CashClose,
@@ -89,6 +90,7 @@ public static class RoleCatalog
                 PermissionCodes.SalesPay,
                 PermissionCodes.SalesCreditNoteCreate,
                 PermissionCodes.SalesCreditNoteCancel,
+                PermissionCodes.SalesInvoice,
                 PermissionCodes.CashAccess,
                 PermissionCodes.CashOpen,
                 PermissionCodes.CashClose,
@@ -155,6 +157,7 @@ public static class RoleCatalog
                 PermissionCodes.QuotesConvert,
                 PermissionCodes.SalesUpdate,
                 PermissionCodes.SalesPay,
+                PermissionCodes.SalesInvoice,
                 PermissionCodes.PurchasesAccess
             }),
         new RoleDefinition(

@@ -49,6 +49,7 @@ public sealed class GetCurrentCompanyHandler
                 company.DefaultNoDeliverySurcharge,
                 company.PdfLogoUrl,
                 company.PdfWatermarkUrl,
+                company.AutomaticInvoicing,
                 company.CreatedAt));
     }
 }

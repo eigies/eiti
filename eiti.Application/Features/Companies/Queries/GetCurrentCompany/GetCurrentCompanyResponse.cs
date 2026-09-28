@@ -9,4 +9,5 @@ public sealed record GetCurrentCompanyResponse(
     decimal? DefaultNoDeliverySurcharge,
     string? PdfLogoUrl,
     string? PdfWatermarkUrl,
+    bool AutomaticInvoicing,
     DateTime CreatedAt);

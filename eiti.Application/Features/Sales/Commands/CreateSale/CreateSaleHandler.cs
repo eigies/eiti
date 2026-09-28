@@ -4,6 +4,7 @@ using eiti.Application.Abstractions.Services;
 using eiti.Application.Common;
 using eiti.Application.Common.Authorization;
 using eiti.Application.Features.Banks.Common;
+using eiti.Application.Features.Sales.Common;
 using eiti.Domain.Banks;
 using eiti.Domain.Branches;
 using eiti.Domain.Cash;
@@ -31,6 +32,7 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
     private readonly IAddressRepository _addressRepository;
     private readonly IBankRepository _bankRepository;
     private readonly IChequeRepository _chequeRepository;
+    private readonly ISaleInvoicingService _saleInvoicingService;
     private readonly IUnitOfWork _unitOfWork;
 
     public CreateSaleHandler(
@@ -46,6 +48,7 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
         IAddressRepository addressRepository,
         IBankRepository bankRepository,
         IChequeRepository chequeRepository,
+        ISaleInvoicingService saleInvoicingService,
         IUnitOfWork unitOfWork)
     {
         _currentUserService = currentUserService;
@@ -60,6 +63,7 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
         _addressRepository = addressRepository;
         _bankRepository = bankRepository;
         _chequeRepository = chequeRepository;
+        _saleInvoicingService = saleInvoicingService;
         _unitOfWork = unitOfWork;
     }
 
@@ -129,6 +133,19 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
             if (customer is null)
             {
                 return Result<CreateSaleResponse>.Failure(CreateSaleErrors.CustomerNotFound);
+            }
+        }
+
+        // Si el usuario pidió factura y al cliente le falta el CUIT, se corta ANTES de guardar:
+        // si no, la venta queda creada con la factura rechazada y hay que arreglarla después.
+        // La facturación automática por config no bloquea la venta; ahí el rechazo queda
+        // registrado en la venta con el mismo motivo.
+        if (request.RequestInvoicing && _saleInvoicingService.IsEnabled)
+        {
+            var receiverError = SaleInvoicingReceiverRules.Validate(customer, request.InvoiceLetter);
+            if (receiverError is not null)
+            {
+                return Result<CreateSaleResponse>.Failure(CreateSaleErrors.InvoicingReceiverInvalid(receiverError));
             }
         }
 
@@ -499,6 +516,9 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
         await _saleRepository.AddAsync(sale, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
+        var invoicing = await SaleInvoicingFlow.TryInvoiceAsync(
+            _saleInvoicingService, _unitOfWork, sale, request.RequestInvoicing, cancellationToken);
+
         var customerAddress = await BuildCustomerAddress(customer, cancellationToken);
 
         return Result<CreateSaleResponse>.Success(
@@ -547,7 +567,8 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
                     GetProductName(productMap, tradeIn.ProductId.Value),
                     GetProductBrand(productMap, tradeIn.ProductId.Value),
                     tradeIn.Quantity,
-                    tradeIn.Amount)).ToList()));
+                    tradeIn.Amount)).ToList(),
+                CreateSaleInvoicingResponse.From(invoicing)));
     }
 
     private static string? BuildCustomerDocument(Customer customer)

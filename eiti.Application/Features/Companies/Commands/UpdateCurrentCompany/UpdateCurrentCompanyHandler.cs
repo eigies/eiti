@@ -84,7 +84,8 @@ public sealed class UpdateCurrentCompanyHandler
                 whatsAppSenderPhone,
                 defaultNoDeliverySurcharge,
                 request.PdfLogoUrl,
-                request.PdfWatermarkUrl);
+                request.PdfWatermarkUrl,
+                request.AutomaticInvoicing ?? company.AutomaticInvoicing);
         }
         catch (ArgumentException ex)
         {
@@ -104,6 +105,7 @@ public sealed class UpdateCurrentCompanyHandler
                 company.DefaultNoDeliverySurcharge,
                 company.PdfLogoUrl,
                 company.PdfWatermarkUrl,
+                company.AutomaticInvoicing,
                 company.CreatedAt));
     }
 }

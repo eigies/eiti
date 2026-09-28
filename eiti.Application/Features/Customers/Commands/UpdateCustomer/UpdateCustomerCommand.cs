@@ -14,5 +14,6 @@ public sealed record UpdateCustomerCommand(
     int? DocumentType,
     string? DocumentNumber,
     string? TaxId,
+    int? IvaCondition,
     CreateCustomerAddressRequest? Address
 ) : IRequest<Result<UpdateCustomerResponse>>;

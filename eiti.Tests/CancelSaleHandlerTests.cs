@@ -10,6 +10,7 @@ using eiti.Domain.Sales;
 using eiti.Domain.Stock;
 using eiti.Domain.Users;
 using FluentAssertions;
+using eiti.Application.Features.Sales.Common;
 using Moq;
 
 namespace eiti.Tests;
@@ -82,6 +83,7 @@ public sealed class CancelSaleHandlerTests
             customerRepository.Object,
             customerPaymentRepository.Object,
             chequeRepository.Object,
+            new Mock<ISaleInvoicingService>().Object,
             unitOfWork.Object);
 
         var result = await handler.Handle(new CancelSaleCommand(sale.Id.Value), CancellationToken.None);

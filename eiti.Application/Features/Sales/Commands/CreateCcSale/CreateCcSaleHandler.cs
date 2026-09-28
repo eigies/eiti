@@ -3,6 +3,8 @@ using eiti.Application.Abstractions.Repositories;
 using eiti.Application.Abstractions.Services;
 using eiti.Application.Common;
 using eiti.Application.Common.Authorization;
+using eiti.Application.Features.Sales.Commands.CreateSale;
+using eiti.Application.Features.Sales.Common;
 using eiti.Domain.Branches;
 using eiti.Domain.Companies;
 using eiti.Domain.Customers;
@@ -22,6 +24,7 @@ public sealed class CreateCcSaleHandler : IRequestHandler<CreateCcSaleCommand, R
     private readonly IBranchProductStockRepository _branchProductStockRepository;
     private readonly IStockMovementRepository _stockMovementRepository;
     private readonly ISaleRepository _saleRepository;
+    private readonly ISaleInvoicingService _saleInvoicingService;
     private readonly IUnitOfWork _unitOfWork;
 
     public CreateCcSaleHandler(
@@ -32,6 +35,7 @@ public sealed class CreateCcSaleHandler : IRequestHandler<CreateCcSaleCommand, R
         IBranchProductStockRepository branchProductStockRepository,
         IStockMovementRepository stockMovementRepository,
         ISaleRepository saleRepository,
+        ISaleInvoicingService saleInvoicingService,
         IUnitOfWork unitOfWork)
     {
         _currentUserService = currentUserService;
@@ -41,6 +45,7 @@ public sealed class CreateCcSaleHandler : IRequestHandler<CreateCcSaleCommand, R
         _branchProductStockRepository = branchProductStockRepository;
         _stockMovementRepository = stockMovementRepository;
         _saleRepository = saleRepository;
+        _saleInvoicingService = saleInvoicingService;
         _unitOfWork = unitOfWork;
     }
 
@@ -70,6 +75,17 @@ public sealed class CreateCcSaleHandler : IRequestHandler<CreateCcSaleCommand, R
         if (customer is null)
         {
             return Result<CreateCcSaleResponse>.Failure(CreateCcSaleErrors.CustomerNotFound);
+        }
+
+        // Mismo criterio que mostrador: si se pidió factura y el cliente no la permite, se corta
+        // antes de guardar. La facturación automática no bloquea: el rechazo queda en la venta.
+        if (request.RequestInvoicing && _saleInvoicingService.IsEnabled)
+        {
+            var receiverError = SaleInvoicingReceiverRules.Validate(customer, request.InvoiceLetter);
+            if (receiverError is not null)
+            {
+                return Result<CreateCcSaleResponse>.Failure(CreateCcSaleErrors.InvoicingReceiverInvalid(receiverError));
+            }
         }
 
         var groupedDetails = request.Details
@@ -279,6 +295,9 @@ public sealed class CreateCcSaleHandler : IRequestHandler<CreateCcSaleCommand, R
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
+        var invoicing = await SaleInvoicingFlow.TryInvoiceAsync(
+            _saleInvoicingService, _unitOfWork, sale, request.RequestInvoicing, cancellationToken);
+
         return Result<CreateCcSaleResponse>.Success(
             new CreateCcSaleResponse(
                 sale.Id.Value,
@@ -313,7 +332,8 @@ public sealed class CreateCcSaleHandler : IRequestHandler<CreateCcSaleCommand, R
                     GetProductName(productMap, tradeIn.ProductId.Value),
                     GetProductBrand(productMap, tradeIn.ProductId.Value),
                     tradeIn.Quantity,
-                    tradeIn.Amount)).ToList()));
+                    tradeIn.Amount)).ToList(),
+                CreateSaleInvoicingResponse.From(invoicing)));
     }
 
     private static string GetProductName(IDictionary<Guid, Product> productMap, Guid productId)

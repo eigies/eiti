@@ -33,6 +33,7 @@ public sealed class BranchConfiguration : IEntityTypeConfiguration<Branch>
             .HasMaxLength(255)
             .IsRequired(false);
 
+        builder.Property(branch => branch.AutomaticInvoicing).IsRequired(false);
         builder.Property(branch => branch.CreatedAt).IsRequired();
         builder.Property(branch => branch.UpdatedAt).IsRequired(false);
 

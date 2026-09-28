@@ -39,6 +39,11 @@ public sealed record ListSalesItemResponse(
     bool IsModified,
     bool IsCuentaCorriente,
     SaleSourceChannel? SourceChannel,
+    int InvoicingStatus,
+    long? FiscalNumber,
+    int? FiscalPointOfSale,
+    // "invoiceA" / "invoiceB": la letra que el listado muestra junto al número.
+    string? FiscalDocumentType,
     IReadOnlyList<ListSalesDetailItemResponse> Details,
     IReadOnlyList<ListSalesPaymentItemResponse> Payments,
     IReadOnlyList<ListSalesTradeInItemResponse> TradeIns);

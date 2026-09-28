@@ -12,6 +12,7 @@ public sealed record CreateCustomerCommand(
     int? DocumentType,
     string? DocumentNumber,
     string? TaxId,
+    int? IvaCondition,
     CreateCustomerAddressRequest? Address
 ) : IRequest<Result<CreateCustomerResponse>>;
 

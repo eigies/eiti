@@ -14,17 +14,20 @@ public sealed class GetSaleByIdHandler : IRequestHandler<GetSaleByIdQuery, Resul
     private readonly ISaleRepository _saleRepository;
     private readonly ICustomerRepository _customerRepository;
     private readonly IProductRepository _productRepository;
+    private readonly ISaleFiscalDocumentRepository _fiscalDocuments;
 
     public GetSaleByIdHandler(
         ICurrentUserService currentUserService,
         ISaleRepository saleRepository,
         ICustomerRepository customerRepository,
-        IProductRepository productRepository)
+        IProductRepository productRepository,
+        ISaleFiscalDocumentRepository fiscalDocuments)
     {
         _currentUserService = currentUserService;
         _saleRepository = saleRepository;
         _customerRepository = customerRepository;
         _productRepository = productRepository;
+        _fiscalDocuments = fiscalDocuments;
     }
 
     public async Task<Result<GetSaleByIdResponse>> Handle(GetSaleByIdQuery request, CancellationToken cancellationToken)
@@ -65,6 +68,11 @@ public sealed class GetSaleByIdHandler : IRequestHandler<GetSaleByIdQuery, Resul
             : (await _productRepository.GetByIdsAsync(productIds, companyId, cancellationToken))
                 .ToDictionary(p => p.Id.Value);
 
+        var fiscalDocuments = await _fiscalDocuments.ListBySaleIdsAsync([sale.Id], companyId, cancellationToken);
+        var invoicing = SaleInvoicingView.From(fiscalDocuments);
+        var invoice = invoicing.Invoice;
+        var creditNote = invoicing.CreditNote;
+
         string? customerDocument = null;
         if (customer?.DocumentType is not null && !string.IsNullOrWhiteSpace(customer.DocumentNumber))
         {
@@ -103,6 +111,19 @@ public sealed class GetSaleByIdHandler : IRequestHandler<GetSaleByIdQuery, Resul
                 sale.CreatedAt,
                 sale.PaidAt,
                 sale.UpdatedAt,
+                (int)(invoice?.Status ?? SaleInvoicingStatus.NotInvoiced),
+                (invoice?.Status ?? SaleInvoicingStatus.NotInvoiced).ToString(),
+                invoice?.FiscalDocumentId,
+                invoice?.DocumentType,
+                invoice?.PointOfSale,
+                invoice?.Number,
+                invoice?.AuthorizationCode,
+                invoice?.AuthorizationExpiry,
+                invoice?.QrUrl,
+                invoice?.RejectionReason ?? creditNote?.RejectionReason,
+                invoice?.IssuedAt,
+                (int?)creditNote?.Status,
+                creditNote?.Number,
                 sale.Details.Select(detail => new GetSaleByIdDetailResponse(
                     detail.ProductId.Value,
                     GetProductName(productMap, detail.ProductId.Value),

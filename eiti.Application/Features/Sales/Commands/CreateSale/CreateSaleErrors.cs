@@ -51,4 +51,8 @@ public static class CreateSaleErrors
     public static readonly Error ChequeBankInvalid = Error.Validation(
         "Sales.Create.ChequeBankInvalid",
         "El banco seleccionado no esta habilitado como banco emisor de cheques.");
+
+    public static Error InvoicingReceiverInvalid(string message) => Error.Validation(
+        "Sales.Create.InvoicingReceiverInvalid",
+        message);
 }
