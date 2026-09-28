@@ -178,6 +178,7 @@ public sealed class ListSalesHandler : IRequestHandler<ListSalesQuery, Result<IR
                         (int)(invoiceMap.TryGetValue(sale.Id.Value, out var invoice) ? invoice.Status : SaleInvoicingStatus.NotInvoiced),
                         invoiceMap.TryGetValue(sale.Id.Value, out invoice) ? invoice.Number : null,
                         invoiceMap.TryGetValue(sale.Id.Value, out invoice) ? invoice.PointOfSale : null,
+                        invoiceMap.TryGetValue(sale.Id.Value, out invoice) ? invoice.DocumentType : null,
                         sale.Details.Select(detail =>
                         {
                             productMap.TryGetValue(detail.ProductId.Value, out var product);

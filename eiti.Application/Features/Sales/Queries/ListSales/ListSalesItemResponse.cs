@@ -42,6 +42,8 @@ public sealed record ListSalesItemResponse(
     int InvoicingStatus,
     long? FiscalNumber,
     int? FiscalPointOfSale,
+    // "invoiceA" / "invoiceB": la letra que el listado muestra junto al número.
+    string? FiscalDocumentType,
     IReadOnlyList<ListSalesDetailItemResponse> Details,
     IReadOnlyList<ListSalesPaymentItemResponse> Payments,
     IReadOnlyList<ListSalesTradeInItemResponse> TradeIns);
