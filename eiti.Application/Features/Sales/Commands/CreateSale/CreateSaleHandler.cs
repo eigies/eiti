@@ -516,7 +516,7 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
         await _saleRepository.AddAsync(sale, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-        await TryInvoiceAsync(sale, request.RequestInvoicing, cancellationToken);
+        var invoicing = await TryInvoiceAsync(sale, request.RequestInvoicing, cancellationToken);
 
         var customerAddress = await BuildCustomerAddress(customer, cancellationToken);
 
@@ -566,7 +566,16 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
                     GetProductName(productMap, tradeIn.ProductId.Value),
                     GetProductBrand(productMap, tradeIn.ProductId.Value),
                     tradeIn.Quantity,
-                    tradeIn.Amount)).ToList()));
+                    tradeIn.Amount)).ToList(),
+                invoicing is null
+                    ? null
+                    : new CreateSaleInvoicingResponse(
+                        (int)invoicing.Status,
+                        invoicing.Status.ToString(),
+                        invoicing.Document?.DocumentType,
+                        invoicing.Document?.PointOfSale,
+                        invoicing.Document?.Number,
+                        invoicing.Message)));
     }
 
     private static string? BuildCustomerDocument(Customer customer)
@@ -582,11 +591,11 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
     /// revierte. Si el servicio fiscal falla, la venta queda con estado Rechazado y el usuario
     /// reintenta desde el detalle.
     /// </summary>
-    private async Task TryInvoiceAsync(Sale sale, bool requestInvoicing, CancellationToken cancellationToken)
+    private async Task<SaleInvoicingOutcome?> TryInvoiceAsync(Sale sale, bool requestInvoicing, CancellationToken cancellationToken)
     {
         if (!_saleInvoicingService.IsEnabled || sale.SaleStatus == SaleStatus.Cancel)
         {
-            return;
+            return null;
         }
 
         var shouldInvoice = requestInvoicing ||
@@ -594,11 +603,12 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
 
         if (!shouldInvoice)
         {
-            return;
+            return null;
         }
 
-        await _saleInvoicingService.InvoiceAsync(sale, cancellationToken);
+        var outcome = await _saleInvoicingService.InvoiceAsync(sale, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+        return outcome;
     }
 
     private async Task<string?> BuildCustomerAddress(Customer? customer, CancellationToken cancellationToken)

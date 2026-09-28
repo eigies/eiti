@@ -95,6 +95,48 @@ public sealed class CreateSaleHandlerTests
     }
 
     [Fact]
+    public async Task Handle_ShouldReturnInvoicingOutcome_WhenSaleIsInvoiced()
+    {
+        var companyId = CompanyId.New();
+        var branch = Branch.Create(companyId, "Sucursal Centro", "SC", "San Martin 123");
+        var product = Product.Create(companyId, "BAT-001", "BAT-001", "Contoso", "Bateria nueva", null, 100m, 70m, null);
+        var stock = BranchProductStock.Create(companyId, branch.Id, product.Id);
+        stock.ApplyManualEntry(10);
+
+        var currentUserService = new Mock<ICurrentUserService>();
+        currentUserService.SetupGet(service => service.IsAuthenticated).Returns(true);
+        currentUserService.SetupGet(service => service.CompanyId).Returns(companyId);
+        var branchRepository = new Mock<IBranchRepository>();
+        branchRepository.Setup(r => r.GetByIdAsync(branch.Id, companyId, It.IsAny<CancellationToken>())).ReturnsAsync(branch);
+        var productRepository = new Mock<IProductRepository>();
+        productRepository.Setup(r => r.GetByIdsAsync(It.IsAny<IEnumerable<ProductId>>(), companyId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<Product> { product });
+        var stockRepository = new Mock<IBranchProductStockRepository>();
+        stockRepository.Setup(r => r.GetOrCreateAsync(branch.Id, product.Id, companyId, It.IsAny<CancellationToken>())).ReturnsAsync(stock);
+
+        var invoicing = new Mock<ISaleInvoicingService>();
+        invoicing.SetupGet(x => x.IsEnabled).Returns(true);
+        invoicing.Setup(x => x.InvoiceAsync(It.IsAny<eiti.Domain.Sales.Sale>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SaleInvoicingOutcome(false, SaleInvoicingStatus.Rejected, Message: "Motivo del rechazo"));
+
+        var handler = new CreateSaleHandler(
+            currentUserService.Object, branchRepository.Object, new Mock<ICustomerRepository>().Object, productRepository.Object,
+            stockRepository.Object, new Mock<IStockMovementRepository>().Object, new Mock<ISaleRepository>().Object,
+            new Mock<ICashDrawerRepository>().Object, new Mock<ICashSessionRepository>().Object, new Mock<IAddressRepository>().Object,
+            new Mock<IBankRepository>().Object, new Mock<IChequeRepository>().Object, invoicing.Object, new Mock<IUnitOfWork>().Object);
+
+        var result = await handler.Handle(
+            new CreateSaleCommand(branch.Id.Value, null, 1, false, null,
+                [new CreateSaleDetailItemRequest(product.Id.Value, 1)], [], [], RequestInvoicing: true),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Invoicing.Should().NotBeNull();
+        result.Value.Invoicing!.Status.Should().Be((int)SaleInvoicingStatus.Rejected);
+        result.Value.Invoicing.Message.Should().Be("Motivo del rechazo");
+    }
+
+    [Fact]
     public async Task Handle_ShouldRejectTradeIn_WhenProductDoesNotAllowManualValueInSale()
     {
         var companyId = CompanyId.New();

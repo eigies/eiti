@@ -29,7 +29,21 @@ public sealed record CreateSaleResponse(
     bool IsModified,
     IReadOnlyList<CreateSaleDetailItemResponse> Details,
     IReadOnlyList<CreateSalePaymentItemResponse> Payments,
-    IReadOnlyList<CreateSaleTradeInItemResponse> TradeIns);
+    IReadOnlyList<CreateSaleTradeInItemResponse> TradeIns,
+    // Null cuando la venta no se facturó (no se pidió y la sucursal no factura sola).
+    CreateSaleInvoicingResponse? Invoicing = null);
+
+/// <summary>
+/// Cómo terminó el pedido de factura que se hizo al crear la venta, para avisarle al vendedor en el
+/// momento: autorizada, en trámite (se completa sola) o rechazada con el motivo.
+/// </summary>
+public sealed record CreateSaleInvoicingResponse(
+    int Status,
+    string StatusName,
+    string? DocumentType,
+    int? PointOfSale,
+    long? Number,
+    string? Message);
 
 public sealed record CreateSaleDetailItemResponse(
     Guid ProductId,
