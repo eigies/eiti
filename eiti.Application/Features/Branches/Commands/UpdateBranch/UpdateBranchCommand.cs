@@ -9,7 +9,9 @@ public sealed record UpdateBranchCommand(
     Guid Id,
     string Name,
     string? Code,
-    string? Address
+    string? Address,
+    // Null = hereda la config de la empresa.
+    bool? AutomaticInvoicing = null
 ) : IRequest<Result<BranchResponse>>, IRequirePermissions
 {
     public IReadOnlyCollection<string> RequiredPermissions => [PermissionCodes.BranchesManage];

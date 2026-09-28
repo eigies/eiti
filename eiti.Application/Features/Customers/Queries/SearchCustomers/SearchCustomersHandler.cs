@@ -40,6 +40,8 @@ public sealed class SearchCustomersHandler : IRequestHandler<SearchCustomersQuer
                     customer.DocumentType?.ToString(),
                     customer.DocumentNumber,
                     customer.TaxId,
+                    customer.IvaCondition.HasValue ? (int)customer.IvaCondition.Value : null,
+                    customer.IvaCondition?.ToString(),
                     customer.CreditBalance))
                 .ToList());
     }

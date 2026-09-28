@@ -19,4 +19,8 @@ public static class CreateCcSaleErrors
     public static readonly Error CustomerNotFound = Error.NotFound(
         "Sales.CreateCc.CustomerNotFound",
         "The selected customer was not found.");
+
+    public static Error InvoicingReceiverInvalid(string message) => Error.Validation(
+        "Sales.CreateCc.InvoicingReceiverInvalid",
+        message);
 }

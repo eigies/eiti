@@ -10,5 +10,6 @@ public sealed record UpdateCurrentCompanyCommand(
     string? WhatsAppSenderPhone,
     decimal? DefaultNoDeliverySurcharge = null,
     string? PdfLogoUrl = null,
-    string? PdfWatermarkUrl = null
+    string? PdfWatermarkUrl = null,
+    bool? AutomaticInvoicing = null
 ) : IRequest<Result<UpdateCurrentCompanyResponse>>;

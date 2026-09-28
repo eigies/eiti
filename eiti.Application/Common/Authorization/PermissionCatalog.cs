@@ -11,6 +11,7 @@ public static class PermissionCatalog
         PermissionCodes.SalesPay,
         PermissionCodes.SalesCreditNoteCreate,
         PermissionCodes.SalesCreditNoteCancel,
+        PermissionCodes.SalesInvoice,
         PermissionCodes.QuotesAccess,
         PermissionCodes.QuotesCreate,
         PermissionCodes.QuotesConvert,

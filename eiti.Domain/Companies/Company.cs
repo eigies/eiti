@@ -11,6 +11,8 @@ public sealed class Company : AggregateRoot<CompanyId>
     public decimal? DefaultNoDeliverySurcharge { get; private set; }
     public string? PdfLogoUrl { get; private set; }
     public string? PdfWatermarkUrl { get; private set; }
+    /// <summary>Facturar electrónicamente cada venta al confirmarla, sin que el usuario tenga que tildarlo. Default OFF.</summary>
+    public bool AutomaticInvoicing { get; private set; }
     public DateTime CreatedAt { get; private set; }
 
     private Company()
@@ -72,7 +74,8 @@ public sealed class Company : AggregateRoot<CompanyId>
         string? whatsAppSenderPhone,
         decimal? defaultNoDeliverySurcharge = null,
         string? pdfLogoUrl = null,
-        string? pdfWatermarkUrl = null)
+        string? pdfWatermarkUrl = null,
+        bool automaticInvoicing = false)
     {
         var normalizedSenderPhone = NormalizeSenderPhone(whatsAppSenderPhone);
         if (isWhatsAppEnabled && string.IsNullOrWhiteSpace(normalizedSenderPhone))
@@ -89,6 +92,7 @@ public sealed class Company : AggregateRoot<CompanyId>
         DefaultNoDeliverySurcharge = defaultNoDeliverySurcharge;
         PdfLogoUrl = NormalizeOptional(pdfLogoUrl, 1_000_000, nameof(pdfLogoUrl));
         PdfWatermarkUrl = NormalizeOptional(pdfWatermarkUrl, 1_000_000, nameof(pdfWatermarkUrl));
+        AutomaticInvoicing = automaticInvoicing;
     }
 
     private static string? NormalizeSenderPhone(string? value)

@@ -14,6 +14,8 @@ public sealed record GetCustomerByIdResponse(
     string? DocumentTypeName,
     string? DocumentNumber,
     string? TaxId,
+    int? IvaCondition,
+    string? IvaConditionName,
     Guid? AddressId,
     CustomerAddressResponse? Address,
     DateTime CreatedAt,

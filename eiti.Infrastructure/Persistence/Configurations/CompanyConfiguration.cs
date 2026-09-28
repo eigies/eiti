@@ -51,6 +51,9 @@ public sealed class CompanyConfiguration : IEntityTypeConfiguration<Company>
             .HasColumnType("text")
             .IsRequired(false);
 
+        builder.Property(company => company.AutomaticInvoicing)
+            .HasDefaultValue(false)
+            .IsRequired();
         builder.Property(company => company.CreatedAt).IsRequired();
 
         builder.HasIndex(company => company.PrimaryDomain).IsUnique();

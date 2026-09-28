@@ -55,6 +55,7 @@ public sealed class ApplicationDbContext : DbContext
     public DbSet<SalePayment> SalePayments { get; set; }
     public DbSet<SaleTradeIn> SaleTradeIns { get; set; }
     public DbSet<SaleCcPayment> SaleCcPayments { get; set; }
+    public DbSet<SaleFiscalDocument> SaleFiscalDocuments { get; set; }
     public DbSet<SaleTransportAssignment> SaleTransportAssignments { get; set; }
     public DbSet<eiti.Domain.Quotes.Quote> Quotes => Set<eiti.Domain.Quotes.Quote>();
     public DbSet<eiti.Domain.Quotes.QuoteDetail> QuoteDetails => Set<eiti.Domain.Quotes.QuoteDetail>();

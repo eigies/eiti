@@ -1,3 +1,4 @@
+using eiti.Application.Features.Sales.Common;
 namespace eiti.Application.Features.Sales.Commands.CreateSale;
 
 public sealed record CreateSaleResponse(
@@ -29,7 +30,33 @@ public sealed record CreateSaleResponse(
     bool IsModified,
     IReadOnlyList<CreateSaleDetailItemResponse> Details,
     IReadOnlyList<CreateSalePaymentItemResponse> Payments,
-    IReadOnlyList<CreateSaleTradeInItemResponse> TradeIns);
+    IReadOnlyList<CreateSaleTradeInItemResponse> TradeIns,
+    // Null cuando la venta no se facturó (no se pidió y la sucursal no factura sola).
+    CreateSaleInvoicingResponse? Invoicing = null);
+
+/// <summary>
+/// Cómo terminó el pedido de factura que se hizo al crear la venta, para avisarle al vendedor en el
+/// momento: autorizada, en trámite (se completa sola) o rechazada con el motivo.
+/// </summary>
+public sealed record CreateSaleInvoicingResponse(
+    int Status,
+    string StatusName,
+    string? DocumentType,
+    int? PointOfSale,
+    long? Number,
+    string? Message)
+{
+    public static CreateSaleInvoicingResponse? From(SaleInvoicingOutcome? outcome) =>
+        outcome is null
+            ? null
+            : new CreateSaleInvoicingResponse(
+                (int)outcome.Status,
+                outcome.Status.ToString(),
+                outcome.Document?.DocumentType,
+                outcome.Document?.PointOfSale,
+                outcome.Document?.Number,
+                outcome.Message);
+}
 
 public sealed record CreateSaleDetailItemResponse(
     Guid ProductId,

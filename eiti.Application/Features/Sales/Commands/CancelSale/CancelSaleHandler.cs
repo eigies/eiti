@@ -4,6 +4,7 @@ using eiti.Application.Abstractions.Services;
 using eiti.Application.Common;
 using eiti.Application.Common.Authorization;
 using eiti.Application.Features.Customers.Common;
+using eiti.Application.Features.Sales.Common;
 using eiti.Domain.Cash;
 using eiti.Domain.Companies;
 using eiti.Domain.Customers;
@@ -28,6 +29,7 @@ public sealed class CancelSaleHandler : IRequestHandler<CancelSaleCommand, Resul
     private readonly ICustomerRepository _customerRepository;
     private readonly ICustomerPaymentRepository _customerPaymentRepository;
     private readonly IChequeRepository _chequeRepository;
+    private readonly ISaleInvoicingService _saleInvoicingService;
     private readonly IUnitOfWork _unitOfWork;
 
     public CancelSaleHandler(
@@ -41,6 +43,7 @@ public sealed class CancelSaleHandler : IRequestHandler<CancelSaleCommand, Resul
         ICustomerRepository customerRepository,
         ICustomerPaymentRepository customerPaymentRepository,
         IChequeRepository chequeRepository,
+        ISaleInvoicingService saleInvoicingService,
         IUnitOfWork unitOfWork)
     {
         _currentUserService = currentUserService;
@@ -53,6 +56,7 @@ public sealed class CancelSaleHandler : IRequestHandler<CancelSaleCommand, Resul
         _customerRepository = customerRepository;
         _customerPaymentRepository = customerPaymentRepository;
         _chequeRepository = chequeRepository;
+        _saleInvoicingService = saleInvoicingService;
         _unitOfWork = unitOfWork;
     }
 
@@ -306,6 +310,16 @@ public sealed class CancelSaleHandler : IRequestHandler<CancelSaleCommand, Resul
             {
                 assignment.Cancel();
             }
+        }
+
+        // Una venta ya facturada se anula ante el fisco con una nota de crédito electrónica.
+        // Deliberadamente NO se propaga el error: si el servicio fiscal está caído, la anulación
+        // se completa igual y la NC queda Rechazada para reintentarla desde el detalle. Anular es
+        // una decisión del negocio; no puede quedar rehén de la disponibilidad de un tercero.
+        if (_saleInvoicingService.IsEnabled)
+        {
+            // Si la venta no tiene factura autorizada, esto no hace nada.
+            await _saleInvoicingService.IssueCreditNoteAsync(sale, cancellationToken);
         }
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);

@@ -15,6 +15,7 @@ public sealed class Customer : AggregateRoot<CustomerId>
     public DocumentType? DocumentType { get; private set; }
     public string? DocumentNumber { get; private set; }
     public string? TaxId { get; private set; }
+    public IvaCondition? IvaCondition { get; private set; }
     public AddressId? AddressId { get; private set; }
     public decimal CreditBalance { get; private set; }
     public DateTime CreatedAt { get; private set; }
@@ -37,6 +38,7 @@ public sealed class Customer : AggregateRoot<CustomerId>
         DocumentType? documentType,
         string? documentNumber,
         string? taxId,
+        IvaCondition? ivaCondition,
         AddressId? addressId,
         DateTime createdAt)
         : base(id)
@@ -50,6 +52,7 @@ public sealed class Customer : AggregateRoot<CustomerId>
         DocumentType = documentType;
         DocumentNumber = NormalizeOptional(documentNumber, 30);
         TaxId = NormalizeOptional(taxId, 20);
+        IvaCondition = ivaCondition;
         AddressId = addressId;
         CreatedAt = createdAt;
     }
@@ -63,6 +66,7 @@ public sealed class Customer : AggregateRoot<CustomerId>
         DocumentType? documentType = null,
         string? documentNumber = null,
         string? taxId = null,
+        IvaCondition? ivaCondition = null,
         AddressId? addressId = null)
     {
         return new Customer(
@@ -75,6 +79,7 @@ public sealed class Customer : AggregateRoot<CustomerId>
             documentType,
             documentNumber,
             taxId,
+            ivaCondition,
             addressId,
             DateTime.UtcNow);
     }
@@ -86,6 +91,7 @@ public sealed class Customer : AggregateRoot<CustomerId>
         DocumentType? documentType,
         string? documentNumber,
         string? taxId,
+        IvaCondition? ivaCondition,
         AddressId? addressId)
     {
         FirstName = NormalizeRequired(firstName, nameof(firstName), 100);
@@ -95,6 +101,7 @@ public sealed class Customer : AggregateRoot<CustomerId>
         DocumentType = documentType;
         DocumentNumber = NormalizeOptional(documentNumber, 30);
         TaxId = NormalizeOptional(taxId, 20);
+        IvaCondition = ivaCondition;
         AddressId = addressId;
         UpdatedAt = DateTime.UtcNow;
     }
