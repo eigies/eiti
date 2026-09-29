@@ -135,6 +135,7 @@ public sealed class SaleInvoicingReceiverTests
     [Theory]
     [InlineData("Arca.ReceiverIdentificationRequired", "El monto supera el tope de ARCA")]
     [InlineData("Arca.ReceiverCuitRequired", "hay que cargar su CUIT")]
+    [InlineData("Arca.ReceiverIsIssuer", "mismo CUIT que quien factura")]
     public async Task Fiscal_service_rejections_reach_the_sale_in_spanish(string code, string expected)
     {
         var body = $$"""{"code":"{{code}}","description":"Receiver identification is required above the configured ARCA threshold.","type":1}""";
@@ -146,6 +147,26 @@ public sealed class SaleInvoicingReceiverTests
         var result = await service.RequestDocumentAsync(new FiscalDocumentRequest(
             "req-1", Guid.NewGuid(), FiscalRequestedDocumentType.Auto, null,
             new FiscalAmounts(10m, [new FiscalVatAmount(21m, 10m, 2.1m)], 0m, 12.1m), new DateOnly(2026, 9, 26)));
+
+        result.Outcome.Should().Be(FiscalDocumentOutcome.Rejected);
+        result.ErrorMessage.Should().Contain(expected);
+    }
+
+    [Theory]
+    [InlineData("10069: Campo DocNro no puede ser igual al del emisor.", "mismo CUIT que quien factura")]
+    [InlineData("10015: Factura A: el receptor debe ser responsable inscripto.", "ARCA: 10015: Factura A")]
+    public async Task An_arca_rejection_keeps_its_reason(string failureReason, string expected)
+    {
+        // Antes el servicio no devolvia el motivo y EITI no lo leia: la venta quedaba "rechazada" sin explicacion.
+        var body = $$"""{"documentId":"d7133a09-3ced-4b6e-b698-0bb38782a965","status":"rejected","type":"invoiceA","pointOfSale":1,"number":null,"authorizationCode":null,"validUntil":null,"qr":null,"isQueued":false,"isDuplicate":false,"failureReason":"{{failureReason}}"}""";
+        var service = new FiscalizationService(
+            new HttpClient(new StubHandler(HttpStatusCode.OK, body)),
+            Options.Create(new FiscalizationOptions { BaseUrl = "http://fiscal.local", ApiKey = "test-key" }),
+            NullLogger<FiscalizationService>.Instance);
+
+        var result = await service.RequestDocumentAsync(new FiscalDocumentRequest(
+            "req-1", Guid.NewGuid(), FiscalRequestedDocumentType.Auto, null,
+            new FiscalAmounts(10m, [new FiscalVatAmount(21m, 10m, 2.1m)], 0m, 12.1m), new DateOnly(2026, 9, 29)));
 
         result.Outcome.Should().Be(FiscalDocumentOutcome.Rejected);
         result.ErrorMessage.Should().Contain(expected);
