@@ -43,6 +43,22 @@ public sealed class SaleRepository : ISaleRepository
         _context.Sales.Remove(sale);
     }
 
+    public async Task<IReadOnlyList<Sale>> ListByCodeAsync(
+        CompanyId companyId,
+        string code,
+        CancellationToken cancellationToken = default)
+    {
+        var normalized = code.Trim().ToUpper();
+        return await _context.Sales
+            .Include(sale => sale.Details)
+            .Include(sale => sale.Payments)
+            .Include(sale => sale.TradeIns)
+            .Where(sale => sale.CompanyId == companyId)
+            .Where(sale => sale.Code != null && sale.Code.ToUpper() == normalized)
+            .OrderByDescending(sale => sale.CreatedAt)
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task<IReadOnlyList<Sale>> ListByCompanyAsync(
         CompanyId companyId,
         DateTime? dateFrom,

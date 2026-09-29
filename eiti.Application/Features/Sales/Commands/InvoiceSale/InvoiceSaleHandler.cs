@@ -14,6 +14,7 @@ public sealed class InvoiceSaleHandler : IRequestHandler<InvoiceSaleCommand, Res
     private readonly ISaleRepository _saleRepository;
     private readonly ISaleFiscalDocumentRepository _fiscalDocuments;
     private readonly ISaleInvoicingService _saleInvoicingService;
+    private readonly ICustomerRepository _customerRepository;
     private readonly IUnitOfWork _unitOfWork;
 
     public InvoiceSaleHandler(
@@ -21,12 +22,14 @@ public sealed class InvoiceSaleHandler : IRequestHandler<InvoiceSaleCommand, Res
         ISaleRepository saleRepository,
         ISaleFiscalDocumentRepository fiscalDocuments,
         ISaleInvoicingService saleInvoicingService,
+        ICustomerRepository customerRepository,
         IUnitOfWork unitOfWork)
     {
         _currentUserService = currentUserService;
         _saleRepository = saleRepository;
         _fiscalDocuments = fiscalDocuments;
         _saleInvoicingService = saleInvoicingService;
+        _customerRepository = customerRepository;
         _unitOfWork = unitOfWork;
     }
 
@@ -69,6 +72,23 @@ public sealed class InvoiceSaleHandler : IRequestHandler<InvoiceSaleCommand, Res
         // de recuperación cuando se perdió la respuesta. El reintento re-envía el mismo RequestId,
         // así que el servicio devuelve el comprobante que ya emitió en vez de emitir otro.
         // Bloquearlo acá dejaba la venta trabada en "en trámite" para siempre.
+
+        // Letra elegida al facturar después del alta: se valida contra el cliente ANTES de pedir nada,
+        // igual que en el alta. Solo al abrir un intento nuevo: un intento en trámite se re-envía tal
+        // cual (pudo haberse emitido) y no se lo frena por datos que cambiaron después.
+        var documents = await _fiscalDocuments.ListBySaleAsync(sale.Id, companyId, cancellationToken);
+        if (command.InvoiceLetter is not null &&
+            SaleFiscalDocumentRules.InFlight(documents, SaleFiscalDocumentKind.Invoice) is null)
+        {
+            var customer = sale.CustomerId is null
+                ? null
+                : await _customerRepository.GetByIdAsync(sale.CustomerId, companyId, cancellationToken);
+            var receiverError = SaleInvoicingReceiverRules.Validate(customer, command.InvoiceLetter);
+            if (receiverError is not null)
+            {
+                return Result.Failure<InvoiceSaleResponse>(InvoiceSaleErrors.ReceiverInvalid(receiverError));
+            }
+        }
 
         var outcome = await _saleInvoicingService.InvoiceAsync(sale, cancellationToken);
 
