@@ -17,7 +17,9 @@ using eiti.Application.Features.Sales.Queries.ListSales;
 using eiti.Application.Features.Sales.Queries.SearchDeliveryAddresses;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
+using eiti.Application.Features.Sales.Common;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 
 namespace eiti.Api.Controllers;
 
@@ -79,9 +81,13 @@ public sealed class SalesController : ControllerBase
     }
 
     [HttpPost("{id:guid}/invoice")]
-    public async Task<IActionResult> InvoiceSale(Guid id, CancellationToken cancellationToken)
+    public async Task<IActionResult> InvoiceSale(
+        Guid id,
+        [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] InvoiceSaleRequest? body,
+        CancellationToken cancellationToken)
     {
-        var result = await _sender.Send(new InvoiceSaleCommand(id), cancellationToken);
+        // Sin cuerpo (como antes) la letra la decide el cliente; con cuerpo, la elegida se valida.
+        var result = await _sender.Send(new InvoiceSaleCommand(id, body?.InvoiceLetter), cancellationToken);
         return result.ToActionResult();
     }
 
@@ -210,3 +216,5 @@ public sealed class SalesController : ControllerBase
 
 public sealed record UpdateSaleTransportStatusRequest(int Status);
 
+/// <summary>Cuerpo opcional de POST /sales/{id}/invoice.</summary>
+public sealed record InvoiceSaleRequest(InvoiceLetter? InvoiceLetter);

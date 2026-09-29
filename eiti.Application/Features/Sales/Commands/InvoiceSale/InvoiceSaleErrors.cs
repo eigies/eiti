@@ -20,6 +20,10 @@ public static class InvoiceSaleErrors
         "Sales.Invoice.AlreadyInvoiced",
         "La venta ya tiene un comprobante autorizado.");
 
+    public static Error ReceiverInvalid(string message) => Error.Validation(
+        "Sales.Invoice.ReceiverInvalid",
+        message);
+
     public static Error Rejected(string? message) => Error.Conflict(
         "Sales.Invoice.Rejected",
         string.IsNullOrWhiteSpace(message)
