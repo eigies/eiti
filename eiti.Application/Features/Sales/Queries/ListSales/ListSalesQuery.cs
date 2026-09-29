@@ -8,8 +8,10 @@ public sealed record ListSalesQuery(
     DateTime? DateFrom,
     DateTime? DateTo,
     int? IdSaleStatus,
-    bool IncludeCuentaCorriente = false
-) : IRequest<Result<IReadOnlyList<ListSalesItemResponse>>>, IRequirePermissions
+    bool IncludeCuentaCorriente = false,
+    // Con código se busca esa venta en cualquier fecha (incluye las de cuenta corriente).
+    string? Code = null
+): IRequest<Result<IReadOnlyList<ListSalesItemResponse>>>, IRequirePermissions
 {
     public IReadOnlyCollection<string> RequiredPermissions => [PermissionCodes.SalesAccess];
 }
