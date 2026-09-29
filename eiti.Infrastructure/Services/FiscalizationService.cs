@@ -297,7 +297,31 @@ public sealed class FiscalizationService : IFiscalizationService
             payload.Number,
             payload.AuthorizationCode,
             payload.ValidUntil?.ToDateTime(TimeOnly.MinValue),
-            payload.Qr);
+            payload.Qr,
+            ErrorMessage: outcome is FiscalDocumentOutcome.Rejected or FiscalDocumentOutcome.Unavailable
+                ? FriendlyRejectionReason(payload.FailureReason)
+                : null);
+    }
+
+    /// <summary>
+    /// Rechazos del fisco que el vendedor tiene que entender sin saber de ARCA. Clave: el codigo que
+    /// ARCA antepone al mensaje ("10069: ..."). El resto pasa tal cual: ARCA ya escribe en castellano.
+    /// </summary>
+    private static readonly Dictionary<string, string> KnownArcaRejections = new(StringComparer.Ordinal)
+    {
+        ["10069"] = "El cliente tiene el mismo CUIT que quien factura: ARCA no permite facturarse a uno mismo. Elegí otro cliente."
+    };
+
+    private static string? FriendlyRejectionReason(string? reason)
+    {
+        if (string.IsNullOrWhiteSpace(reason))
+        {
+            return null;
+        }
+
+        var separator = reason.IndexOf(':');
+        var code = separator > 0 ? reason[..separator].Trim() : string.Empty;
+        return KnownArcaRejections.TryGetValue(code, out var friendly) ? friendly : $"ARCA: {reason.Trim()}";
     }
 
     /// <summary>
@@ -308,6 +332,8 @@ public sealed class FiscalizationService : IFiscalizationService
     {
         ["Arca.ReceiverCuitRequired"] =
             "El cliente es Responsable Inscripto o Monotributista: para facturarle hay que cargar su CUIT en la ficha del cliente.",
+        ["Arca.ReceiverIsIssuer"] =
+            "El cliente tiene el mismo CUIT que quien factura: no se puede facturar a uno mismo. Elegí otro cliente.",
         ["Arca.ReceiverIdentificationRequired"] =
             "El monto supera el tope de ARCA para facturar a un consumidor final sin identificar. Asigná un cliente a la venta con su DNI o CUIT cargado y volvé a facturar."
     };
@@ -360,7 +386,9 @@ public sealed class FiscalizationService : IFiscalizationService
         DateOnly? ValidUntil,
         string? Qr,
         bool IsQueued,
-        bool IsDuplicate);
+        bool IsDuplicate,
+        // Motivo del rechazo: del fisco ("10069: ...") o de la validacion previa del servicio.
+        string? FailureReason = null);
 
     // Respuesta de GET /api/fiscal-documents/{id}: los campos del alta más emisor, fecha, importes,
     // receptor y comprobante asociado (los del pedido que se autorizó).
