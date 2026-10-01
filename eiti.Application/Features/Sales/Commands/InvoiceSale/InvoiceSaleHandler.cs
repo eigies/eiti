@@ -15,6 +15,7 @@ public sealed class InvoiceSaleHandler : IRequestHandler<InvoiceSaleCommand, Res
     private readonly ISaleFiscalDocumentRepository _fiscalDocuments;
     private readonly ISaleInvoicingService _saleInvoicingService;
     private readonly ICustomerRepository _customerRepository;
+    private readonly IBranchRepository _branchRepository;
     private readonly IUnitOfWork _unitOfWork;
 
     public InvoiceSaleHandler(
@@ -23,6 +24,7 @@ public sealed class InvoiceSaleHandler : IRequestHandler<InvoiceSaleCommand, Res
         ISaleFiscalDocumentRepository fiscalDocuments,
         ISaleInvoicingService saleInvoicingService,
         ICustomerRepository customerRepository,
+        IBranchRepository branchRepository,
         IUnitOfWork unitOfWork)
     {
         _currentUserService = currentUserService;
@@ -30,6 +32,7 @@ public sealed class InvoiceSaleHandler : IRequestHandler<InvoiceSaleCommand, Res
         _fiscalDocuments = fiscalDocuments;
         _saleInvoicingService = saleInvoicingService;
         _customerRepository = customerRepository;
+        _branchRepository = branchRepository;
         _unitOfWork = unitOfWork;
     }
 
@@ -77,8 +80,19 @@ public sealed class InvoiceSaleHandler : IRequestHandler<InvoiceSaleCommand, Res
         // igual que en el alta. Solo al abrir un intento nuevo: un intento en trámite se re-envía tal
         // cual (pudo haberse emitido) y no se lo frena por datos que cambiaron después.
         var documents = await _fiscalDocuments.ListBySaleAsync(sale.Id, companyId, cancellationToken);
-        if (command.InvoiceLetter is not null &&
-            SaleFiscalDocumentRules.InFlight(documents, SaleFiscalDocumentKind.Invoice) is null)
+        var opensNewAttempt = SaleFiscalDocumentRules.InFlight(documents, SaleFiscalDocumentKind.Invoice) is null;
+        if (opensNewAttempt)
+        {
+            // Sin punto de venta en la sucursal no se pide nada: se avisa qué hay que hacer.
+            var branch = await _branchRepository.GetByIdAsync(sale.BranchId, companyId, cancellationToken);
+            var branchError = SaleInvoicingBranchRules.Validate(branch);
+            if (branchError is not null)
+            {
+                return Result.Failure<InvoiceSaleResponse>(InvoiceSaleErrors.BranchWithoutPointOfSale(branchError));
+            }
+        }
+
+        if (command.InvoiceLetter is not null && opensNewAttempt)
         {
             var customer = sale.CustomerId is null
                 ? null

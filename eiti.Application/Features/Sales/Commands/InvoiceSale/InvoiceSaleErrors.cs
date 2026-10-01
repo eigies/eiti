@@ -29,4 +29,8 @@ public static class InvoiceSaleErrors
         string.IsNullOrWhiteSpace(message)
             ? "El servicio de facturación rechazó el comprobante."
             : message);
+
+    public static Error BranchWithoutPointOfSale(string message) => Error.Validation(
+        "Sales.Invoice.BranchWithoutPointOfSale",
+        message);
 }

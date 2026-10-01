@@ -30,6 +30,7 @@ public sealed class CreateCcSaleInvoicingTests
     public CreateCcSaleInvoicingTests()
     {
         _branch = Branch.Create(_companyId, "Sucursal Centro", "SC", "San Martin 123");
+        _branch.AssignFiscalPointOfSale(FiscalPointOfSale.Create(_companyId, 3));
         _product = Product.Create(_companyId, "BAT-001", "BAT-001", "Contoso", "Bateria nueva", null, 100m, 70m, null);
         _invoicing.SetupGet(x => x.IsEnabled).Returns(true);
     }
@@ -44,6 +45,20 @@ public sealed class CreateCcSaleInvoicingTests
         result.IsFailure.Should().BeTrue();
         result.Error.Code.Should().Be("Sales.CreateCc.InvoicingReceiverInvalid");
         result.Error.Description.Should().Contain("hay que cargar su CUIT");
+        _sales.Verify(x => x.AddAsync(It.IsAny<Sale>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Asking_for_an_invoice_in_a_branch_without_point_of_sale_does_not_create_the_sale()
+    {
+        _branch.ClearFiscalPointOfSale();
+        var customer = Customer(IvaCondition.ConsumidorFinal, taxId: null);
+
+        var result = await Handler(customer).Handle(Command(customer, requestInvoicing: true, null), CancellationToken.None);
+
+        result.Error.Code.Should().Be("Sales.CreateCc.BranchWithoutPointOfSale");
+        result.Error.Description.Should().Be(
+            "La sucursal Sucursal Centro no tiene punto de venta de ARCA. Asignale uno en Facturación electrónica para poder facturar.");
         _sales.Verify(x => x.AddAsync(It.IsAny<Sale>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 

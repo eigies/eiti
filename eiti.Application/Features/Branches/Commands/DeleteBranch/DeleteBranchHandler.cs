@@ -11,15 +11,18 @@ public sealed class DeleteBranchHandler : IRequestHandler<DeleteBranchCommand, R
 {
     private readonly ICurrentUserService _currentUserService;
     private readonly IBranchRepository _branchRepository;
+    private readonly IFiscalPointOfSaleRepository _pointsOfSale;
     private readonly IUnitOfWork _unitOfWork;
 
     public DeleteBranchHandler(
         ICurrentUserService currentUserService,
         IBranchRepository branchRepository,
+        IFiscalPointOfSaleRepository pointsOfSale,
         IUnitOfWork unitOfWork)
     {
         _currentUserService = currentUserService;
         _branchRepository = branchRepository;
+        _pointsOfSale = pointsOfSale;
         _unitOfWork = unitOfWork;
     }
 
@@ -41,6 +44,10 @@ public sealed class DeleteBranchHandler : IRequestHandler<DeleteBranchCommand, R
             return Result.Failure(DeleteBranchErrors.InUse);
 
         // DeleteAsync limpia las filas de stock vacías (contadores en 0) de la sucursal y remueve la entidad.
+        // El punto de venta es de la sucursal (1:1): se va con ella y su número queda libre.
+        if (branch.FiscalPointOfSale is not null)
+            _pointsOfSale.Remove(branch.FiscalPointOfSale);
+
         await _branchRepository.DeleteAsync(branch, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
