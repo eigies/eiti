@@ -40,7 +40,18 @@ public interface IFiscalizationService
         Guid tenantId,
         Guid documentId,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Habilita en el perfil fiscal del cliente el punto de venta que se le asigna a una sucursal.
+    /// Repetirlo no hace nada. Sin esto el servicio rechaza las facturas de ese punto de venta.
+    /// </summary>
+    Task<FiscalOperationResult> RegisterPointOfSaleAsync(
+        Guid tenantId,
+        int number,
+        CancellationToken cancellationToken = default);
 }
+
+public sealed record FiscalOperationResult(bool IsSuccess, string? ErrorMessage = null);
 
 /// <summary>Qué comprobante se pide. <c>Auto</c> deja que el servicio resuelva A o B según el receptor.</summary>
 public enum FiscalRequestedDocumentType

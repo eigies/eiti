@@ -1,6 +1,7 @@
 using eiti.Api.Extensions;
 using eiti.Application.Features.Branches.Commands.CreateBranch;
 using eiti.Application.Features.Branches.Commands.DeleteBranch;
+using eiti.Application.Features.Branches.Commands.SetBranchPointOfSale;
 using eiti.Application.Features.Branches.Commands.UpdateBranch;
 using eiti.Application.Features.Branches.Queries.ListBranches;
 using eiti.Application.Features.Branches.Queries.ListTransferTargets;
@@ -47,6 +48,13 @@ public sealed class BranchesController : ControllerBase
     public async Task<IActionResult> Update(Guid id, [FromBody] UpdateBranchCommand command, CancellationToken cancellationToken)
     {
         var result = await _sender.Send(command with { Id = id }, cancellationToken);
+        return result.ToActionResult();
+    }
+
+    [HttpPut("{id:guid}/fiscal-point-of-sale")]
+    public async Task<IActionResult> SetPointOfSale(Guid id, [FromBody] SetBranchPointOfSaleRequest request, CancellationToken cancellationToken)
+    {
+        var result = await _sender.Send(new SetBranchPointOfSaleCommand(id, request.Number), cancellationToken);
         return result.ToActionResult();
     }
 

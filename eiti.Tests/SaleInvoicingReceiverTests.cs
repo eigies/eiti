@@ -27,6 +27,13 @@ public sealed class SaleInvoicingReceiverTests
     private const string ValidCuit = "20-39758385-7";
 
     private readonly CompanyId _companyId = CompanyId.New();
+    private readonly Branch _branch;
+
+    public SaleInvoicingReceiverTests()
+    {
+        _branch = Branch.Create(_companyId, "Sucursal Centro", "SC", "San Martin 123");
+        _branch.AssignFiscalPointOfSale(FiscalPointOfSale.Create(_companyId, 3));
+    }
 
     [Fact]
     public void Counter_sale_and_final_consumer_need_no_customer_data()
@@ -114,6 +121,39 @@ public sealed class SaleInvoicingReceiverTests
     }
 
     [Fact]
+    public async Task The_invoice_is_requested_on_the_point_of_sale_of_the_selling_branch()
+    {
+        var customer = Customer(IvaCondition.ConsumidorFinal, taxId: null);
+        var fiscal = new Mock<IFiscalizationService>();
+        fiscal.SetupGet(x => x.IsEnabled).Returns(true);
+        fiscal.Setup(x => x.RequestDocumentAsync(It.IsAny<FiscalDocumentRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new FiscalDocumentResult(FiscalDocumentOutcome.Unavailable, ErrorMessage: "timeout"));
+
+        await InvoicingService(fiscal, customer, [], []).InvoiceAsync(Sale(customer), CancellationToken.None);
+
+        fiscal.Verify(x => x.RequestDocumentAsync(
+            It.Is<FiscalDocumentRequest>(r => r.PointOfSale == 3), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task A_branch_without_point_of_sale_is_rejected_without_calling_the_fiscal_service()
+    {
+        // Facturación automática: la venta ya se hizo, el motivo queda en la venta para resolverlo.
+        _branch.ClearFiscalPointOfSale();
+        var customer = Customer(IvaCondition.ConsumidorFinal, taxId: null);
+        var fiscal = new Mock<IFiscalizationService>();
+        fiscal.SetupGet(x => x.IsEnabled).Returns(true);
+        var added = new List<SaleFiscalDocument>();
+
+        var outcome = await InvoicingService(fiscal, customer, [], added).InvoiceAsync(Sale(customer), CancellationToken.None);
+
+        outcome.Status.Should().Be(SaleInvoicingStatus.Rejected);
+        outcome.Message.Should().StartWith("La sucursal Sucursal Centro no tiene punto de venta");
+        added.Should().ContainSingle().Which.RejectionReason.Should().Be(outcome.Message);
+        fiscal.Verify(x => x.RequestDocumentAsync(It.IsAny<FiscalDocumentRequest>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
     public async Task An_attempt_in_flight_is_always_resent_even_if_the_customer_data_became_invalid()
     {
         // El intento pudo haberse emitido: no re-enviarlo dejaría la venta trabada o duplicaría el comprobante.
@@ -173,9 +213,38 @@ public sealed class SaleInvoicingReceiverTests
     }
 
     [Fact]
-    public async Task A_sale_that_asks_for_an_invoice_is_not_created_when_the_customer_is_missing_the_cuit()
+    public async Task A_sale_that_asks_for_an_invoice_is_not_created_when_the_branch_has_no_point_of_sale()
     {
         var branch = Branch.Create(_companyId, "Sucursal Centro", "SC", "San Martin 123");
+        var product = Product.Create(_companyId, "BAT-001", "BAT-001", "Contoso", "Bateria nueva", null, 100m, 70m, null);
+        var currentUser = new Mock<ICurrentUserService>();
+        currentUser.SetupGet(x => x.IsAuthenticated).Returns(true);
+        currentUser.SetupGet(x => x.CompanyId).Returns(_companyId);
+        var branches = new Mock<IBranchRepository>();
+        branches.Setup(x => x.GetByIdAsync(branch.Id, _companyId, It.IsAny<CancellationToken>())).ReturnsAsync(branch);
+        var sales = new Mock<ISaleRepository>();
+        var invoicing = new Mock<ISaleInvoicingService>();
+        invoicing.SetupGet(x => x.IsEnabled).Returns(true);
+
+        var handler = new CreateSaleHandler(
+            currentUser.Object, branches.Object, new Mock<ICustomerRepository>().Object, new Mock<IProductRepository>().Object,
+            new Mock<IBranchProductStockRepository>().Object, new Mock<IStockMovementRepository>().Object, sales.Object,
+            new Mock<ICashDrawerRepository>().Object, new Mock<ICashSessionRepository>().Object, new Mock<IAddressRepository>().Object,
+            new Mock<IBankRepository>().Object, new Mock<IChequeRepository>().Object, invoicing.Object, new Mock<IUnitOfWork>().Object);
+
+        var result = await handler.Handle(
+            new CreateSaleCommand(branch.Id.Value, null, 1, false, null,
+                [new CreateSaleDetailItemRequest(product.Id.Value, 1)], [], [], RequestInvoicing: true),
+            CancellationToken.None);
+
+        result.Error.Code.Should().Be("Sales.Create.BranchWithoutPointOfSale");
+        sales.Verify(x => x.AddAsync(It.IsAny<Sale>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task A_sale_that_asks_for_an_invoice_is_not_created_when_the_customer_is_missing_the_cuit()
+    {
+        var branch = _branch;
         var product = Product.Create(_companyId, "BAT-001", "BAT-001", "Contoso", "Bateria nueva", null, 100m, 70m, null);
         var customer = Customer(IvaCondition.ResponsableInscripto, taxId: null);
 
@@ -210,7 +279,7 @@ public sealed class SaleInvoicingReceiverTests
     [Fact]
     public async Task A_counter_sale_asking_for_invoice_a_without_customer_is_not_created()
     {
-        var branch = Branch.Create(_companyId, "Sucursal Centro", "SC", "San Martin 123");
+        var branch = _branch;
         var product = Product.Create(_companyId, "BAT-001", "BAT-001", "Contoso", "Bateria nueva", null, 100m, 70m, null);
         var currentUser = new Mock<ICurrentUserService>();
         currentUser.SetupGet(x => x.IsAuthenticated).Returns(true);
@@ -242,7 +311,7 @@ public sealed class SaleInvoicingReceiverTests
         eiti.Domain.Customers.Customer.Create(_companyId, "Juan", "Perez", null, taxId: taxId, ivaCondition: condition);
 
     private Sale Sale(Customer customer) =>
-        eiti.Domain.Sales.Sale.Create(_companyId, BranchId.New(), customer.Id, false, SaleStatus.OnHold,
+        eiti.Domain.Sales.Sale.Create(_companyId, _branch.Id, customer.Id, false, SaleStatus.OnHold,
             [SaleDetail.Create(ProductId.New(), 1, 1210m)]);
 
     private SaleInvoicingService InvoicingService(
@@ -259,8 +328,11 @@ public sealed class SaleInvoicingReceiverTests
         var customers = new Mock<ICustomerRepository>();
         customers.Setup(x => x.GetByIdAsync(customer.Id, _companyId, It.IsAny<CancellationToken>())).ReturnsAsync(customer);
 
+        var branches = new Mock<IBranchRepository>();
+        branches.Setup(x => x.GetByIdAsync(_branch.Id, _companyId, It.IsAny<CancellationToken>())).ReturnsAsync(_branch);
+
         return new SaleInvoicingService(fiscal.Object, documents.Object, customers.Object,
-            new Mock<ICompanyRepository>().Object, new Mock<IBranchRepository>().Object);
+            new Mock<ICompanyRepository>().Object, branches.Object);
     }
 
     private sealed class StubHandler(HttpStatusCode status, string body) : HttpMessageHandler

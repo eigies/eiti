@@ -136,12 +136,19 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
             }
         }
 
-        // Si el usuario pidió factura y al cliente le falta el CUIT, se corta ANTES de guardar:
+        // Si el usuario pidió factura y la sucursal no tiene punto de venta o al cliente le falta
+        // el CUIT, se corta ANTES de guardar:
         // si no, la venta queda creada con la factura rechazada y hay que arreglarla después.
         // La facturación automática por config no bloquea la venta; ahí el rechazo queda
         // registrado en la venta con el mismo motivo.
         if (request.RequestInvoicing && _saleInvoicingService.IsEnabled)
         {
+            var branchError = SaleInvoicingBranchRules.Validate(branch);
+            if (branchError is not null)
+            {
+                return Result<CreateSaleResponse>.Failure(CreateSaleErrors.BranchWithoutPointOfSale(branchError));
+            }
+
             var receiverError = SaleInvoicingReceiverRules.Validate(customer, request.InvoiceLetter);
             if (receiverError is not null)
             {

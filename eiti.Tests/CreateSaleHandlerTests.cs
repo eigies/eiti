@@ -99,6 +99,7 @@ public sealed class CreateSaleHandlerTests
     {
         var companyId = CompanyId.New();
         var branch = Branch.Create(companyId, "Sucursal Centro", "SC", "San Martin 123");
+        branch.AssignFiscalPointOfSale(FiscalPointOfSale.Create(companyId, 3));
         var product = Product.Create(companyId, "BAT-001", "BAT-001", "Contoso", "Bateria nueva", null, 100m, 70m, null);
         var stock = BranchProductStock.Create(companyId, branch.Id, product.Id);
         stock.ApplyManualEntry(10);

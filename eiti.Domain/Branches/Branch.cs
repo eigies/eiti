@@ -11,6 +11,9 @@ public sealed class Branch : AggregateRoot<BranchId>
     public string? Address { get; private set; }
     /// <summary>Override de <c>Company.AutomaticInvoicing</c>. Null = hereda de la empresa.</summary>
     public bool? AutomaticInvoicing { get; private set; }
+    /// <summary>Punto de venta de ARCA donde factura esta sucursal (1:1). Null = todavía no puede facturar.</summary>
+    public FiscalPointOfSaleId? FiscalPointOfSaleId { get; private set; }
+    public FiscalPointOfSale? FiscalPointOfSale { get; private set; }
     public DateTime CreatedAt { get; private set; }
     public DateTime? UpdatedAt { get; private set; }
 
@@ -55,6 +58,25 @@ public sealed class Branch : AggregateRoot<BranchId>
         Code = NormalizeOptional(code, 40, "Branch code");
         Address = NormalizeOptional(address, 255, "Branch address");
         AutomaticInvoicing = automaticInvoicing;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    public void AssignFiscalPointOfSale(FiscalPointOfSale pointOfSale)
+    {
+        if (pointOfSale.CompanyId != CompanyId)
+        {
+            throw new InvalidOperationException("The point of sale belongs to another company.");
+        }
+
+        FiscalPointOfSale = pointOfSale;
+        FiscalPointOfSaleId = pointOfSale.Id;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    public void ClearFiscalPointOfSale()
+    {
+        FiscalPointOfSale = null;
+        FiscalPointOfSaleId = null;
         UpdatedAt = DateTime.UtcNow;
     }
 

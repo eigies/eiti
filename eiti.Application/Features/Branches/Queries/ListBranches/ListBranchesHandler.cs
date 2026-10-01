@@ -85,7 +85,8 @@ public sealed class ListBranchesHandler : IRequestHandler<ListBranchesQuery, Res
                 salesCountByBranch.GetValueOrDefault(branch.Id.Value, 0),
                 cashValue,
                 branch.CreatedAt,
-                branch.UpdatedAt));
+                branch.UpdatedAt,
+                branch.FiscalPointOfSale?.Number));
         }
 
         return Result<IReadOnlyList<BranchResponse>>.Success(responses);

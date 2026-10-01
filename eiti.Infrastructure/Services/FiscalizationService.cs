@@ -270,6 +270,49 @@ public sealed class FiscalizationService : IFiscalizationService
     private static Uri BuildUri(FiscalizationOptions options, string relativePath) =>
         new(new Uri(options.BaseUrl!.TrimEnd('/') + "/"), relativePath);
 
+    public async Task<FiscalOperationResult> RegisterPointOfSaleAsync(
+        Guid tenantId,
+        int number,
+        CancellationToken cancellationToken = default)
+    {
+        var options = _options.Value;
+        if (!options.IsConfigured)
+        {
+            return new FiscalOperationResult(false, "El servicio de facturación no está configurado.");
+        }
+
+        try
+        {
+            using var httpRequest = new HttpRequestMessage(
+                HttpMethod.Put,
+                BuildUri(options, $"api/admin/fiscal-points-of-sale?tenantId={tenantId}"))
+            {
+                Content = JsonContent.Create(new { number }, options: JsonOptions)
+            };
+            httpRequest.Headers.Add("X-Api-Key", options.ApiKey);
+
+            using var response = await _httpClient.SendAsync(httpRequest, cancellationToken);
+            if (response.IsSuccessStatusCode)
+            {
+                return new FiscalOperationResult(true);
+            }
+
+            var body = await response.Content.ReadAsStringAsync(cancellationToken);
+            _logger.LogWarning(
+                "Could not register point of sale {Number} for tenant {TenantId}. Status: {StatusCode}, Body: {Body}",
+                number,
+                tenantId,
+                (int)response.StatusCode,
+                body);
+            return new FiscalOperationResult(false, ExtractErrorMessage(body, (int)response.StatusCode));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error while registering point of sale {Number} for tenant {TenantId}.", number, tenantId);
+            return new FiscalOperationResult(false, "No se pudo contactar al servicio de facturación.");
+        }
+    }
+
     private static FiscalDocumentResult MapResponse(string body)
     {
         var payload = JsonSerializer.Deserialize<FiscalDocumentResponsePayload>(body, JsonOptions);
@@ -333,6 +376,10 @@ public sealed class FiscalizationService : IFiscalizationService
     {
         ["Arca.ReceiverCuitRequired"] =
             "El cliente es Responsable Inscripto o Monotributista: para facturarle hay que cargar su CUIT en la ficha del cliente.",
+        ["FiscalProfile.NotFound"] =
+            "El servicio de facturación todavía no tiene un perfil fiscal activo para esta empresa.",
+        ["FiscalProfile.Ambiguous"] =
+            "La empresa tiene más de un perfil fiscal activo en el servicio de facturación: hay que desactivar el que ya no se usa.",
         ["Arca.ReceiverIsIssuer"] =
             "El cliente tiene el mismo CUIT que quien factura: no se puede facturar a uno mismo. Elegí otro cliente.",
         ["Arca.ReceiverIdentificationRequired"] =

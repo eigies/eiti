@@ -9,4 +9,6 @@ public sealed record BranchResponse(
     int SalesCount,
     decimal CashValue,
     DateTime CreatedAt,
-    DateTime? UpdatedAt);
+    DateTime? UpdatedAt,
+    // Punto de venta de ARCA donde factura la sucursal (1:1). Null = todavía no puede facturar.
+    int? FiscalPointOfSaleNumber = null);

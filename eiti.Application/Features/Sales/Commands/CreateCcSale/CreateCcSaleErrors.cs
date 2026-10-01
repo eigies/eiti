@@ -23,4 +23,8 @@ public static class CreateCcSaleErrors
     public static Error InvoicingReceiverInvalid(string message) => Error.Validation(
         "Sales.CreateCc.InvoicingReceiverInvalid",
         message);
+
+    public static Error BranchWithoutPointOfSale(string message) => Error.Validation(
+        "Sales.CreateCc.BranchWithoutPointOfSale",
+        message);
 }

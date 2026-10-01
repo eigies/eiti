@@ -20,6 +20,7 @@ public sealed class BranchRepository : IBranchRepository
         CancellationToken cancellationToken = default)
     {
         return await _context.Branches
+            .Include(branch => branch.FiscalPointOfSale)
             .FirstOrDefaultAsync(branch => branch.Id == id && branch.CompanyId == companyId, cancellationToken);
     }
 
@@ -28,6 +29,7 @@ public sealed class BranchRepository : IBranchRepository
         CancellationToken cancellationToken = default)
     {
         return await _context.Branches
+            .Include(branch => branch.FiscalPointOfSale)
             .Where(branch => branch.CompanyId == companyId)
             .OrderBy(branch => branch.Name)
             .ToListAsync(cancellationToken);

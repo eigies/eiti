@@ -55,4 +55,8 @@ public static class CreateSaleErrors
     public static Error InvoicingReceiverInvalid(string message) => Error.Validation(
         "Sales.Create.InvoicingReceiverInvalid",
         message);
+
+    public static Error BranchWithoutPointOfSale(string message) => Error.Validation(
+        "Sales.Create.BranchWithoutPointOfSale",
+        message);
 }
