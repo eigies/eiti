@@ -119,17 +119,18 @@ public sealed class IncomingTransfersReportHandlerTests
     public async Task Handle_ShouldDateCcCollectionsByTheirChosenDay_NotByWhenTheyWereLoaded()
     {
         var f = new Fixture();
-        var backdated = f.CcCollection(SalePaymentMethod.Transfer, 50000m, MercadoPagoId,
-            date: new DateTime(2026, 9, 5, 0, 0, 0, DateTimeKind.Utc));
+        var chosenDay = DateTime.SpecifyKind(Fixture.Today.AddDays(-5), DateTimeKind.Utc);
+        var backdated = f.CcCollection(SalePaymentMethod.Transfer, 50000m, MercadoPagoId, date: chosenDay);
         f.Sales().CcPayments(backdated);
+        var query = Fixture.Query();
 
-        var result = await f.Handler().Handle(Fixture.Query(), CancellationToken.None);
+        var result = await f.Handler().Handle(query, CancellationToken.None);
 
         var row = result.Value.Rows.Single();
-        row.OccurredAt.Should().Be(new DateTime(2026, 9, 5, 0, 0, 0, DateTimeKind.Utc));
+        row.OccurredAt.Should().Be(chosenDay);
         row.DateOnly.Should().BeTrue();
         f.CustomerPaymentRepository.Verify(r => r.ListTransfersByDateAsync(
-            f.CompanyId.Value, new DateTime(2026, 9, 1), new DateTime(2026, 9, 30), null,
+            f.CompanyId.Value, query.DateFrom, query.DateTo, null,
             It.IsAny<IReadOnlyCollection<Guid>?>(), It.IsAny<CancellationToken>()));
     }
 
@@ -140,13 +141,14 @@ public sealed class IncomingTransfersReportHandlerTests
         var sale = f.RetailSale(transferBankId: MercadoPagoId, amount: 100m, code: "V-1");
         f.Sales(sale);
 
-        var inside = await f.Handler().Handle(Fixture.Query(), CancellationToken.None);
-        var before = await f.Handler().Handle(Fixture.Query(month: 1), CancellationToken.None);
+        var query = Fixture.Query();
+        var inside = await f.Handler().Handle(query, CancellationToken.None);
+        var before = await f.Handler().Handle(Fixture.Query(daysBack: 120), CancellationToken.None);
 
         inside.Value.Rows.Should().ContainSingle();
-        before.Value.Rows.Should().BeEmpty("the sale was collected in September, not in January");
+        before.Value.Rows.Should().BeEmpty("the sale was collected today, not four months ago");
         f.SaleRepository.Verify(r => r.ListWithPaymentsForReportAsync(
-            f.CompanyId, It.Is<DateTime>(d => d < new DateTime(2026, 8, 5)), It.IsAny<DateTime>(), null,
+            f.CompanyId, It.Is<DateTime>(d => d < query.DateFrom.AddDays(-27)), It.IsAny<DateTime>(), null,
             It.IsAny<IReadOnlyCollection<Guid>?>(), It.IsAny<CancellationToken>()));
     }
 
@@ -233,8 +235,14 @@ public sealed class IncomingTransfersReportHandlerTests
             CcPayments();
         }
 
-        public static IncomingTransfersReportQuery Query(int? bankId = null, int month = 9) =>
-            new(new DateTime(2026, month, 1), new DateTime(2026, month, DateTime.DaysInMonth(2026, month)), bankId);
+        /// <summary>
+        /// Las ventas y movimientos de prueba se fechan con la hora actual (el dominio usa DateTime.UtcNow),
+        /// así que el rango va alrededor de hoy; un mes fijo deja de contenerlos cuando ese mes pasa.
+        /// </summary>
+        public static DateTime Today { get; } = DateTime.UtcNow.Date;
+
+        public static IncomingTransfersReportQuery Query(int? bankId = null, int daysBack = 0) =>
+            new(Today.AddDays(-daysBack - 7), Today.AddDays(-daysBack + 7), bankId);
 
         public Sale RetailSale(int? transferBankId, decimal amount, string code, SalePaymentMethod method = SalePaymentMethod.Transfer)
         {
@@ -267,7 +275,7 @@ public sealed class IncomingTransfersReportHandlerTests
             DateTime? date = null)
         {
             var payment = CustomerPayment.Create(CompanyId.Value, Customer.Id.Value, Branch.Id.Value, method, amount,
-                date ?? new DateTime(2026, 9, 10, 0, 0, 0, DateTimeKind.Utc), reference, null, UserId.Value);
+                date ?? DateTime.SpecifyKind(Today, DateTimeKind.Utc), reference, null, UserId.Value);
             payment.SetTransferBank(bankId);
             return payment;
         }
