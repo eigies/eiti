@@ -11,4 +11,5 @@ public sealed record BranchResponse(
     DateTime CreatedAt,
     DateTime? UpdatedAt,
     // Punto de venta de ARCA donde factura la sucursal (1:1). Null = todavía no puede facturar.
-    int? FiscalPointOfSaleNumber = null);
+    int? FiscalPointOfSaleNumber = null,
+    Guid? FiscalPointOfSaleId = null);

@@ -54,6 +54,6 @@ public sealed class UpdateBranchHandler : IRequestHandler<UpdateBranchCommand, R
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return Result<BranchResponse>.Success(new(branch.Id.Value, branch.Name, branch.Code, branch.Address, branch.AutomaticInvoicing, 0, 0m, branch.CreatedAt, branch.UpdatedAt,
-            branch.FiscalPointOfSale?.Number));
+            branch.FiscalPointOfSale?.Number, branch.FiscalPointOfSaleId?.Value));
     }
 }

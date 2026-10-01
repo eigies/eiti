@@ -10,6 +10,12 @@ public interface IBranchRepository
         CompanyId companyId,
         CancellationToken cancellationToken = default);
 
+    /// <summary>La sucursal que factura con ese punto de venta (1:1), si hay una.</summary>
+    Task<Branch?> GetByFiscalPointOfSaleIdAsync(
+        FiscalPointOfSaleId pointOfSaleId,
+        CompanyId companyId,
+        CancellationToken cancellationToken = default);
+
     Task<IReadOnlyList<Branch>> ListByCompanyAsync(
         CompanyId companyId,
         CancellationToken cancellationToken = default);

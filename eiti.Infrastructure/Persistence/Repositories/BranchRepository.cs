@@ -24,6 +24,16 @@ public sealed class BranchRepository : IBranchRepository
             .FirstOrDefaultAsync(branch => branch.Id == id && branch.CompanyId == companyId, cancellationToken);
     }
 
+    public async Task<Branch?> GetByFiscalPointOfSaleIdAsync(
+        FiscalPointOfSaleId pointOfSaleId,
+        CompanyId companyId,
+        CancellationToken cancellationToken = default)
+    {
+        return await _context.Branches
+            .Include(branch => branch.FiscalPointOfSale)
+            .FirstOrDefaultAsync(branch => branch.FiscalPointOfSaleId == pointOfSaleId && branch.CompanyId == companyId, cancellationToken);
+    }
+
     public async Task<IReadOnlyList<Branch>> ListByCompanyAsync(
         CompanyId companyId,
         CancellationToken cancellationToken = default)

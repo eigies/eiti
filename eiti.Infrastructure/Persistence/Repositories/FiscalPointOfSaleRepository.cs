@@ -22,6 +22,20 @@ public sealed class FiscalPointOfSaleRepository : IFiscalPointOfSaleRepository
             cancellationToken);
     }
 
+    public async Task<FiscalPointOfSale?> GetByIdAsync(FiscalPointOfSaleId id, CompanyId companyId, CancellationToken cancellationToken = default)
+    {
+        return await _context.FiscalPointsOfSale
+            .FirstOrDefaultAsync(pointOfSale => pointOfSale.Id == id && pointOfSale.CompanyId == companyId, cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<FiscalPointOfSale>> ListByCompanyAsync(CompanyId companyId, CancellationToken cancellationToken = default)
+    {
+        return await _context.FiscalPointsOfSale
+            .Where(pointOfSale => pointOfSale.CompanyId == companyId)
+            .OrderBy(pointOfSale => pointOfSale.Number)
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task AddAsync(FiscalPointOfSale pointOfSale, CancellationToken cancellationToken = default)
     {
         await _context.FiscalPointsOfSale.AddAsync(pointOfSale, cancellationToken);

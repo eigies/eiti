@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using eiti.Application.Abstractions.Services;
+using eiti.Domain.Customers;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -313,6 +314,106 @@ public sealed class FiscalizationService : IFiscalizationService
         }
     }
 
+    public Task<FiscalIssuerProfileResult> GetIssuerAsync(Guid tenantId, CancellationToken cancellationToken = default) =>
+        SendIssuerAsync(HttpMethod.Get, $"api/admin/fiscal-profiles/active?tenantId={tenantId}", null, tenantId, cancellationToken);
+
+    public Task<FiscalIssuerProfileResult> UpdateIssuerAsync(Guid tenantId, FiscalIssuerUpdate update, CancellationToken cancellationToken = default) =>
+        SendIssuerAsync(HttpMethod.Put, $"api/admin/fiscal-profiles/active/issuer?tenantId={tenantId}", new
+        {
+            legalName = update.LegalName,
+            vatCondition = ToServiceVatCondition(update.VatCondition),
+            iibb = update.Iibb,
+            activityStartDate = update.ActivityStartDate,
+            commercialAddress = update.CommercialAddress
+        }, tenantId, cancellationToken);
+
+    private async Task<FiscalIssuerProfileResult> SendIssuerAsync(HttpMethod method, string path, object? body, Guid tenantId, CancellationToken cancellationToken)
+    {
+        var options = _options.Value;
+        if (!options.IsConfigured)
+        {
+            return new FiscalIssuerProfileResult(false, ErrorMessage: "El servicio de facturación no está configurado.");
+        }
+
+        try
+        {
+            using var httpRequest = new HttpRequestMessage(method, BuildUri(options, path));
+            if (body is not null)
+            {
+                httpRequest.Content = JsonContent.Create(body, options: JsonOptions);
+            }
+            httpRequest.Headers.Add("X-Api-Key", options.ApiKey);
+
+            using var response = await _httpClient.SendAsync(httpRequest, cancellationToken);
+            var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning(
+                    "Fiscal issuer {Method} failed for tenant {TenantId}. Status: {StatusCode}, Body: {Body}",
+                    method, tenantId, (int)response.StatusCode, responseBody);
+                return new FiscalIssuerProfileResult(false, ErrorCode: ExtractErrorCode(responseBody),
+                    ErrorMessage: ExtractErrorMessage(responseBody, (int)response.StatusCode));
+            }
+
+            var profile = JsonSerializer.Deserialize<ServiceIssuerProfile>(responseBody, JsonOptions)
+                ?? throw new JsonException("Empty fiscal profile.");
+            return new FiscalIssuerProfileResult(true, new FiscalIssuerProfile(profile.Cuit, profile.LegalName, ToIvaCondition(profile.VatCondition),
+                profile.Iibb, profile.ActivityStartDate, profile.CommercialAddress, profile.Environment == ServiceEnvironment.Production,
+                profile.PointsOfSale ?? [], profile.CertificateNotAfter));
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogError(ex, "Unexpected error on fiscal issuer {Method} for tenant {TenantId}.", method, tenantId);
+            return new FiscalIssuerProfileResult(false, ErrorMessage: "No se pudo contactar al servicio de facturación.");
+        }
+    }
+
+    private static string ToServiceVatCondition(IvaCondition condition) => condition switch
+    {
+        IvaCondition.ResponsableInscripto => "registered",
+        IvaCondition.Monotributo => "monotribute",
+        IvaCondition.Exento => "exempt",
+        _ => "finalConsumer"
+    };
+
+    private static IvaCondition ToIvaCondition(ServiceVatCondition condition) => condition switch
+    {
+        ServiceVatCondition.Registered => IvaCondition.ResponsableInscripto,
+        ServiceVatCondition.Monotribute => IvaCondition.Monotributo,
+        ServiceVatCondition.Exempt => IvaCondition.Exento,
+        _ => IvaCondition.ConsumidorFinal
+    };
+
+    private static string? ExtractErrorCode(string body)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(body);
+            return document.RootElement.TryGetProperty("code", out var code) && code.ValueKind == JsonValueKind.String
+                ? code.GetString()
+                : null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    private enum ServiceVatCondition { Registered, Monotribute, FinalConsumer, Exempt }
+
+    private enum ServiceEnvironment { Certification, Production }
+
+    private sealed record ServiceIssuerProfile(
+        string Cuit,
+        string LegalName,
+        ServiceVatCondition VatCondition,
+        string? Iibb,
+        DateOnly ActivityStartDate,
+        string? CommercialAddress,
+        ServiceEnvironment Environment,
+        IReadOnlyCollection<int>? PointsOfSale,
+        DateTimeOffset? CertificateNotAfter);
+
     private static FiscalDocumentResult MapResponse(string body)
     {
         var payload = JsonSerializer.Deserialize<FiscalDocumentResponsePayload>(body, JsonOptions);
@@ -376,6 +477,7 @@ public sealed class FiscalizationService : IFiscalizationService
     {
         ["Arca.ReceiverCuitRequired"] =
             "El cliente es Responsable Inscripto o Monotributista: para facturarle hay que cargar su CUIT en la ficha del cliente.",
+        ["FiscalIssuer.InvalidActivityStartDate"] = "La fecha de inicio de actividades no puede ser futura.",
         ["FiscalProfile.NotFound"] =
             "El servicio de facturación todavía no tiene un perfil fiscal activo para esta empresa.",
         ["FiscalProfile.Ambiguous"] =
