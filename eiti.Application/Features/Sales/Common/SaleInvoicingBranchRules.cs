@@ -12,5 +12,5 @@ public static class SaleInvoicingBranchRules
     public static string? Validate(Branch? branch) =>
         branch?.FiscalPointOfSale is not null
             ? null
-            : $"La sucursal {branch?.Name ?? "de la venta"} no tiene punto de venta de ARCA asignado. Asignalo en Sucursales para poder facturar.";
+            : $"La sucursal {branch?.Name ?? "de la venta"} no tiene punto de venta de ARCA. Asignale uno en Empresa → Facturación electrónica para poder facturar.";
 }
