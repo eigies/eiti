@@ -10,6 +10,8 @@ namespace eiti.Application.Features.FiscalSettings.Common;
 /// </summary>
 public sealed record FiscalSettingsResponse(
     bool Enabled,
+    // Default de la empresa: cada venta se factura al confirmarse. Cada sucursal puede sobrescribirlo.
+    bool AutomaticInvoicing,
     FiscalIssuerResponse? Issuer,
     // Por qué no se pudieron leer los datos del emisor (ej. el servicio todavía no tiene perfil).
     string? IssuerUnavailableReason,

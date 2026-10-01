@@ -2,6 +2,7 @@ using eiti.Api.Extensions;
 using eiti.Application.Features.FiscalSettings.Commands.AssignFiscalPointOfSale;
 using eiti.Application.Features.FiscalSettings.Commands.CreateFiscalPointOfSale;
 using eiti.Application.Features.FiscalSettings.Commands.DeleteFiscalPointOfSale;
+using eiti.Application.Features.FiscalSettings.Commands.SetAutomaticInvoicing;
 using eiti.Application.Features.FiscalSettings.Commands.UpdateFiscalIssuer;
 using eiti.Application.Features.FiscalSettings.Queries.GetFiscalSettings;
 using MediatR;
@@ -27,6 +28,13 @@ public sealed class FiscalSettingsController : ControllerBase
     public async Task<IActionResult> Get(CancellationToken cancellationToken)
     {
         var result = await _sender.Send(new GetFiscalSettingsQuery(), cancellationToken);
+        return result.ToActionResult();
+    }
+
+    [HttpPut("automatic-invoicing")]
+    public async Task<IActionResult> SetAutomaticInvoicing([FromBody] SetAutomaticInvoicingCommand command, CancellationToken cancellationToken)
+    {
+        var result = await _sender.Send(command, cancellationToken);
         return result.ToActionResult();
     }
 

@@ -58,7 +58,7 @@ public sealed class CreateCcSaleInvoicingTests
 
         result.Error.Code.Should().Be("Sales.CreateCc.BranchWithoutPointOfSale");
         result.Error.Description.Should().Be(
-            "La sucursal Sucursal Centro no tiene punto de venta de ARCA. Asignale uno en Empresa → Facturación electrónica para poder facturar.");
+            "La sucursal Sucursal Centro no tiene punto de venta de ARCA. Asignale uno en Facturación electrónica para poder facturar.");
         _sales.Verify(x => x.AddAsync(It.IsAny<Sale>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 

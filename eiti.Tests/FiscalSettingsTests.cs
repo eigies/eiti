@@ -171,6 +171,22 @@ public sealed class FiscalSettingsTests
     }
 
     [Fact]
+    public async Task Automatic_invoicing_is_set_on_the_company()
+    {
+        var company = eiti.Domain.Companies.Company.CreateLegacy(_companyId);
+        var companies = new Mock<ICompanyRepository>();
+        companies.Setup(x => x.GetByIdAsync(_companyId, It.IsAny<CancellationToken>())).ReturnsAsync(company);
+
+        var result = await new eiti.Application.Features.FiscalSettings.Commands.SetAutomaticInvoicing.SetAutomaticInvoicingHandler(
+                _currentUser.Object, companies.Object, _unitOfWork.Object)
+            .Handle(new eiti.Application.Features.FiscalSettings.Commands.SetAutomaticInvoicing.SetAutomaticInvoicingCommand(true), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        company.AutomaticInvoicing.Should().BeTrue();
+        _unitOfWork.Verify(x => x.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
     public void The_issuer_cannot_be_a_final_consumer_nor_start_in_the_future()
     {
         var validator = new UpdateFiscalIssuerValidator();

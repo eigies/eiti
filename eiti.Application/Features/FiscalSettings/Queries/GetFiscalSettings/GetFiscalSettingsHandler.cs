@@ -12,17 +12,20 @@ public sealed class GetFiscalSettingsHandler : IRequestHandler<GetFiscalSettings
     private readonly IFiscalPointOfSaleRepository _pointsOfSale;
     private readonly IBranchRepository _branchRepository;
     private readonly IFiscalizationService _fiscalizationService;
+    private readonly ICompanyRepository _companyRepository;
 
     public GetFiscalSettingsHandler(
         ICurrentUserService currentUserService,
         IFiscalPointOfSaleRepository pointsOfSale,
         IBranchRepository branchRepository,
-        IFiscalizationService fiscalizationService)
+        IFiscalizationService fiscalizationService,
+        ICompanyRepository companyRepository)
     {
         _currentUserService = currentUserService;
         _pointsOfSale = pointsOfSale;
         _branchRepository = branchRepository;
         _fiscalizationService = fiscalizationService;
+        _companyRepository = companyRepository;
     }
 
     public async Task<Result<FiscalSettingsResponse>> Handle(GetFiscalSettingsQuery request, CancellationToken cancellationToken)
@@ -32,6 +35,9 @@ public sealed class GetFiscalSettingsHandler : IRequestHandler<GetFiscalSettings
             return Result<FiscalSettingsResponse>.Failure(authCheck.Error);
 
         var companyId = _currentUserService.CompanyId!;
+
+        var company = await _companyRepository.GetByIdAsync(companyId, cancellationToken);
+        var automaticInvoicing = company?.AutomaticInvoicing ?? false;
 
         var pointsOfSale = await _pointsOfSale.ListByCompanyAsync(companyId, cancellationToken);
         var branches = await _branchRepository.ListByCompanyAsync(companyId, cancellationToken);
@@ -44,12 +50,12 @@ public sealed class GetFiscalSettingsHandler : IRequestHandler<GetFiscalSettings
 
         if (!_fiscalizationService.IsEnabled)
         {
-            return Result<FiscalSettingsResponse>.Success(new(false, null, null, rows));
+            return Result<FiscalSettingsResponse>.Success(new(false, automaticInvoicing, null, null, rows));
         }
 
         var issuer = await _fiscalizationService.GetIssuerAsync(companyId.Value, cancellationToken);
         return Result<FiscalSettingsResponse>.Success(issuer.IsSuccess
-            ? new(true, FiscalIssuerResponse.From(issuer.Issuer!), null, rows)
-            : new(true, null, issuer.ErrorMessage, rows));
+            ? new(true, automaticInvoicing, FiscalIssuerResponse.From(issuer.Issuer!), null, rows)
+            : new(true, automaticInvoicing, null, issuer.ErrorMessage, rows));
     }
 }
