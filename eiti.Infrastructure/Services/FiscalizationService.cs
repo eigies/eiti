@@ -54,7 +54,8 @@ public sealed class FiscalizationService : IFiscalizationService
             requestId = request.RequestId,
             tenantId = request.TenantId,
             regime = options.Regime,
-            pointOfSale = request.PointOfSale ?? options.DefaultPointOfSale,
+            // Sin punto de venta el servicio usa el del perfil del emisor: cada cliente tiene el suyo en ARCA.
+            pointOfSale = request.PointOfSale,
             requestedType = request.RequestedType,
             receiver = request.Receiver is null
                 ? null
