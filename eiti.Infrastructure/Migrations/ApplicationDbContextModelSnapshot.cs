@@ -229,6 +229,9 @@ namespace eiti.Infrastructure.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp without time zone");
 
+                    b.Property<Guid?>("FiscalPointOfSaleId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(120)
@@ -239,10 +242,38 @@ namespace eiti.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("FiscalPointOfSaleId")
+                        .IsUnique();
+
                     b.HasIndex("CompanyId", "Name")
                         .IsUnique();
 
                     b.ToTable("Branches", (string)null);
+                });
+
+            modelBuilder.Entity("eiti.Domain.Branches.FiscalPointOfSale", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CompanyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<int>("Number")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompanyId", "Number")
+                        .IsUnique();
+
+                    b.ToTable("FiscalPointsOfSale", (string)null);
                 });
 
             modelBuilder.Entity("eiti.Domain.Cash.CashDrawer", b =>
@@ -2546,6 +2577,13 @@ namespace eiti.Infrastructure.Migrations
                         .HasForeignKey("CompanyId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("eiti.Domain.Branches.FiscalPointOfSale", "FiscalPointOfSale")
+                        .WithOne()
+                        .HasForeignKey("eiti.Domain.Branches.Branch", "FiscalPointOfSaleId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("FiscalPointOfSale");
                 });
 
             modelBuilder.Entity("eiti.Domain.Cash.CashDrawer", b =>

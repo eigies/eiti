@@ -22,11 +22,14 @@ public sealed class InvoiceSaleLetterTests
     private const string ValidCuit = "30-71999999-5";
 
     private readonly CompanyId _companyId = CompanyId.New();
+    private readonly Branch _branch;
     private readonly Mock<ISaleInvoicingService> _invoicing = new();
     private readonly List<SaleFiscalDocument> _documents = [];
 
     public InvoiceSaleLetterTests()
     {
+        _branch = Branch.Create(_companyId, "Sucursal Centro", "SC", "San Martin 123");
+        _branch.AssignFiscalPointOfSale(FiscalPointOfSale.Create(_companyId, 3));
         _invoicing.SetupGet(x => x.IsEnabled).Returns(true);
         _invoicing.Setup(x => x.InvoiceAsync(It.IsAny<Sale>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new SaleInvoicingOutcome(true, SaleInvoicingStatus.Invoiced));
@@ -66,6 +69,34 @@ public sealed class InvoiceSaleLetterTests
     public async Task A_matching_letter_invoices()
     {
         var result = await Invoice(Customer(IvaCondition.ResponsableInscripto, ValidCuit), InvoiceLetter.A);
+
+        result.IsSuccess.Should().BeTrue();
+        _invoicing.Verify(x => x.InvoiceAsync(It.IsAny<Sale>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task A_branch_without_point_of_sale_is_refused_without_calling_the_service()
+    {
+        _branch.ClearFiscalPointOfSale();
+
+        var result = await Invoice(Customer(IvaCondition.ResponsableInscripto, ValidCuit), null);
+
+        result.Error.Code.Should().Be("Sales.Invoice.BranchWithoutPointOfSale");
+        result.Error.Description.Should().StartWith("La sucursal Sucursal Centro no tiene punto de venta");
+        _invoicing.Verify(x => x.InvoiceAsync(It.IsAny<Sale>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task An_attempt_in_flight_is_resent_even_if_the_branch_lost_its_point_of_sale()
+    {
+        var customer = Customer(IvaCondition.ConsumidorFinal, taxId: null);
+        var sale = Sale(customer);
+        var inFlight = SaleFiscalDocument.CreateInvoice(_companyId, sale.Id, 1);
+        inFlight.MarkUnconfirmed("timeout");
+        _documents.Add(inFlight);
+        _branch.ClearFiscalPointOfSale();
+
+        var result = await Invoice(customer, null, sale);
 
         result.IsSuccess.Should().BeTrue();
         _invoicing.Verify(x => x.InvoiceAsync(It.IsAny<Sale>(), It.IsAny<CancellationToken>()), Times.Once);
@@ -113,8 +144,11 @@ public sealed class InvoiceSaleLetterTests
             customers.Setup(x => x.GetByIdAsync(customer.Id, _companyId, It.IsAny<CancellationToken>())).ReturnsAsync(customer);
         }
 
+        var branches = new Mock<IBranchRepository>();
+        branches.Setup(x => x.GetByIdAsync(_branch.Id, _companyId, It.IsAny<CancellationToken>())).ReturnsAsync(_branch);
+
         var handler = new InvoiceSaleHandler(currentUser.Object, sales.Object, fiscalDocuments.Object, _invoicing.Object,
-            customers.Object, new Mock<IUnitOfWork>().Object);
+            customers.Object, branches.Object, new Mock<IUnitOfWork>().Object);
 
         return await handler.Handle(new InvoiceSaleCommand(sale.Id.Value, letter), CancellationToken.None);
     }
@@ -123,6 +157,6 @@ public sealed class InvoiceSaleLetterTests
         eiti.Domain.Customers.Customer.Create(_companyId, "Juan", "Perez", null, taxId: taxId, ivaCondition: condition);
 
     private Sale Sale(Customer? customer) =>
-        eiti.Domain.Sales.Sale.Create(_companyId, BranchId.New(), customer?.Id, false, SaleStatus.OnHold,
+        eiti.Domain.Sales.Sale.Create(_companyId, _branch.Id, customer?.Id, false, SaleStatus.OnHold,
             [SaleDetail.Create(ProductId.New(), 1, 1210m)]);
 }

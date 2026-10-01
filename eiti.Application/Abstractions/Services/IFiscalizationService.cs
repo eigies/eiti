@@ -1,3 +1,4 @@
+using eiti.Domain.Customers;
 namespace eiti.Application.Abstractions.Services;
 
 /// <summary>
@@ -40,7 +41,45 @@ public interface IFiscalizationService
         Guid tenantId,
         Guid documentId,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Habilita en el perfil fiscal del cliente el punto de venta que se le asigna a una sucursal.
+    /// Repetirlo no hace nada. Sin esto el servicio rechaza las facturas de ese punto de venta.
+    /// </summary>
+    Task<FiscalOperationResult> RegisterPointOfSaleAsync(
+        Guid tenantId,
+        int number,
+        CancellationToken cancellationToken = default);
+
+    Task<FiscalIssuerProfileResult> GetIssuerAsync(Guid tenantId, CancellationToken cancellationToken = default);
+
+    /// <summary>Rige para lo que se emita después: lo ya emitido guarda los datos de ese día.</summary>
+    Task<FiscalIssuerProfileResult> UpdateIssuerAsync(Guid tenantId, FiscalIssuerUpdate update, CancellationToken cancellationToken = default);
 }
+
+public sealed record FiscalOperationResult(bool IsSuccess, string? ErrorMessage = null);
+
+/// <summary>Datos del emisor del perfil activo del cliente en el servicio de facturación.</summary>
+public sealed record FiscalIssuerProfile(
+    string Cuit,
+    string LegalName,
+    IvaCondition VatCondition,
+    string? Iibb,
+    DateOnly ActivityStartDate,
+    string? CommercialAddress,
+    bool IsProduction,
+    IReadOnlyCollection<int> PointsOfSale,
+    DateTimeOffset? CertificateNotAfter);
+
+/// <summary>Lo que el cliente puede cambiar. El CUIT no: tiene que coincidir con el del certificado.</summary>
+public sealed record FiscalIssuerUpdate(
+    string LegalName,
+    IvaCondition VatCondition,
+    string? Iibb,
+    DateOnly ActivityStartDate,
+    string? CommercialAddress);
+
+public sealed record FiscalIssuerProfileResult(bool IsSuccess, FiscalIssuerProfile? Issuer = null, string? ErrorCode = null, string? ErrorMessage = null);
 
 /// <summary>Qué comprobante se pide. <c>Auto</c> deja que el servicio resuelva A o B según el receptor.</summary>
 public enum FiscalRequestedDocumentType
