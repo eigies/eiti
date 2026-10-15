@@ -19,7 +19,7 @@ reales (CreateSale, CreateCcSale, AddCustomerPayment, CreatePurchase, AddSupplie
 Requisitos: la empresa ya registrada con el flujo real (crea perfiles de acceso y owner):
 
   curl -X POST http://localhost:5133/api/auth/register -H "Content-Type: application/json" \
-    -d '{"username":"demo","firstName":"Gustavo","lastName":"Demo","email":"demo@bateriassanmartin.com.ar","password":"Demo1234!","companyName":"Baterias San Martin"}'
+    -d '{"username":"demo","firstName":"Admin","lastName":"Demo","email":"demo@bateriassanmartin.example","password":"Demo1234!","companyName":"Baterias San Martin"}'
 
 Es idempotente: borra TODO lo operativo de esa empresa (menos la empresa, sus perfiles y el
 owner) y lo vuelve a generar relativo a "ahora". Correrlo el mismo día de la demo: la caja
@@ -69,6 +69,23 @@ def new_id() -> uuid.UUID:
     return uuid.uuid4()
 
 
+def fake_cuit(rng, prefix: str) -> str:
+    """CUIT al azar con dígito verificador válido (pasa las validaciones de facturación)."""
+    while True:
+        body = prefix + f"{rng.randint(0, 99_999_999):08d}"
+        total = sum(int(d) * w for d, w in zip(body, [5, 4, 3, 2, 7, 6, 5, 4, 3, 2]))
+        check = 11 - total % 11
+        if check == 11:
+            check = 0
+        if check != 10:
+            return body + str(check)
+
+
+def fake_phone(rng) -> str:
+    # Rango 5555: no corresponde a líneas reales, así un envío por WhatsApp de prueba no le llega a nadie.
+    return f"11 5555-{rng.randint(0, 9999):04d}"
+
+
 def hash_password(password: str) -> str:
     salt = os.urandom(16)
     key = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, 100_000, 32)
@@ -113,46 +130,51 @@ PRODUCTS = [
 ]
 
 SUPPLIER_BY_BRAND = {
-    "Moura": "Distribuidora Litoral Baterías S.A.",
-    "Willard": "Acumuladores del Oeste S.R.L.",
-    "Heliar": "Acumuladores del Oeste S.R.L.",
-    "Prestolite": "Acumuladores del Oeste S.R.L.",
-    "Bosch": "Autopartes Bonaerense S.A.",
-    "Yuasa": "Moto Parts Importadora S.A.",
-    "Genérico": "Insumos Automotor Ramos S.R.L.",
-    "Black+Decker": "Insumos Automotor Ramos S.R.L.",
+    "Moura": "Distribuidora Río Manso Baterías S.A.",
+    "Willard": "Acumuladores Cerro Azul S.R.L.",
+    "Heliar": "Acumuladores Cerro Azul S.R.L.",
+    "Prestolite": "Acumuladores Cerro Azul S.R.L.",
+    "Bosch": "Autopartes Faro del Sur S.A.",
+    "Yuasa": "Moto Parts Colibrí S.A.",
+    "Genérico": "Insumos Automotor Los Sauces S.R.L.",
+    "Black+Decker": "Insumos Automotor Los Sauces S.R.L.",
 }
 
+# Proveedores ficticios (los mails van a un dominio .example reservado, no existen).
 SUPPLIERS = [
-    ("Distribuidora Litoral Baterías S.A.", "30-71234567-1", "011 4651-2200", "pedidos@litoralbaterias.com.ar"),
-    ("Acumuladores del Oeste S.R.L.", "30-70987654-3", "011 4488-9100", "ventas@acumuladoresoeste.com.ar"),
-    ("Autopartes Bonaerense S.A.", "30-69876543-2", "011 4205-7700", "comercial@autopartesba.com.ar"),
-    ("Moto Parts Importadora S.A.", "30-71555444-9", "011 4762-3300", "mayoristas@motoparts.com.ar"),
-    ("Insumos Automotor Ramos S.R.L.", "30-71888777-5", "011 4656-1122", "insumos@iar.com.ar"),
+    ("Distribuidora Río Manso Baterías S.A.", "pedidos@riomanso.example"),
+    ("Acumuladores Cerro Azul S.R.L.", "ventas@cerroazul.example"),
+    ("Autopartes Faro del Sur S.A.", "comercial@farodelsur.example"),
+    ("Moto Parts Colibrí S.A.", "mayoristas@colibri.example"),
+    ("Insumos Automotor Los Sauces S.R.L.", "insumos@lossauces.example"),
 ]
 
 # Mayoristas (cuenta corriente): name, cuit, iva, peso, prefiere camión, días entre cobros, sucursal (0=central)
+# Mayoristas (cuenta corriente), todos ficticios. El CUIT se genera al azar con dígito verificador válido.
+# name, iva, peso, prefiere camión, días entre cobros, sucursal (0=central)
 WHOLESALE = [
-    ("Taller Mecánico Hermanos Ruiz", "30-71100223-4", 1, 10, False, 7, 0),
-    ("Gomería y Lubricentro El Rápido", "20-28765432-1", 2, 8, False, 6, 0),
-    ("Transportes Del Valle S.R.L.", "30-70456789-0", 1, 7, True, 14, 0),
-    ("Lubricentro Ruta 3", "20-31234567-8", 2, 6, False, 8, 1),
-    ("Electricidad del Automotor Gómez", "20-25987654-3", 2, 8, False, 7, 0),
-    ("Remises San Justo S.A.", "30-71234000-6", 1, 5, False, 10, 0),
-    ("Agroservicios La Pampa S.A.", "30-68765123-7", 1, 3, True, 15, 0),
-    ("Taller Integral Martínez", "20-29345678-5", 2, 6, False, 7, 1),
-    ("Distribuidora de Bebidas Morón S.A.", "30-70111222-8", 1, 4, True, 12, 0),
-    ("Mecánica Ligera Fernández", "20-33456789-2", 2, 5, False, 9, 1),
+    ("Taller Los Aromos", 1, 10, False, 7, 0),
+    ("Gomería La Tortuga Veloz", 2, 8, False, 6, 0),
+    ("Transportes Cielo Austral S.R.L.", 1, 7, True, 14, 0),
+    ("Lubricentro Kilómetro Cero", 2, 6, False, 8, 1),
+    ("Electricidad Automotor Chispa", 2, 8, False, 7, 0),
+    ("Remises Luna Nueva S.A.", 1, 5, False, 10, 0),
+    ("Agroservicios Trébol Dorado S.A.", 1, 3, True, 15, 0),
+    ("Taller Integral Engranaje", 2, 6, False, 7, 1),
+    ("Distribuidora Alfajor Feliz S.A.", 1, 4, True, 12, 0),
+    ("Mecánica Tuerca y Tornillo", 2, 5, False, 9, 1),
 ]
 
-FIRST_NAMES = ["Juan", "María", "Carlos", "Laura", "Diego", "Sofía", "Martín", "Valeria", "Pablo", "Florencia",
-               "Sergio", "Carolina", "Hernán", "Gabriela", "Nicolás", "Romina", "Federico", "Paula", "Alejandro",
-               "Natalia", "Gustavo", "Silvina", "Ezequiel", "Mariana", "Leandro", "Daniela", "Ricardo", "Analía",
-               "Facundo", "Lorena", "Javier", "Verónica", "Cristian", "Andrea", "Marcelo", "Julieta"]
-LAST_NAMES = ["González", "Rodríguez", "Gómez", "Fernández", "López", "Díaz", "Martínez", "Pérez", "García",
-              "Sánchez", "Romero", "Sosa", "Álvarez", "Torres", "Ruiz", "Ramírez", "Flores", "Acosta", "Benítez",
-              "Medina", "Herrera", "Suárez", "Aguirre", "Giménez", "Molina", "Castro", "Ortiz", "Silva", "Rojas",
-              "Luna", "Juárez", "Cabrera", "Ríos", "Ferreyra", "Godoy", "Morales"]
+# Nombres de fantasía: apellidos poco comunes combinados al azar, para no coincidir con clientes reales.
+FIRST_NAMES = ["Abril", "Bautista", "Celeste", "Dante", "Elena", "Fausto", "Greta", "Homero", "Irene", "Joaquín",
+               "Kiara", "Lisandro", "Malena", "Nahuel", "Olivia", "Pilar", "Quimey", "Renata", "Simón", "Tiziana",
+               "Ulises", "Violeta", "Wenceslao", "Ximena", "Yago", "Zoe", "Bruno", "Catalina", "Emilia", "Thiago"]
+LAST_NAMES = ["Albarde", "Brunetto", "Cosentani", "Dalvesco", "Escaladi", "Ferruchi", "Galvarini", "Holtmann",
+              "Ibarguren", "Jarmusch", "Kovalenko", "Lanciotti", "Montebello", "Nervetti", "Olaberri", "Pazzolini",
+              "Quintabal", "Rivadeo", "Santarelli", "Tolosano", "Urquiola", "Valdecasas", "Wolkenberg", "Zabaletti"]
+
+PROSPECTS = ["Flota Logística Punto Sur", "Cooperativa de Taxis Arcoíris", "Taller El Pistón Feliz",
+             "Club Social Los Cardos", "Remisería La Brújula", "Ramiro Valdecasas"]
 
 RETAIL_CHANNELS = [(7, 25), (1, 20), (2, 15), (9, 15), (5, 10), (10, 10), (8, 5)]  # SaleSourceChannel, peso
 
@@ -261,8 +283,8 @@ class Seeder:
         # Puntos de venta y sucursales
         self.branches = []
         for idx, (name, code, addr) in enumerate([
-            ("Casa Central", "CEN", "Av. de Mayo 1450, Ramos Mejía"),
-            ("Sucursal Norte", "NOR", "Av. Gaona 3820, Haedo"),
+            ("Casa Central", "CEN", "Av. de los Álamos 1450, Villa Ficticia"),
+            ("Sucursal Norte", "NOR", "Calle Los Tilos 3820, Barrio Ficticio"),
         ]):
             pos_id = new_id()
             self.add("FiscalPointsOfSale", Id=pos_id, CompanyId=self.company_id, Number=idx + 1, CreatedAt=created)
@@ -307,10 +329,10 @@ class Seeder:
         self.cashier_id = new_id()
         self.seller_id = new_id()
         for uid, username, first, last, profile, branch in [
-            (self.cashier_id, "cajero.centro", "Lucía", "Fernández", "cashier", self.branches[0]),
-            (self.seller_id, "vendedor.norte", "Matías", "Gómez", "seller", self.branches[1]),
+            (self.cashier_id, "cajero.centro", "Celeste", "Galvarini", "cashier", self.branches[0]),
+            (self.seller_id, "vendedor.norte", "Dante", "Rivadeo", "seller", self.branches[1]),
         ]:
-            self.add("Users", Id=uid, Username=username, Email=f"{username}@bateriassanmartin.com.ar", PasswordHash=pw,
+            self.add("Users", Id=uid, Username=username, Email=f"{username}@bateriassanmartin.example", PasswordHash=pw,
                      CompanyId=self.company_id, EmployeeId=None, AccessProfileId=self.profiles[profile], IsActive=True,
                      CreatedAt=created, LastLoginAt=self.now_utc - timedelta(hours=2), FirstName=first, LastName=last)
             self.add("UserBranchAccesses", Id=new_id(), UserId=uid, BranchId=branch["id"])
@@ -357,11 +379,11 @@ class Seeder:
 
         # Proveedores
         self.suppliers = {}
-        for name, cuit, phone, email in SUPPLIERS:
+        for name, email in SUPPLIERS:
             sid = new_id()
             self.suppliers[name] = {"id": sid, "name": name, "credit": D0}
-            self.add("Suppliers", Id=sid, CompanyId=self.company_id, Name=name, Phone=phone, Email=email,
-                     TaxId=cuit.replace("-", ""), Notes=None, IsActive=True, CreatedAt=created, CreditBalance=D0)
+            self.add("Suppliers", Id=sid, CompanyId=self.company_id, Name=name, Phone=fake_phone(r), Email=email,
+                     TaxId=fake_cuit(r, "30"), Notes=None, IsActive=True, CreatedAt=created, CreditBalance=D0)
 
         # Clientes minoristas
         self.retail_customers = []
@@ -376,7 +398,7 @@ class Seeder:
             if dni in used_dnis:
                 continue
             used_dnis.add(dni)
-            phone = f"11 {r.randint(3000, 6999)}-{r.randint(1000, 9999)}"
+            phone = fake_phone(r)
             c = {"id": cid, "name": f"{first} {last}", "phone": phone}
             self.retail_customers.append(c)
             self.add("Customers", Id=cid, CompanyId=self.company_id, Name=c["name"], FirstName=first, LastName=last,
@@ -385,12 +407,13 @@ class Seeder:
 
         # Mayoristas (CC)
         self.wholesale = []
-        for name, cuit, iva, weight, truck, every, branch_idx in WHOLESALE:
+        for name, iva, weight, truck, every, branch_idx in WHOLESALE:
+            cuit = fake_cuit(r, "30" if name.endswith(("S.A.", "S.R.L.")) else "20")
             cid = new_id()
-            c = {"id": cid, "name": name, "cuit": cuit.replace("-", ""), "weight": weight, "truck": truck,
+            c = {"id": cid, "name": name, "cuit": cuit, "weight": weight, "truck": truck,
                  "every": every, "branch": self.branches[branch_idx], "credit": D0,
                  "next_payment": self.start_day + timedelta(days=r.randint(3, every + 2)),
-                 "phone": f"11 {r.randint(4000, 4999)}-{r.randint(1000, 9999)}", "row": None}
+                 "phone": fake_phone(r), "row": None}
             c["row"] = self.add("Customers", Id=cid, CompanyId=self.company_id, Name=name, FirstName=name, LastName="",
                                 Email=None, Phone=c["phone"], DocumentType=None, DocumentNumber=None, TaxId=c["cuit"],
                                 AddressId=None, CreditBalance=D0, CreatedAt=created, IvaCondition=iva)
@@ -929,10 +952,8 @@ class Seeder:
             status = 3 if i % 6 == 0 else 1
             self.add("Quotes", Id=qid, CompanyId=self.company_id, BranchId=branch["id"],
                      CustomerId=customer["id"] if customer else None,
-                     ProspectName=r.choice(["Flota Logística Oeste", "Cooperativa de Taxis Morón", "Hugo Benítez",
-                                            "Taller El Tano", "Club Atlético Haedo", "Remisería La Estación"])
-                     if prospect else None,
-                     ProspectContact=f"11 {r.randint(3000, 6999)}-{r.randint(1000, 9999)}" if prospect else None,
+                     ProspectName=r.choice(PROSPECTS) if prospect else None,
+                     ProspectContact=fake_phone(r) if prospect else None,
                      GeneralDiscountPercent=D0, TotalAmount=money(total),
                      ExpiresAt=utc(created_local + timedelta(days=15)), IdQuoteStatus=status, ConvertedSaleId=None,
                      Code=f"PRES-{branch['code']}-{branch['quote_seq']:03d}", CreatedByUserId=branch["user"],
@@ -947,6 +968,9 @@ class Seeder:
 
     def flush(self):
         assert set(self.rows) <= set(self.ORDER), set(self.rows) - set(self.ORDER)
+        # El owner se registra con cualquier nombre; para la demo queda uno genérico.
+        self.cur.execute('update "Users" set "FirstName" = %s, "LastName" = %s, "Email" = %s where "Id" = %s',
+                         ("Admin", "Demo", f"{self.owner_username}@bateriassanmartin.example", self.owner_id))
         for table in self.ORDER:
             rows = self.rows.get(table)
             if not rows:

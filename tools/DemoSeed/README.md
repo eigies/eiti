@@ -21,7 +21,7 @@ Qué genera (todo coherente entre sí, simulado en orden cronológico como lo ha
 
    ```bash
    curl -X POST http://localhost:5133/api/auth/register -H "Content-Type: application/json" \
-     -d '{"username":"demo","firstName":"Gustavo","lastName":"Demo","email":"demo@bateriassanmartin.com.ar","password":"Demo1234!","companyName":"Baterias San Martin"}'
+     -d '{"username":"demo","firstName":"Admin","lastName":"Demo","email":"demo@bateriassanmartin.example","password":"Demo1234!","companyName":"Baterias San Martin"}'
    ```
 
 2. Correr el seed (requiere `pip install psycopg2-binary`):
