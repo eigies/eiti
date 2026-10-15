@@ -7,7 +7,7 @@ Qué genera (todo coherente entre sí, simulado en orden cronológico como lo ha
 
 - 2 sucursales (Casa Central / Sucursal Norte), una caja cada una, 27 productos (Moura, Willard, Bosch,
   Heliar, Prestolite, Yuasa, accesorios y casco para canje), 70 clientes minoristas y 10 mayoristas CC.
-- ~1.200 ventas: minoristas pagadas en efectivo, transferencia o tarjeta (con canje de casco), ventas
+- ~950 ventas (importes y volumen inventados y escalados: no se corresponden con ningún cliente real): minoristas pagadas en efectivo, transferencia o tarjeta (con canje de casco), ventas
   CC a talleres/flotas, pendientes y canceladas. El mes en curso viene un poco arriba del anterior.
 - Una sesión de caja por día hábil y sucursal: abre con lo que quedó en el cierre anterior, retiro a
   tesorería al cierre y alguna diferencia chica de arqueo. **Hoy:** Casa Central queda **abierta** y
@@ -30,7 +30,7 @@ Qué genera (todo coherente entre sí, simulado en orden cronológico como lo ha
    python -I tools/DemoSeed/seed_demo.py
    ```
 
-   Opcionales: `--owner demo`, `--days 105`, `--seed <n>`, `--conn "<libpq conn string>"` (o env `EITI_DEMO_CONN`).
+   Opcionales: `--owner demo`, `--days 105`, `--seed <n>`, `--price-factor 0.8`, `--volume-factor 0.75`, `--conn "<libpq conn string>"` (o env `EITI_DEMO_CONN`).
 
 **Correrlo el día de la demo.** Es idempotente (borra lo operativo de esa empresa y lo regenera relativo a
 "ahora"), y la caja abierta tiene que ser de hoy: con una caja de un día anterior el sistema no deja vender.

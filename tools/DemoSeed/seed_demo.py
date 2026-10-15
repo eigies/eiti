@@ -158,8 +158,12 @@ RETAIL_CHANNELS = [(7, 25), (1, 20), (2, 15), (9, 15), (5, 10), (10, 10), (8, 5)
 
 
 class Seeder:
-    def __init__(self, conn, owner_username: str, days: int, rng_seed: int):
+    def __init__(self, conn, owner_username: str, days: int, rng_seed: int,
+                 price_factor: float = 0.8, volume_factor: float = 0.75):
         self.conn = conn
+        # Importes y volumen "dibujados": la demo no tiene que poder compararse con ningún cliente real.
+        self.price_factor = Decimal(str(price_factor))
+        self.volume_factor = volume_factor
         self.cur = conn.cursor()
         self.rng = random.Random(rng_seed)
         self.rows = defaultdict(list)
@@ -178,6 +182,9 @@ class Seeder:
         self.profiles = dict(self.cur.fetchall())
 
     # -----------------------------------------------------------------------------------------
+    def scaled(self, amount) -> Decimal:
+        return money((Decimal(amount) * self.price_factor / 500).to_integral_value() * 500)
+
     def add(self, table, **cols):
         self.rows[table].append(cols)
         return cols
@@ -327,8 +334,15 @@ class Seeder:
         self.products = []
         for i, (code, brand, name, cat, price, cost, w_retail, w_cc, target) in enumerate(PRODUCTS):
             pid = new_id()
-            p = {"id": pid, "code": code, "brand": brand, "name": name, "cat": cat, "price": money(price),
-                 "cost": money(cost), "w_retail": w_retail, "w_cc": w_cc, "target": target}
+            # Precio con desvío propio por producto, redondeado a "xx.900" como una lista de precios real.
+            jitter = Decimal(str(r.uniform(0.88, 1.12)))
+            fake_price = Decimal(price) * self.price_factor * jitter
+            step = 1000 if fake_price >= 20000 else 100
+            fake_price = max(Decimal(step), (fake_price / step).to_integral_value() * step - step // 10)
+            margin = Decimal(cost) / Decimal(price) * Decimal(str(r.uniform(0.96, 1.04)))
+            p = {"id": pid, "code": code, "brand": brand, "name": name, "cat": cat, "price": money(fake_price),
+                 "cost": money((fake_price * margin / 100).to_integral_value() * 100), "w_retail": w_retail,
+                 "w_cc": w_cc, "target": target}
             self.products.append(p)
             self.add("Products", Id=pid, CompanyId=self.company_id, Code=code, Sku=f"779{1000000 + i * 7919:07d}",
                      Brand=brand, Name=name, Description=None, Price=p["price"], CostPrice=p["cost"], UnitPrice=None,
@@ -543,7 +557,7 @@ class Seeder:
         if battery_units and r.random() < 0.72:
             cat = lines[0][0]["cat"]
             unit = {0: 15000, 1: 25000, 2: 6000}[cat]
-            trade_in = (battery_units, Decimal(unit))
+            trade_in = (battery_units, self.scaled(unit))
 
         status = force_status or (1 if r.random() < 0.03 else 2)
         if status != 2:
@@ -576,7 +590,7 @@ class Seeder:
         if not lines:
             return None
         units = sum(q for _, q in lines)
-        trade_in = (units, Decimal(12000 if not customer["truck"] else 20000)) if r.random() < 0.7 else None
+        trade_in = (units, self.scaled(12000 if not customer["truck"] else 20000)) if r.random() < 0.7 else None
         info = self.create_sale(branch, at, lines, customer=customer, cc=True, status=1, trade_in=trade_in,
                                 line_discount=12, channel=7)
         info["paid"] = D0
@@ -782,13 +796,13 @@ class Seeder:
                 for s in day_sessions:
                     events.append((s["open"] + timedelta(minutes=20), "restock", s))
             for s_idx, session in enumerate(day_sessions):
-                mean = (7.5 if s_idx == 0 else 4.5) * factor
+                mean = (7.5 if s_idx == 0 else 4.5) * factor * self.volume_factor
                 n = max(1, round(r.gauss(mean, mean * 0.25)))
                 for _ in range(n):
                     t = rand_time(session)
                     if t:
                         events.append((t, "retail", session))
-            n_cc = max(0, round(r.gauss(2.3 * factor, 0.9)))
+            n_cc = max(0, round(r.gauss(2.3 * factor * self.volume_factor, 0.8)))
             for _ in range(n_cc):
                 customer = self.weighted(self.wholesale, lambda c: c["weight"])
                 session = day_sessions[0] if customer["branch"] is self.branches[0] else day_sessions[1]
@@ -978,11 +992,13 @@ def main():
     parser.add_argument("--owner", default="demo", help="username del owner de la empresa demo")
     parser.add_argument("--days", type=int, default=105, help="días de historia a generar")
     parser.add_argument("--seed", type=int, default=20261015, help="semilla del generador aleatorio")
+    parser.add_argument("--price-factor", type=float, default=0.8, help="escala de precios/importes")
+    parser.add_argument("--volume-factor", type=float, default=0.75, help="escala de cantidad de ventas")
     args = parser.parse_args()
 
     conn = psycopg2.connect(args.conn)
     try:
-        seeder = Seeder(conn, args.owner, args.days, args.seed)
+        seeder = Seeder(conn, args.owner, args.days, args.seed, args.price_factor, args.volume_factor)
         seeder.wipe()
         seeder.build_master_data()
         seeder.simulate()
