@@ -29,6 +29,7 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
     private readonly ISaleTransportAssignmentRepository _saleTransportAssignmentRepository;
     private readonly IAddressRepository _addressRepository;
     private readonly IBankRepository _bankRepository;
+    private readonly ISaleFiscalDocumentRepository _fiscalDocuments;
     private readonly IUnitOfWork _unitOfWork;
 
     public UpdateSaleHandler(
@@ -43,6 +44,7 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
         ISaleTransportAssignmentRepository saleTransportAssignmentRepository,
         IAddressRepository addressRepository,
         IBankRepository bankRepository,
+        ISaleFiscalDocumentRepository fiscalDocuments,
         IUnitOfWork unitOfWork)
     {
         _currentUserService = currentUserService;
@@ -56,6 +58,7 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
         _saleTransportAssignmentRepository = saleTransportAssignmentRepository;
         _addressRepository = addressRepository;
         _bankRepository = bankRepository;
+        _fiscalDocuments = fiscalDocuments;
         _unitOfWork = unitOfWork;
     }
 
@@ -158,6 +161,14 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
         {
             return Result<UpdateSaleResponse>.Failure(UpdateSaleErrors.NotEditable);
         }
+
+        // Una venta facturada (o con la factura en trámite, que puede terminar autorizada) no cambia de
+        // importe: la factura quedaría por un monto y la venta por otro (pasó con MAT-3358). Se compara
+        // contra el total al final, así cobrar o cambiar datos que no mueven el total sigue permitido.
+        var fiscalDocuments = await _fiscalDocuments.ListBySaleAsync(sale.Id, companyId, cancellationToken);
+        var hasInvoice = SaleInvoicingView.From(fiscalDocuments).LiveInvoice is not null
+            || SaleFiscalDocumentRules.InFlight(fiscalDocuments, SaleFiscalDocumentKind.Invoice) is not null;
+        var invoicedTotal = sale.TotalAmount;
 
         var existingTransportAssignmentId = sale.TransportAssignmentId;
 
@@ -571,6 +582,12 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
                     payment.SetTransferBank(reqLine.TransferBankId.Value);
                 }
             }
+        }
+
+        // Se corta antes de guardar: nada de lo que se armó arriba (detalle, stock, caja) se persiste.
+        if (hasInvoice && sale.TotalAmount != invoicedTotal)
+        {
+            return Result<UpdateSaleResponse>.Failure(UpdateSaleErrors.InvoicedAmountChange);
         }
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
