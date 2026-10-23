@@ -110,6 +110,11 @@ Por qué así y no "un pago con líneas hijas":
 
 Antes de escribir componentes: skill `/frontend-design` (CLAUDE.md).
 
+**El mockup es la especificación visual**: misma estructura, columnas, textos, colores (vía variables),
+espaciados y comportamiento en los tres anchos. Lo único que NO se lleva: el interruptor de tema del
+mockup (la app ya tiene `ThemeService`), la página atenuada de fondo del modal (en la app es la pantalla
+real) y lo que dependa de las decisiones abiertas de abajo (cheque propio, cuenta propia, elegir facturas).
+
 - [ ] Modelos en `core/models/account-ledger.models.ts`: `LedgerRow`, `LedgerLine`, `LedgerImputation`,
       `LedgerResponse`, `PendingDocument`, `GroupedPaymentLineDraft`, `GroupedPaymentRequest`.
 - [ ] Servicios: `supplier-account.service.ts` (`getLedger`, `createPaymentOrder`, `cancelPaymentOrder`) y
