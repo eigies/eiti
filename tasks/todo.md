@@ -42,6 +42,12 @@ Las NC ya lo hacen bien (`AddCredit(imputado); ConsumeCredit(monto)`).
       00003-00001045") en el extracto, Pendientes e "Imputado a". Rechazada o en trámite: sin comprobante.
 - [x] Camino de producción probado: base migrada y cargada con la API de `main`, mi rama encima (aplica solo
       `AddPaymentOrdersAndReceipts`). Datos viejos se ven bien en extractos; e2e y `LedgerCheck` en verde.
+- [x] **Recorrido de la app real** (front `ng serve` + API de la rama + Postgres migrado desde `main`, manejada
+      con Playwright): login, recibo con tarjeta (recargo) + cheque + transferencia con banco, extracto y
+      detalle de medios, imprimir recibo, exportar Excel/PDF, Pendientes; OP con el cheque recibido +
+      transferencia + efectivo con vista previa FIFO; caja (desglose por banco del servidor y del historial,
+      renglón "Transferencia - Mercadopago"); anular OP y recibo y caja de vuelta. **29/29**, sin errores
+      de consola ni respuestas 4xx/5xx.
 - **Bug de `main` encontrado:** `772b49b` no agregó `TransferBankId` al request de la API
   (`AddCustomerPaymentRequest`): en producción el banco de los cobros por transferencia se sigue
   descartando. Esta rama lo mapea y sale junto con todo (decisión del usuario). Test de controller
