@@ -1,5 +1,17 @@
 # Lessons Learned
 
+## Anular un pago se comía el saldo a favor previo: el arreglo ya existía en las NC - 2026-10-23
+
+**Síntoma:** proveedor con factura de 100.000 pendiente y 50.000 de saldo a favor (conviven después de anular otro pago). Paga 30.000 → la factura queda en 20.000 y el saldo en 0. Anula ese pago → la factura vuelve a 100.000 pero el saldo queda en **0**: desaparecieron 50.000. Igual en clientes.
+
+**Causa raíz:** el applicator (`SupplierCreditApplicator` / `CustomerCreditApplicator`) imputa **todo** el saldo disponible, no solo el del pago nuevo, y marca todas esas imputaciones con el id del pago. La reversa (`SupplierPaymentReversal` / `CustomerPaymentReversal`) hacía `max(0, importe − imputado)`: cuando lo imputado superaba al pago (80.000 contra 30.000), el piso en cero se tragaba el saldo previo.
+
+**Lo que más enseña:** `CancelSupplierCreditNoteHandler` y `CancelCustomerCreditNoteHandler` **ya tenían este mismo bug arreglado**, con un comentario que lo explica ("La resta ingenua ... destruía el saldo que el cliente ya tenía"). Nadie llevó el arreglo a los pagos, que usan el mismo applicator. **Fix:** la misma cuenta que las NC: `AddCredit(imputado); ConsumeCredit(importe)`, o sea devolver lo imputado y descontar lo que aportó el pago.
+
+**Patrón a recordar:** el saldo a favor es un pozo, no una suma de aportes etiquetados. Revertir algo que alimentó el pozo es "devolver lo que sacó + sacar lo que puso", nunca `max(0, puso − sacó)`. Y cuando se arregla un bug en un camino, **grepear la misma fórmula en los caminos hermanos** (acá: `Math.Max(0m, ... - imputedTotal)`): si el arreglo queda en uno solo, el otro sigue rompiendo datos en silencio. Las cuentas históricas afectadas aparecen en `tools/LedgerCheck` con diferencia negativa.
+
+**Bonus del mismo día:** `IReadOnlyDictionary<Guid, int>.GetValueOrDefault(clave)` devuelve **0** si falta la clave, no null, aunque el resultado se asigne a un `int?`. Para "valor o null" usar `TryGetValue`. Lo agarró un test que verificaba que los movimientos que no son transferencia NO tuvieran banco.
+
 ## El día del usuario no es el día UTC: reportes cortados a las 21:00 - 2026-08-15
 
 **Síntoma:** Gustavo (Baterías Soler) no veía en el reporte de medios de pago un cobro por transferencia de 250.000 y uno con tarjeta de 182.000, y además reportó que "a partir de las 21 se pasa al otro día".

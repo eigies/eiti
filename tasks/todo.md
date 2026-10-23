@@ -14,7 +14,7 @@ cierre de caja ("Transferencias por banco") solo cuenta ventas de mostrador, nun
 - [x] Caja: el movimiento del cobro lleva el banco (sesión actual e historial) y el desglose por banco del
       resumen suma los cobros CC por transferencia (neto: ingreso − anulación dentro de la sesión).
 - [x] Auditoría: el snapshot del cobro incluye el banco.
-- [ ] Front: desglose por banco y renglón del cobro en caja; detalle del medio en extracto y comprobante.
+- [x] Front: desglose por banco y renglón del cobro en caja; detalle del medio en extracto y comprobante.
 
 ## B. Anular un pago/cobro pierde el saldo a favor previo
 Al registrar un pago, el applicator imputa **todo** el saldo a favor (el previo también) con back-link al
@@ -25,8 +25,25 @@ Las NC ya lo hacen bien (`AddCredit(imputado); ConsumeCredit(monto)`).
       cliente, pago suelto y grupo de varios medios). Fallaban los 4 (se perdían los 50.000); ahora 421/421.
 
 ## Verificación
-- [ ] `dotnet test` + `ng build` + `ng test`.
-- [ ] Postgres real: migración + e2e con transferencia con banco y con saldo previo + `LedgerCheck`.
+- [x] `dotnet test` **425/425** · `ng build` sin errores · `ng test` **332/332**.
+- [x] Postgres real: la migración aplica sobre una base que ya tenía la anterior (el camino de producción).
+      E2E: banco no habilitado → rechazado; extracto, resumen, sesión actual e historial muestran el banco;
+      el cobro suelto también; anular resta. Saldo previo armado solo con operaciones de la API (factura +
+      saldo conviviendo) → pago de 30.000 → anular: proveedor y cliente vuelven a 100.000 pendiente y
+      50.000 a favor, y el extracto cuadra. `LedgerCheck`: 7/7 cuentas sin diferencia.
+
+## Revisión
+- El test del desglose de caja agarró un error mío antes del commit: `GetValueOrDefault` sobre un
+  diccionario de `int` devuelve **0**, no null, así que los cobros que no eran transferencia salían con
+  "banco 0". Se usa `TryGetValue`.
+- **Datos históricos (B):** las anulaciones ya hechas con el error perdieron saldo a favor. En
+  `LedgerCheck` aparecen como cuentas con **diferencia negativa** (el extracto da menos deuda que la
+  cuenta): esa diferencia es el saldo a favor perdido. Hay que revisarlas una por una antes de devolverlo
+  a mano; puede haber otras causas.
+- Fuera de alcance, sin cambios: si el saldo a favor que generó un pago ya se usó en una compra/venta
+  nueva y después se anula ese pago, el saldo queda **negativo**. El total de la cuenta es correcto (la
+  deuda aparece como saldo negativo y no como factura pendiente); las NC en ese caso rechazan la anulación.
+- Los cobros por transferencia **anteriores** a este cambio siguen sin banco: no hay de dónde sacarlo.
 
 ---
 
