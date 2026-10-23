@@ -5,11 +5,14 @@
 //     saldo final del extracto  ==  saldo pendiente − saldo a favor   (lo que muestran las tarjetas)
 // Una diferencia significa que el extracto y la cuenta cuentan historias distintas sobre los mismos datos.
 //
-// Uso: dotnet run --project tools/LedgerCheck -- "<connection string>"
+// Uso: dotnet run --project tools/LedgerCheck -- "<connection string>" [--explicar]
 // La base tiene que tener las migraciones de esta rama aplicadas (usa el mismo modelo que la API).
+// Con --explicar, debajo de cada cuenta que no cuadra parte la diferencia en documentos y saldo a favor
+// (ver Explain.cs) y lista los comprobantes y pagos que la producen.
 // No escribe nada: solo manda queries (ninguna termina en "Command", así que tampoco audita).
 using eiti.Application;
 using eiti.Application.Abstractions.Services;
+using eiti.Application.Common.Accounts;
 using eiti.Application.Features.Customers.Queries.GetCustomerAccount;
 using eiti.Application.Features.Customers.Queries.GetCustomerLedger;
 using eiti.Application.Features.Suppliers.Queries.GetSupplierAccount;
@@ -32,6 +35,7 @@ if (args.Length == 0)
 }
 
 var connectionString = args[0];
+var explain = args.Skip(1).Contains("--explicar");
 var configuration = new ConfigurationBuilder()
     .AddInMemoryCollection(new Dictionary<string, string?> { ["ConnectionStrings:DefaultConnection"] = connectionString })
     .Build();
@@ -71,10 +75,12 @@ foreach (var (kind, companyId, id, name) in accounts)
 
     decimal? closing, pending, credit;
     string? error;
+    AccountLedgerResponse? ledgerValue;
     if (kind == "proveedor")
     {
         var ledger = await sender.Send(new GetSupplierLedgerQuery(id));
         var account = await sender.Send(new GetSupplierAccountQuery(id));
+        ledgerValue = ledger.IsSuccess ? ledger.Value : null;
         closing = ledger.IsSuccess ? ledger.Value.ClosingBalance : null;
         pending = account.IsSuccess ? account.Value.SaldoPendiente : null;
         credit = account.IsSuccess ? account.Value.SaldoAFavor : null;
@@ -84,6 +90,7 @@ foreach (var (kind, companyId, id, name) in accounts)
     {
         var ledger = await sender.Send(new GetCustomerLedgerQuery(id));
         var account = await sender.Send(new GetCustomerAccountQuery(id));
+        ledgerValue = ledger.IsSuccess ? ledger.Value : null;
         closing = ledger.IsSuccess ? ledger.Value.ClosingBalance : null;
         pending = account.IsSuccess ? account.Value.SaldoPendiente : null;
         credit = account.IsSuccess ? account.Value.SaldoAFavor : null;
@@ -103,6 +110,10 @@ foreach (var (kind, companyId, id, name) in accounts)
     {
         mismatches++;
         Console.WriteLine($"DIFIERE {kind,-9} {companyId} {name} ({id}): extracto {closing:N2} · cuenta {expected:N2} (pendiente {pending:N2} − a favor {credit:N2}) · diferencia {closing - expected:N2}");
+        if (explain && kind == "proveedor")
+            await Explain.SupplierAsync(scope.ServiceProvider, companyId, id, ledgerValue!, credit.Value, closing.Value - expected);
+        else if (explain)
+            await Explain.CustomerAsync(scope.ServiceProvider, companyId, id, ledgerValue!, credit.Value, closing.Value - expected);
     }
 }
 
