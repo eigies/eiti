@@ -161,13 +161,14 @@ public sealed class CustomerReceiptHandlersTests
             .IsValid.Should().BeTrue();
     }
 
-    private Sale AddCcSale(string code, decimal total, bool withStock = false)
+    private Sale AddCcSale(string code, decimal total, bool withStock = false, decimal tradeIn = 0m)
     {
         var sale = Sale.CreateCc(
             _companyId,
             _branch.Id,
             _customer.Id,
             [SaleDetail.Create(withStock ? _productId : ProductId.New(), 1, total)],
+            tradeIns: tradeIn > 0m ? [SaleTradeIn.Create(ProductId.New(), 1, tradeIn)] : null,
             code: code);
         _pending.Add(sale);
         return sale;
@@ -489,6 +490,63 @@ public sealed class CustomerReceiptHandlersTests
         ledger.Pending[0].Code.Should().Be("VENT-0102");
         ledger.Pending[0].Imputed.Should().Be(25_000m);
         ledger.Pending[0].Pending.Should().Be(75_000m);
+    }
+
+    // ── Canje en una venta CC ────────────────────────────────────────────────
+    // El canje salda parte de la venta: el extracto lo muestra como haber y la deuda de la tarjeta lo descuenta.
+    // Antes la tarjeta y el extracto lo ignoraban, y en producción se "saldó" la diferencia con un cobro "Otro"
+    // por el valor del canje (CRISTACOL, MAT-1626: venta 229.779, canje 140.000).
+
+    [Fact]
+    public async Task Extracto_VentaConCanje_ElCanjeEsHaber_YCuadraConLasTarjetas()
+    {
+        var venta = AddCcSale("VENT-0101", 229_779m, withStock: true, tradeIn: 140_000m);
+        (await Handler().Handle(
+            new AddCustomerReceiptCommand(_customer.Id.Value, new DateTime(2026, 10, 2), null,
+                [new AddCustomerReceiptLine((int)SalePaymentMethod.Transfer, 89_779m, "Ref. 1")]),
+            CancellationToken.None)).IsSuccess.Should().BeTrue();
+
+        var ledger = (await LedgerHandler().Handle(new GetCustomerLedgerQuery(_customer.Id.Value), CancellationToken.None)).Value;
+
+        venta.SaleStatus.Should().Be(SaleStatus.Paid);
+        _customer.CreditBalance.Should().Be(0m);
+        var canje = ledger.Rows.Single(r => r.Source == "trade_in");
+        canje.Credit.Should().Be(140_000m);
+        canje.Id.Should().Be(venta.Id.Value);
+        canje.Means.Single().Method.Should().Be("trade_in");
+        ledger.ClosingBalance.Should().Be(0m);
+        ledger.Pending.Should().BeEmpty();
+    }
+
+    // La limpieza en producción: anular el cobro "Otro" que duplicaba el canje deja la venta Pagada (la salda el
+    // canje), el saldo a favor como estaba y el extracto en 0.
+    [Fact]
+    public async Task AnularElCobroQueDuplicabaElCanje_LaVentaSiguePagada_YElExtractoCierraEnCero()
+    {
+        var venta = AddCcSale("VENT-0101", 229_779m, withStock: true, tradeIn: 140_000m);
+        (await Handler().Handle(
+            new AddCustomerReceiptCommand(_customer.Id.Value, new DateTime(2026, 10, 2), null,
+                [new AddCustomerReceiptLine((int)SalePaymentMethod.Transfer, 89_779m, "Ref. 1")]),
+            CancellationToken.None)).IsSuccess.Should().BeTrue();
+
+        // Estado que quedó en producción: un cobro "Otro" por el canje, imputado entero a la venta.
+        var duplicado = CustomerPayment.Create(
+            _companyId.Value, _customer.Id.Value, _branch.Id.Value, SalePaymentMethod.Other, 140_000m,
+            new DateTime(2026, 10, 2), null, null, _userId.Value);
+        _payments.Add(duplicado);
+        venta.ApplyCustomerCredit(140_000m, DateTime.UtcNow, duplicado.Id, "Saldo a favor aplicado automáticamente");
+        (await LedgerHandler().Handle(new GetCustomerLedgerQuery(_customer.Id.Value), CancellationToken.None))
+            .Value.ClosingBalance.Should().Be(-140_000m);
+
+        var result = await CancelPaymentHandler().Handle(
+            new CancelCustomerPaymentCommand(_customer.Id.Value, duplicado.Id), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        venta.SaleStatus.Should().Be(SaleStatus.Paid);
+        venta.CcPendingAmount.Should().Be(0m);
+        _customer.CreditBalance.Should().Be(0m);
+        (await LedgerHandler().Handle(new GetCustomerLedgerQuery(_customer.Id.Value), CancellationToken.None))
+            .Value.ClosingBalance.Should().Be(0m);
     }
 
     // ── Banco de la transferencia ────────────────────────────────────────────

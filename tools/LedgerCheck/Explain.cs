@@ -9,8 +9,7 @@ using Microsoft.Extensions.DependencyInjection;
 // Explica una cuenta que no cuadra. La diferencia D = extracto − (pendiente − a favor) se parte, sin resto, en:
 //
 //   documentos  lo que la tarjeta no ve de cada comprobante: compras Pagadas con pendiente distinto de 0
-//               (la tarjeta solo suma las Activas), ventas cobradas de más (la tarjeta las toma como 0) y
-//               canjes de ventas CC (bajan el pendiente pero no son un haber del extracto).
+//               (la tarjeta solo suma las Activas) y ventas cobradas de más (la tarjeta las toma como 0).
 //   saldo       saldo a favor guardado − saldo que corresponde: la plata del extracto que no quedó imputada a
 //               comprobantes vivos, menos el saldo a favor ya aplicado. Si da distinto de 0, el saldo a favor
 //               guardado no coincide con los pagos (por ejemplo, saldo perdido o creado de la nada).
@@ -80,16 +79,18 @@ internal static class Explain
         var activeRows = sales.SelectMany(s => s.CcPayments.Where(r => r.Status == SaleCcPaymentStatus.Active)
             .Select(r => (Sale: s, Row: r))).ToList();
 
-        // Documentos: la tarjeta toma como 0 una venta cobrada de más, y el canje baja el pendiente sin ser haber.
-        var hidden = live.Where(s => s.CcPendingAmount < 0 || s.TradeInAmount != 0).ToList();
-        var documents = hidden.Sum(s => Math.Min(0m, s.CcPendingAmount) + s.TradeInAmount);
+        // Documentos: la tarjeta toma como 0 una venta cobrada de más. (El canje baja el pendiente y es haber del
+        // extracto: no genera diferencia.)
+        var hidden = live.Where(s => s.CcPendingAmount < 0).ToList();
+        var documents = hidden.Sum(s => s.CcPendingAmount);
 
         var appliedCredit = activeRows
             .Where(x => liveIds.Contains(x.Sale.Id.Value) && x.Row.Method == SalePaymentMethod.CustomerCredit
                 && x.Row.CustomerPaymentId is null && x.Row.CreditNoteId is null)
             .Sum(x => x.Row.Amount);
         var moneyOnLive = live.Sum(s => s.CcPaidTotal) - appliedCredit;
-        var unapplied = ledger.TotalCredit - moneyOnLive;
+        // El haber del extracto incluye los canjes de las ventas vivas, que no son plata.
+        var unapplied = ledger.TotalCredit - live.Sum(s => s.TradeInAmount) - moneyOnLive;
         var expectedCredit = unapplied - appliedCredit;
         var creditTerm = storedCredit - expectedCredit;
 
@@ -106,7 +107,7 @@ internal static class Explain
             return;
 
         Console.WriteLine($"      saldo a favor guardado {storedCredit:N2} · plata sin imputar a ventas vivas {unapplied:N2} − saldo ya aplicado {appliedCredit:N2} = {expectedCredit:N2}");
-        foreach (var row in ledger.Rows.Where(r => !r.IsCancelled && r.Kind != "invoice"))
+        foreach (var row in ledger.Rows.Where(r => !r.IsCancelled && r.Kind != "invoice" && r.Source != "trade_in"))
         {
             var ids = row.Means.Select(m => m.PaymentId).ToHashSet();
             var mine = activeRows.Where(x => (x.Row.CustomerPaymentId is { } cp && ids.Contains(cp))

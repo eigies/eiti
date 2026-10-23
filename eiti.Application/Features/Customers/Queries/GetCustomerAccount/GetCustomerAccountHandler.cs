@@ -59,9 +59,10 @@ public sealed class GetCustomerAccountHandler
             : (await _chequeRepository.ListByIdsAsync(chequeIds, companyId, cancellationToken))
                 .ToDictionary(c => c.Id, c => c.Numero);
 
+        // El canje salda parte de la venta sin ser un cobro: la deuda es lo que queda para pagar.
         var deudaTotal = sales
             .Where(s => s.SaleStatus != SaleStatus.Cancel)
-            .Sum(s => s.TotalAmount);
+            .Sum(s => s.TotalAmount - s.TradeInAmount);
         var saldoPendiente = sales
             .Where(s => s.SaleStatus != SaleStatus.Cancel)
             .Sum(s => Math.Max(0m, s.CcPendingAmount));

@@ -16,7 +16,8 @@ public sealed record AccountLedgerResponse(
 
 // Kind: qué es ("invoice" | "payment" | "credit_note"). Source: de dónde sale y, con eso, cómo se anula:
 // "purchase" | "sale" | "payment_order" | "receipt" | "payment" (pago sin grupo, anterior a las órdenes) |
-// "legacy" (pago cargado en la compra/venta antes de la cuenta corriente) | "credit_note".
+// "legacy" (pago cargado en la compra/venta antes de la cuenta corriente) | "credit_note" |
+// "trade_in" (canje de una venta CC: se anula con la venta, el Id es el de la venta).
 // Id es el de la cosa que se anula: la orden / el recibo para los grupos.
 public sealed record LedgerRowResponse(
     string Kind,
@@ -33,7 +34,7 @@ public sealed record LedgerRowResponse(
     IReadOnlyList<LedgerMeansResponse> Means,
     IReadOnlyList<LedgerImputationResponse> Imputations);
 
-// Un medio dentro de un pago/cobro. Method: "cash" | "transfer" | "check" | "card" | "other".
+// Un medio dentro de un pago/cobro. Method: "cash" | "transfer" | "check" | "card" | "other" | "trade_in".
 public sealed record LedgerMeansResponse(
     Guid PaymentId,
     string Method,
