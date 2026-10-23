@@ -135,6 +135,22 @@ Remove-Item Env:PROD_URL, Env:PGPASSWORD
 `devolver.sql`, `saldo-perdido.txt` y `ledgercheck.txt` se guardan hasta aplicar la corrección y después se
 borran. Ninguno se commitea.
 
+## Canjes cobrados dos veces (en producción, después del deploy)
+
+Antes del arreglo de los canjes, la tarjeta y el extracto mostraban una venta CC con canje con el total entero
+pendiente, y se "saldó" la diferencia cargando un cobro "Otro" por el valor del canje. Con la rama desplegada esas
+ventas quedan cobradas de más y el paso 6 las marca con diferencia negativa igual al canje.
+
+1. `psql $env:PROD_URL -f tools\LedgerCheck\canjes-duplicados.sql` (solo lee) lista los cobros.
+2. Anular cada uno desde la app (cuenta del cliente → el cobro → "Anular cobro"). **Nunca antes del deploy**:
+   con el código viejo la venta vuelve a pendiente y el stock a reservado. Con el nuevo la venta sigue Pagada
+   (la salda el canje), el saldo a favor no cambia y el stock no se mueve.
+3. Correr el paso 6 contra producción: esas cuentas tienen que desaparecer del listado.
+
+Ensayado sobre una copia del 2026-10-23: 3 cobros (CRISTACOL SA 140.000; CAREXTREME AUDIOCAR 76.000 y 38.000)
+anulados con `CancelCustomerPaymentCommand`; ventas Pagadas, saldo a favor 0, sin movimientos de stock, y las dos
+cuentas salieron del control de cuadre.
+
 ## Qué reportar
 
 - Versión del servidor, última migración de producción (paso 3) y avisos de `pg_restore` que no sean de roles,

@@ -401,6 +401,7 @@ public sealed class SaleRepository : ISaleRepository
         var query = _context.Sales
             .Include(sale => sale.Details)
             .Include(sale => sale.CcPayments)
+            .Include(sale => sale.TradeIns)
             .Where(sale => sale.CompanyId == companyId && sale.IsCuentaCorriente);
 
         if (customerId is not null)
@@ -423,6 +424,7 @@ public sealed class SaleRepository : ISaleRepository
         var sales = await _context.Sales
             .Include(sale => sale.Details)
             .Include(sale => sale.CcPayments)
+            .Include(sale => sale.TradeIns)
             .Where(sale => sale.CompanyId == companyId
                 && sale.CustomerId == customerId
                 && sale.IsCuentaCorriente
@@ -447,6 +449,7 @@ public sealed class SaleRepository : ISaleRepository
         return await _context.Sales
             .Include(sale => sale.Details)
             .Include(sale => sale.CcPayments)
+            .Include(sale => sale.TradeIns)
             .Where(sale => sale.CompanyId == companyId
                 && sale.CustomerId == customerId
                 && sale.IsCuentaCorriente)
@@ -462,6 +465,7 @@ public sealed class SaleRepository : ISaleRepository
         return await _context.Sales
             .Include(sale => sale.Details)
             .Include(sale => sale.CcPayments)
+            .Include(sale => sale.TradeIns)
             .Where(sale => sale.CompanyId == companyId
                 && sale.CcPayments.Any(p => p.CustomerPaymentId == customerPaymentId))
             .ToListAsync(cancellationToken);
@@ -475,6 +479,7 @@ public sealed class SaleRepository : ISaleRepository
         return await _context.Sales
             .Include(sale => sale.Details)
             .Include(sale => sale.CcPayments)
+            .Include(sale => sale.TradeIns)
             .Where(sale => sale.CompanyId == companyId
                 && sale.CcPayments.Any(p => p.CreditNoteId == creditNoteId))
             .ToListAsync(cancellationToken);
@@ -486,6 +491,7 @@ public sealed class SaleRepository : ISaleRepository
     {
         var sales = await _context.Sales
             .Include(sale => sale.CcPayments)
+            .Include(sale => sale.TradeIns)
             .Where(sale => sale.CompanyId == companyId
                 && sale.IsCuentaCorriente
                 && sale.SaleStatus != SaleStatus.Cancel
@@ -508,6 +514,7 @@ public sealed class SaleRepository : ISaleRepository
         var query = _context.Sales
             .Include(sale => sale.Details)
             .Include(sale => sale.CcPayments)
+            .Include(sale => sale.TradeIns)
             .Where(sale => sale.CompanyId == companyId
                         && sale.SaleStatus == SaleStatus.OnHold
                         && sale.Details.Any(detail => detail.ProductId == productId));

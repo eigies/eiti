@@ -151,6 +151,23 @@ public sealed class GetCustomerLedgerHandler : IRequestHandler<GetCustomerLedger
                     "invoice", "sale", sale.Id.Value, default, sale.Code, invoiceLabels.GetValueOrDefault(sale.Id.Value), "Venta",
                     0m, 0m, 0m, false, [], [])));
 
+            // Canje (bienes que el cliente entregó como parte de pago): salda parte de la venta igual que un cobro
+            // (CcSettledTotal), así que es haber. No se anula solo: se va con la venta (Id = la venta).
+            if (sale.TradeInAmount > 0)
+            {
+                entries.Add(Entry(
+                    BusinessCalendar.ToBusinessDate(sale.CreatedAt),
+                    sale.CreatedAt,
+                    debit: 0m,
+                    credit: sale.TradeInAmount,
+                    sale.SaleStatus == SaleStatus.Cancel,
+                    new LedgerRowResponse(
+                        "payment", "trade_in", sale.Id.Value, default, null, null, $"Canje en la venta {saleCode}".Trim(),
+                        0m, 0m, 0m, false,
+                        [new LedgerMeansResponse(sale.Id.Value, "trade_in", "Canje", sale.TradeInAmount, null)],
+                        [new LedgerImputationResponse(sale.Id.Value, saleCode, invoiceLabels.GetValueOrDefault(sale.Id.Value), sale.TradeInAmount)])));
+            }
+
             // Cobros cargados en la venta antes de la cuenta corriente: son haber, sin recibo ni número.
             foreach (var legacy in sale.CcPayments.Where(r =>
                 r.CustomerPaymentId is null && r.CreditNoteId is null && r.Method != SalePaymentMethod.CustomerCredit))
