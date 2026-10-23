@@ -36,17 +36,18 @@ Por qué así y no "un pago con líneas hijas":
 ## Backend (`eiti`)
 
 ### Dominio + infraestructura
-- [ ] `eiti.Domain/Suppliers/SupplierPaymentOrder.cs`: `Id, CompanyId, SupplierId, BranchId, Code, Date,
-      Notes, Status (Active/Cancelled), TotalAmount, CreatedAt, CreatedByUserId`. `Create(...)` valida
-      total > 0; `Cancel()` lanza si ya está anulada.
-- [ ] `SupplierPayment.PaymentOrderId` (`Guid?`) + `AttachToOrder(orderId)`.
-- [ ] Espejo en clientes: `eiti.Domain/Customers/CustomerReceipt.cs` + `CustomerPayment.ReceiptId`.
-- [ ] EF: `IEntityTypeConfiguration` de las dos, `decimal(18,2)`, `HasIndex` en `SupplierId`/`CustomerId`
+- [x] `eiti.Domain/Suppliers/SupplierPaymentOrder.cs`: `Id, CompanyId, SupplierId, BranchId, Code, Date,
+      Notes, Status (Active/Cancelled), TotalAmount, CreatedAt, CreatedByUserId, Cancelled*`. El total se
+      arma con `AddPayment(pago)` (vincula el pago, exige mismo proveedor y pago activo); `Cancel()` lanza
+      si ya está anulada. Que haya ≥ 1 medio lo garantiza el validador del comando.
+- [x] `SupplierPayment.PaymentOrderId` (`Guid?`) + `AttachToOrder(orderId)`.
+- [x] Espejo en clientes: `eiti.Domain/Customers/CustomerReceipt.cs` + `CustomerPayment.ReceiptId`.
+- [x] EF: `IEntityTypeConfiguration` de las dos, `decimal(18,2)`, `HasIndex` en `SupplierId`/`CustomerId`
       y en las FK nuevas, **índice único `(CompanyId, Code)`** para que un choque del `count + 1` falle
       fuerte en vez de duplicar el número.
-- [ ] Repositorios `ISupplierPaymentOrderRepository` / `ICustomerReceiptRepository` (solo lo que usan
+- [x] Repositorios `ISupplierPaymentOrderRepository` / `ICustomerReceiptRepository` (solo lo que usan
       los handlers: `AddAsync`, `GetByIdAsync` con sus pagos, `CountByCompanyAsync`) + DI.
-- [ ] Migración `AddPaymentOrdersAndReceipts`.
+- [x] Migración `AddPaymentOrdersAndReceipts`.
 
 ### Registrar el pago agrupado
 - [ ] Extraer la lógica de **una línea** de `AddSupplierPaymentHandler` a `SupplierPaymentRegistrar`

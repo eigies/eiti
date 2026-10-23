@@ -14,6 +14,8 @@ public sealed class SupplierPayment
     public decimal Amount { get; private set; }
     public PurchasePaymentStatus Status { get; private set; }
     public Guid? ChequeId { get; private set; }
+    // Orden de pago que agrupa este medio con otros (null en pagos anteriores a las órdenes).
+    public Guid? PaymentOrderId { get; private set; }
     public string? Reference { get; private set; }
     public string? Notes { get; private set; }
     public DateTime Date { get; private set; }
@@ -77,6 +79,14 @@ public sealed class SupplierPayment
             throw new InvalidOperationException("Supplier payment is already cancelled.");
 
         Status = PurchasePaymentStatus.Cancelled;
+    }
+
+    internal void AttachToOrder(Guid paymentOrderId)
+    {
+        if (PaymentOrderId.HasValue)
+            throw new InvalidOperationException("Supplier payment already belongs to a payment order.");
+
+        PaymentOrderId = paymentOrderId;
     }
 
     private static string? NormalizeOptional(string? value, int maxLength)
