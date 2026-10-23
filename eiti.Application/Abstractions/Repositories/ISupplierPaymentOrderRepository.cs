@@ -10,5 +10,7 @@ public interface ISupplierPaymentOrderRepository
     // no se reutiliza.
     Task<int> CountByCompanyAsync(Guid companyId, CancellationToken ct = default);
 
+    Task<List<SupplierPaymentOrder>> ListBySupplierAsync(Guid companyId, Guid supplierId, CancellationToken ct = default);
+
     Task AddAsync(SupplierPaymentOrder order, CancellationToken ct = default);
 }

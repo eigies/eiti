@@ -1,6 +1,9 @@
 using eiti.Application.Abstractions.Data;
 using eiti.Application.Abstractions.Repositories;
 using eiti.Application.Abstractions.Services;
+using eiti.Domain.Banks;
+using eiti.Application.Features.Suppliers.Queries.GetSupplierLedger;
+using eiti.Application.Common;
 using eiti.Application.Features.Suppliers.Commands.AddSupplierPayment;
 using eiti.Application.Features.Suppliers.Commands.AddSupplierPaymentOrder;
 using eiti.Application.Features.Suppliers.Commands.CancelSupplierPayment;
@@ -416,5 +419,141 @@ public sealed class SupplierPaymentOrderHandlersTests
         payment.Status.Should().Be(PurchasePaymentStatus.Cancelled);
         _orders.Single().Status.Should().Be(PurchasePaymentStatus.Cancelled);
         compra.PendingAmount.Should().Be(100_000m);
+    }
+
+    // ── Extracto ─────────────────────────────────────────────────────────────
+
+    private sealed class FixedTime(DateTimeOffset now) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => now;
+    }
+
+    private GetSupplierLedgerHandler LedgerHandler(IReadOnlyList<SupplierCreditNote> notes)
+    {
+        var (currentUser, suppliers, _, _) = Context();
+
+        var purchases = new Mock<IPurchaseRepository>();
+        purchases
+            .Setup(r => r.ListAllBySupplierAsync(_companyId.Value, _supplier.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => _pending.ToList());
+        _paymentRepository
+            .Setup(r => r.ListBySupplierAsync(_companyId.Value, _supplier.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => _payments.ToList());
+        _orderRepository
+            .Setup(r => r.ListBySupplierAsync(_companyId.Value, _supplier.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => _orders.ToList());
+        var creditNotes = new Mock<ISupplierCreditNoteRepository>();
+        creditNotes
+            .Setup(r => r.ListBySupplierAsync(_companyId.Value, _supplier.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => notes.ToList());
+        var cheques = new Mock<IChequeRepository>();
+        cheques
+            .Setup(r => r.ListByIdsAsync(It.IsAny<IEnumerable<Guid>>(), _companyId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IEnumerable<Guid> ids, CompanyId _, CancellationToken _) =>
+                _cheques.Values.Where(c => ids.Contains(c.Id)).ToList());
+        var nacion = Bank.Create(_companyId, "Banco Nación", useForCard: true, useForTransfer: true, useForCheque: true);
+        typeof(Bank).GetProperty(nameof(Bank.Id))!.SetValue(nacion, 1); // el Id lo pone la base
+        var banks = new Mock<IBankRepository>();
+        banks
+            .Setup(r => r.GetByIdsAsync(It.IsAny<IEnumerable<int>>(), _companyId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([nacion]);
+
+        return new GetSupplierLedgerHandler(
+            currentUser.Object, suppliers.Object, purchases.Object, _paymentRepository.Object, _orderRepository.Object,
+            creditNotes.Object, cheques.Object, banks.Object, new FixedTime(DateTimeOffset.UtcNow));
+    }
+
+    [Fact]
+    public async Task Extracto_UnRenglonPorOrden_ConMediosEImputaciones_YCuadraConLasTarjetas()
+    {
+        var today = BusinessCalendar.ToBusinessDate(DateTime.UtcNow);
+
+        // Compra pagada en la compra misma, antes de la cuenta corriente.
+        var legacyPurchase = AddPurchase("COMP-0099", 50_000m);
+        legacyPurchase.AddPayment(PurchasePayment.Create(PurchasePaymentMethod.Cash, 50_000m, today.AddDays(-30), "Recibo 7", null));
+        AddPurchase("COMP-0112", 685_000m);
+        AddPurchase("COMP-0118", 200_000m);
+
+        var chequeA = AddCheque(350_000m);
+        (await OrderHandler().Handle(
+            new AddSupplierPaymentOrderCommand(
+                _supplier.Id, today, null,
+                [
+                    Line(PurchasePaymentMethod.Check, 350_000m, chequeA.Id),
+                    Line(PurchasePaymentMethod.Check, 250_000m, AddCheque(250_000m).Id),
+                    Line(PurchasePaymentMethod.BankTransfer, 150_000m, reference: "Ref. 88213"),
+                    Line(PurchasePaymentMethod.Cash, 300_000m),
+                ]),
+            CancellationToken.None)).IsSuccess.Should().BeTrue();
+
+        // Pago anterior a las órdenes (sin grupo): quedó todo como saldo a favor.
+        var oldPayment = SupplierPayment.Create(
+            _companyId.Value, _supplier.Id, _branchId.Value, PurchasePaymentMethod.BankTransfer, 10_000m,
+            today.AddDays(-20), "Transf 1", null, _userId.Value);
+        _payments.Add(oldPayment);
+        _supplier.AddCredit(10_000m);
+
+        var note = SupplierCreditNote.Create(
+            _companyId.Value, _supplier.Id, _branchId.Value, "NCP-001", 20_000m, "Bonificación", today.AddDays(-5), null, _userId.Value);
+        _supplier.AddCredit(20_000m);
+
+        // Una orden anulada no mueve el saldo.
+        (await OrderHandler().Handle(
+            new AddSupplierPaymentOrderCommand(_supplier.Id, today, null, [Line(PurchasePaymentMethod.BankTransfer, 5_000m)]),
+            CancellationToken.None)).IsSuccess.Should().BeTrue();
+        var anulada = _orders.Last();
+        (await CancelOrderHandler().Handle(new CancelSupplierPaymentOrderCommand(_supplier.Id, anulada.Id), CancellationToken.None))
+            .IsSuccess.Should().BeTrue();
+
+        var pendiente = AddPurchase("COMP-0130", 400_000m);
+
+        var result = await LedgerHandler([note]).Handle(new GetSupplierLedgerQuery(_supplier.Id), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        var ledger = result.Value;
+
+        // Control de cuadre: el saldo final del extracto es lo que dicen las tarjetas.
+        ledger.ClosingBalance.Should().Be(_pending.Sum(p => p.PendingAmount) - _supplier.CreditBalance);
+        ledger.ClosingBalance.Should().Be(1_335_000m - 1_130_000m);
+
+        ledger.Rows.Should().NotContain(r => r.Id == anulada.Id);
+        ledger.Rows.First().Source.Should().Be("legacy");
+        ledger.Rows.First().Description.Should().Contain("COMP-0099");
+        ledger.Rows.Select(r => r.Date).Should().BeInAscendingOrder();
+
+        var op = ledger.Rows.Single(r => r.Code == "OP-0001");
+        op.Source.Should().Be("payment_order");
+        op.Credit.Should().Be(1_050_000m);
+        op.Means.Should().HaveCount(4);
+        var cheque = op.Means.First(m => m.Method == "check");
+        cheque.ChequeNumber.Should().Be(chequeA.Numero);
+        cheque.BankName.Should().Be("Banco Nación");
+        cheque.DueDate.Should().Be(chequeA.FechaVencimiento);
+        op.Means.Single(m => m.Method == "transfer").Reference.Should().Be("Ref. 88213");
+        op.Imputations.Select(i => (i.Code, i.Amount)).Should().Equal(("COMP-0112", 685_000m), ("COMP-0118", 200_000m));
+
+        ledger.Rows.Single(r => r.Id == oldPayment.Id).Source.Should().Be("payment");
+        ledger.Rows.Single(r => r.Id == note.Id).Credit.Should().Be(20_000m);
+
+        ledger.Pending.Should().ContainSingle();
+        ledger.Pending[0].Code.Should().Be("COMP-0130");
+        ledger.Pending[0].Pending.Should().Be(400_000m);
+        ledger.Pending[0].AgeDays.Should().Be(0);
+        pendiente.Status.Should().Be(PurchaseStatus.Active);
+
+        // Con anulados: aparece la orden anulada, con el saldo que traía.
+        var conAnulados = (await LedgerHandler([note]).Handle(
+            new GetSupplierLedgerQuery(_supplier.Id, IncludeCancelled: true), CancellationToken.None)).Value;
+        var rows = conAnulados.Rows.ToList();
+        var idx = rows.FindIndex(r => r.Id == anulada.Id);
+        rows[idx].IsCancelled.Should().BeTrue();
+        rows[idx].Balance.Should().Be(rows[idx - 1].Balance);
+
+        // Desde hace 10 días: el saldo anterior trae el pago en la compra y el pago sin orden.
+        var desde = (await LedgerHandler([note]).Handle(
+            new GetSupplierLedgerQuery(_supplier.Id, DateFrom: today.AddDays(-10)), CancellationToken.None)).Value;
+        desde.OpeningBalance.Should().Be(-60_000m);
+        desde.Rows.First().Id.Should().Be(note.Id);
+        desde.ClosingBalance.Should().Be(ledger.ClosingBalance);
     }
 }

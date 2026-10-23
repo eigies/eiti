@@ -82,4 +82,16 @@ public sealed class BusinessCalendarTests
         BusinessCalendar.TimeZone.GetUtcOffset(new DateTime(2026, 8, 14))
             .Should().Be(TimeSpan.FromHours(-OffsetHours));
     }
+
+    // Lo inverso: dónde cae en el calendario del usuario algo guardado con DateTime.UtcNow.
+    [Theory]
+    [InlineData(2026, 8, 15, 0, 13, 14)]  // 21:13 local del 14
+    [InlineData(2026, 8, 15, 2, 59, 14)]  // 23:59 local del 14
+    [InlineData(2026, 8, 15, 3, 0, 15)]   // 00:00 local del 15
+    public void ToBusinessDate_UbicaElInstanteEnElDiaLocal(int y, int m, int d, int h, int min, int expectedDay)
+    {
+        var date = BusinessCalendar.ToBusinessDate(new DateTime(y, m, d, h, min, 0, DateTimeKind.Utc));
+
+        date.Should().Be(new DateTime(2026, 8, expectedDay));
+    }
 }

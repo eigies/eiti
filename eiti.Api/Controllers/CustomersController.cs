@@ -10,6 +10,7 @@ using eiti.Application.Features.Customers.Commands.CreateCustomer;
 using eiti.Application.Features.Customers.Commands.DeleteCustomer;
 using eiti.Application.Features.Customers.Commands.UpdateCustomer;
 using eiti.Application.Features.Customers.Queries.GetCustomerAccount;
+using eiti.Application.Features.Customers.Queries.GetCustomerLedger;
 using eiti.Application.Features.Customers.Queries.GetCustomerById;
 using eiti.Application.Features.Customers.Queries.GetCustomerPaymentLink;
 using eiti.Application.Features.Customers.Queries.SearchCustomers;
@@ -109,6 +110,19 @@ public sealed class CustomersController : ControllerBase
         CancellationToken cancellationToken)
     {
         var result = await _sender.Send(new GetCustomerAccountQuery(id), cancellationToken);
+        return result.ToActionResult();
+    }
+
+    // Extracto: renglones en orden cronológico con saldo acumulado + ventas pendientes.
+    [HttpGet("{id:guid}/ledger")]
+    public async Task<IActionResult> GetCustomerLedger(
+        Guid id,
+        [FromQuery] DateTime? dateFrom,
+        [FromQuery] DateTime? dateTo,
+        [FromQuery] bool includeCancelled,
+        CancellationToken cancellationToken)
+    {
+        var result = await _sender.Send(new GetCustomerLedgerQuery(id, dateFrom, dateTo, includeCancelled), cancellationToken);
         return result.ToActionResult();
     }
 

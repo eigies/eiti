@@ -25,6 +25,14 @@ public sealed class CustomerReceiptRepository : ICustomerReceiptRepository
             .CountAsync(r => r.CompanyId == companyId, ct);
     }
 
+    public async Task<List<CustomerReceipt>> ListByCustomerAsync(Guid companyId, Guid customerId, CancellationToken ct = default)
+    {
+        return await _db.CustomerReceipts
+            .AsNoTracking()
+            .Where(r => r.CompanyId == companyId && r.CustomerId == customerId)
+            .ToListAsync(ct);
+    }
+
     public async Task AddAsync(CustomerReceipt receipt, CancellationToken ct = default)
     {
         await _db.CustomerReceipts.AddAsync(receipt, ct);

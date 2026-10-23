@@ -34,6 +34,13 @@ public static class BusinessCalendar
     public static DateTime EndOfDayUtc(DateTime localDate)
         => ToUtc(localDate.Date.AddDays(1).AddTicks(-1));
 
+    /// <summary>
+    /// Fecha de negocio (día local, a las 00:00) de un instante UTC. Lo inverso de <see cref="StartOfDayUtc"/>:
+    /// sirve para ubicar en el calendario del usuario algo que se guardó con DateTime.UtcNow.
+    /// </summary>
+    public static DateTime ToBusinessDate(DateTime utcInstant)
+        => TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(utcInstant, DateTimeKind.Utc), TimeZone).Date;
+
     private static DateTime ToUtc(DateTime local)
     {
         // ConvertTimeToUtc exige Kind Unspecified o Local; los DateTime que llegan del query string

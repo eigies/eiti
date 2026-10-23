@@ -5,6 +5,7 @@ using eiti.Application.Features.Customers.Commands.AddCustomerReceipt;
 using eiti.Application.Features.Customers.Commands.CancelCustomerPayment;
 using eiti.Application.Features.Customers.Commands.CancelCustomerReceipt;
 using eiti.Application.Features.Customers.Common;
+using eiti.Application.Features.Customers.Queries.GetCustomerLedger;
 using eiti.Domain.Banks;
 using eiti.Domain.Branches;
 using eiti.Domain.Cash;
@@ -340,5 +341,76 @@ public sealed class CustomerReceiptHandlersTests
         payment.Status.Should().Be(SaleCcPaymentStatus.Cancelled);
         _receipts.Single().Status.Should().Be(SaleCcPaymentStatus.Cancelled);
         venta.CcPendingAmount.Should().Be(300_000m);
+    }
+
+    // ── Extracto ─────────────────────────────────────────────────────────────
+
+    private sealed class FixedTime(DateTimeOffset now) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => now;
+    }
+
+    private GetCustomerLedgerHandler LedgerHandler()
+    {
+        var sales = new Mock<ISaleRepository>();
+        sales
+            .Setup(r => r.ListCcSalesByCustomerAsync(_companyId, _customer.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => _pending.ToList());
+        _paymentRepository
+            .Setup(r => r.ListByCustomerAsync(_companyId.Value, _customer.Id.Value, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => _payments.ToList());
+        _receiptRepository
+            .Setup(r => r.ListByCustomerAsync(_companyId.Value, _customer.Id.Value, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => _receipts.ToList());
+        var creditNotes = new Mock<ICustomerCreditNoteRepository>();
+        creditNotes
+            .Setup(r => r.ListByCustomerAsync(_companyId.Value, _customer.Id.Value, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+        var cheques = new Mock<IChequeRepository>();
+        cheques
+            .Setup(r => r.ListByIdsAsync(It.IsAny<IEnumerable<Guid>>(), _companyId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => _cheques.ToList());
+        var banks = new Mock<IBankRepository>();
+        banks
+            .Setup(r => r.GetByIdsAsync(It.IsAny<IEnumerable<int>>(), _companyId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => [_bank]);
+
+        return new GetCustomerLedgerHandler(
+            _context.User.Object, _context.Customers.Object, sales.Object, _paymentRepository.Object,
+            _receiptRepository.Object, creditNotes.Object, cheques.Object, banks.Object, new FixedTime(DateTimeOffset.UtcNow));
+    }
+
+    [Fact]
+    public async Task Extracto_ElReciboEsUnRenglonConSusMedios_YCuadraConLasTarjetas()
+    {
+        AddCcSale("VENT-0101", 300_000m, withStock: true);
+        AddCcSale("VENT-0102", 100_000m);
+        var receipt = await CollectWithThreeMeansAsync();
+
+        var result = await LedgerHandler().Handle(new GetCustomerLedgerQuery(_customer.Id.Value), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        var ledger = result.Value;
+        ledger.ClosingBalance.Should().Be(_pending.Sum(s => s.CcPendingAmount) - _customer.CreditBalance);
+        ledger.ClosingBalance.Should().Be(75_000m);
+
+        var row = ledger.Rows.Single(r => r.Source == "receipt");
+        row.Id.Should().Be(receipt.Id);
+        row.Code.Should().Be("RC-0001");
+        row.Credit.Should().Be(325_000m);
+        ledger.Rows.Select(r => r.Date).Should().BeInAscendingOrder();
+        ledger.Rows.Last().Balance.Should().Be(75_000m);
+
+        var card = row.Means.Single(m => m.Method == "card");
+        card.BankName.Should().Be("Banco Nación");
+        card.CardInstallments.Should().Be(3);
+        card.CardSurcharge.Should().Be(20_000m);
+        row.Means.Single(m => m.Method == "check").ChequeNumber.Should().Be("00045120");
+        row.Imputations.Select(i => (i.Code, i.Amount)).Should().Equal(("VENT-0101", 300_000m), ("VENT-0102", 25_000m));
+
+        ledger.Pending.Should().ContainSingle();
+        ledger.Pending[0].Code.Should().Be("VENT-0102");
+        ledger.Pending[0].Imputed.Should().Be(25_000m);
+        ledger.Pending[0].Pending.Should().Be(75_000m);
     }
 }

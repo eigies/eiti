@@ -87,26 +87,26 @@ Por qué así y no "un pago con líneas hijas":
       reservado, cheque anulado). **405/405.**
 
 ### Extracto
-- [ ] `Application/Common/Accounts/LedgerBuilder.cs`: función pura que recibe movimientos
-      `(fecha, creadoEn, debe, haber, anulado, …)` y un rango, y devuelve **saldo anterior**, renglones en
-      orden **ascendente** con **saldo acumulado**, y totales del período. Los anulados salen con saldo
-      sin cambio y marcados. Compartida por proveedores y clientes.
-- [ ] Rango de fechas con `BusinessCalendar.ToUtcRange` (lección del 15/08: el día del usuario no es el
-      día UTC).
-- [ ] `GetSupplierLedger` → `GET suppliers/{id}/ledger?dateFrom&dateTo&includeCancelled`:
-      `{ openingBalance, rows[], totals, pending[] }`. Cada renglón de pago agrupado trae `lines[]`
-      (medio, detalle de cheque/tarjeta, monto) e `imputations[]`. `pending[]` = compras con saldo
-      (total, imputado, saldo, días de antigüedad) para la pestaña Pendientes.
-- [ ] `GetCustomerLedger` → `GET customers/{id}/ledger`: ídem con ventas CC / cobros / NC.
-- [ ] El extracto **no necesita migración ni arreglo de datos**: se calcula al vuelo con lo que ya hay
-      (compras/ventas CC, pagos/cobros, NC). Incluir los **pagos legacy por-compra**
-      (`PurchasePayment` sin `SupplierPaymentId`, como ya hace `GetSupplierAccount`) y **excluir** las
-      imputaciones (`SupplierCredit`/`CustomerCredit`, filas de NC) para no contar dos veces.
-- [ ] **Control de cuadre**: saldo final del extracto sin filtro de fechas = `saldoPendiente − saldoAFavor`
-      de la tarjeta. Test que lo asegure + query de chequeo sobre todas las cuentas de prod antes del
-      release (si alguna no cuadra, es un dato viejo inconsistente para revisar, no se esconde).
-- [ ] `GetSupplierAccount` / `GetCustomerAccount` **no se tocan** (siguen alimentando las tarjetas de
-      resumen y cualquier otro consumidor).
+- [x] `Application/Common/Accounts/LedgerBuilder.cs`: función pura → **saldo anterior**, renglones en orden
+      **ascendente** (día de negocio, después instante de registro) con **saldo acumulado**, totales del
+      período. Lo anulado no mueve el saldo y aparece solo si se pide. Compartida por proveedores y clientes.
+- [x] Fechas: lo guardado como instante (`CreatedAt` de compras/ventas) se ubica en el día del usuario con
+      `BusinessCalendar.ToBusinessDate` (nuevo, inverso de `StartOfDayUtc`); lo que ya es fecha de calendario
+      (`Date` de pagos, OP/RC, NC) se usa tal cual. El filtro Desde/Hasta compara días contra días.
+- [x] Contrato único `AccountLedgerResponse` (rows con `Kind`/`Source`/`Means`/`Imputations` + `Pending`);
+      los textos de cada medio los arma el front con datos estructurados (cheque, banco, vto, cuotas, recargo).
+- [x] `GetSupplierLedger` → `GET suppliers/{id}/ledger?dateFrom&dateTo&includeCancelled`: compras, OP
+      (un renglón por orden), pagos sin orden, **pagos cargados en la compra** (legacy), NC. Las imputaciones
+      no son renglones. `pending[]` con antigüedad en días.
+- [x] `GetCustomerLedger` → `GET customers/{id}/ledger`: ventas CC, recibos, cobros sin recibo, cobros
+      legacy por venta, NC.
+- [x] **Control de cuadre** en tests: saldo final del extracto = `Σ pendiente − saldo a favor`.
+- [x] Tests: `LedgerBuilder` (ejemplo del cliente 10 + 2 − 8 = 4, mismo día, anulados, rango, saldo a
+      favor), `ToBusinessDate`, extracto de proveedor (OP con 4 medios, legacy, pago sin orden, NC, OP anulada,
+      Desde con saldo anterior, pendientes) y de cliente (recibo con tarjeta/cheque). **416/416.**
+- [ ] Correr la query de cuadre sobre todas las cuentas de **producción** antes del release (necesita
+      acceso a la base).
+- [x] `GetSupplierAccount` / `GetCustomerAccount` **no se tocaron**.
 
 ### Permisos
 - [ ] Sin permisos nuevos: alta usa `PurchasesPay` / `SalesPay`, extracto `PurchasesAccess` / el de

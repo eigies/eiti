@@ -25,6 +25,14 @@ public sealed class SupplierPaymentOrderRepository : ISupplierPaymentOrderReposi
             .CountAsync(o => o.CompanyId == companyId, ct);
     }
 
+    public async Task<List<SupplierPaymentOrder>> ListBySupplierAsync(Guid companyId, Guid supplierId, CancellationToken ct = default)
+    {
+        return await _db.SupplierPaymentOrders
+            .AsNoTracking()
+            .Where(o => o.CompanyId == companyId && o.SupplierId == supplierId)
+            .ToListAsync(ct);
+    }
+
     public async Task AddAsync(SupplierPaymentOrder order, CancellationToken ct = default)
     {
         await _db.SupplierPaymentOrders.AddAsync(order, ct);

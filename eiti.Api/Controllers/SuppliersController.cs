@@ -7,6 +7,7 @@ using eiti.Application.Features.Suppliers.Commands.CreateSupplier;
 using eiti.Application.Features.Suppliers.Commands.DeactivateSupplier;
 using eiti.Application.Features.Suppliers.Commands.UpdateSupplier;
 using eiti.Application.Features.Suppliers.Queries.GetSupplierAccount;
+using eiti.Application.Features.Suppliers.Queries.GetSupplierLedger;
 using eiti.Application.Features.Suppliers.Queries.ListSupplierAccounts;
 using eiti.Application.Features.Suppliers.Queries.ListSuppliers;
 using MediatR;
@@ -84,6 +85,19 @@ public sealed class SuppliersController : ControllerBase
         CancellationToken cancellationToken)
     {
         var result = await _sender.Send(new GetSupplierAccountQuery(id), cancellationToken);
+        return result.ToActionResult();
+    }
+
+    // Extracto: renglones en orden cronológico con saldo acumulado + facturas pendientes.
+    [HttpGet("{id:guid}/ledger")]
+    public async Task<IActionResult> GetSupplierLedger(
+        Guid id,
+        [FromQuery] DateTime? dateFrom,
+        [FromQuery] DateTime? dateTo,
+        [FromQuery] bool includeCancelled,
+        CancellationToken cancellationToken)
+    {
+        var result = await _sender.Send(new GetSupplierLedgerQuery(id, dateFrom, dateTo, includeCancelled), cancellationToken);
         return result.ToActionResult();
     }
 
