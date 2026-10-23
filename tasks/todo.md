@@ -85,6 +85,13 @@ Por qué así y no "un pago con líneas hijas":
       (medio, detalle de cheque/tarjeta, monto) e `imputations[]`. `pending[]` = compras con saldo
       (total, imputado, saldo, días de antigüedad) para la pestaña Pendientes.
 - [ ] `GetCustomerLedger` → `GET customers/{id}/ledger`: ídem con ventas CC / cobros / NC.
+- [ ] El extracto **no necesita migración ni arreglo de datos**: se calcula al vuelo con lo que ya hay
+      (compras/ventas CC, pagos/cobros, NC). Incluir los **pagos legacy por-compra**
+      (`PurchasePayment` sin `SupplierPaymentId`, como ya hace `GetSupplierAccount`) y **excluir** las
+      imputaciones (`SupplierCredit`/`CustomerCredit`, filas de NC) para no contar dos veces.
+- [ ] **Control de cuadre**: saldo final del extracto sin filtro de fechas = `saldoPendiente − saldoAFavor`
+      de la tarjeta. Test que lo asegure + query de chequeo sobre todas las cuentas de prod antes del
+      release (si alguna no cuadra, es un dato viejo inconsistente para revisar, no se esconde).
 - [ ] `GetSupplierAccount` / `GetCustomerAccount` **no se tocan** (siguen alimentando las tarjetas de
       resumen y cualquier otro consumidor).
 
