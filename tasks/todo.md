@@ -104,26 +104,29 @@ Por qué así y no "un pago con líneas hijas":
 - [x] Tests: `LedgerBuilder` (ejemplo del cliente 10 + 2 − 8 = 4, mismo día, anulados, rango, saldo a
       favor), `ToBusinessDate`, extracto de proveedor (OP con 4 medios, legacy, pago sin orden, NC, OP anulada,
       Desde con saldo anterior, pendientes) y de cliente (recibo con tarjeta/cheque). **416/416.**
-- [ ] Correr la query de cuadre sobre todas las cuentas de **producción** antes del release (necesita
-      acceso a la base).
+- [x] Herramienta de cuadre **`tools/LedgerCheck`** (solo lectura): corre los mismos handlers de la API
+      sobre cada proveedor y cliente con movimientos y lista las cuentas donde el saldo del extracto no da
+      `pendiente − a favor`. Probada en Postgres local: 4/4 cuentas cuadran y detecta una diferencia inyectada.
+- [ ] **Correrla contra producción antes del release** (necesita la connection string, no la tengo):
+      `dotnet run --project tools/LedgerCheck -- "<connection string>"`.
 - [x] `GetSupplierAccount` / `GetCustomerAccount` **no se tocaron**.
 
 ### Permisos
-- [ ] Sin permisos nuevos: alta usa `PurchasesPay` / `SalesPay`, extracto `PurchasesAccess` / el de
+- [x] Sin permisos nuevos: alta usa `PurchasesPay` / `SalesPay`, extracto `PurchasesAccess` / el de
       cuentas de clientes, anular el mismo que hoy anula pagos. (Si aparece alguno: las **4 listas**,
       dentro de su bloque temático.)
 
-### Tests (`eiti.Tests`)
-- [ ] `LedgerBuilder`: saldo anterior, orden por fecha y luego `CreatedAt`, NC al haber, anulados sin
+### Tests (`eiti.Tests`) — cubiertos en los pasos de arriba
+- [x] `LedgerBuilder`: saldo anterior, orden por fecha y luego `CreatedAt`, NC al haber, anulados sin
       efecto, saldo negativo = a favor.
-- [ ] `AddSupplierPaymentOrder`: 3 cheques + transferencia + efectivo → 5 pagos con la misma OP, cheques
+- [x] `AddSupplierPaymentOrder`: 3 cheques + transferencia + efectivo → 5 pagos con la misma OP, cheques
       `Entregado`, **solo el efectivo mueve caja**, FIFO correcto entre facturas, excedente a saldo a favor,
       cheque repetido rechazado, falla de una línea → nada persistido.
-- [ ] `AddCustomerReceipt`: tarjeta con recargo + cheque a cartera + efectivo, venta que queda paga
+- [x] `AddCustomerReceipt`: tarjeta con recargo + cheque a cartera + efectivo, venta que queda paga
       confirma stock una sola vez.
-- [ ] `Cancel*`: todas las líneas revertidas, cheques de vuelta en cartera, caja neteada, saldo restaurado.
-      Anular una línea suelta de un grupo → `PartOfGroup`.
-- [ ] Endpoint viejo genera OP/RC de una línea (los tests existentes de `AddCustomerPayment` y
+- [x] `Cancel*`: todas las líneas revertidas, cheques de vuelta en cartera, caja neteada, saldo restaurado.
+      Anular una línea suelta de un grupo → `PartOfOrder` / `PartOfReceipt`.
+- [x] Endpoint viejo genera OP/RC de una línea (los tests existentes de `AddCustomerPayment` y
       `CancelSupplierPayment` tienen que seguir verdes).
 
 ## Frontend (`eiti-front`)
@@ -135,40 +138,44 @@ espaciados y comportamiento en los tres anchos. Lo único que NO se lleva: el in
 mockup (la app ya tiene `ThemeService`), la página atenuada de fondo del modal (en la app es la pantalla
 real) y lo que dependa de las decisiones abiertas de abajo (cheque propio, cuenta propia, elegir facturas).
 
-- [ ] Modelos en `core/models/account-ledger.models.ts`: `LedgerRow`, `LedgerLine`, `LedgerImputation`,
-      `LedgerResponse`, `PendingDocument`, `GroupedPaymentLineDraft`, `GroupedPaymentRequest`.
-- [ ] Servicios: `supplier-account.service.ts` (`getLedger`, `createPaymentOrder`, `cancelPaymentOrder`) y
-      `customer-account.service.ts` (`getLedger`, `createReceipt`, `cancelReceipt`). URLs desde
-      `environment.apiUrl`, errores vía `ToastService`.
-- [ ] **`shared/components/account-ledger/`** (`app-account-ledger`, OnPush): pestañas Extracto/Pendientes,
-      filtro Desde/Hasta, "Mostrar anulados", renglón de grupo desplegable (medios + imputación),
-      totales, export **Excel** (XLSX) y **PDF** (jsPDF). Textos por input (`Compra/Pago/OP` vs
-      `Venta/Cobro/RC`). Outputs: `rangeChange`, `paySelected`, `cancelGroup`, `openDocument`.
-- [ ] **`shared/components/grouped-payment-modal/`** (`app-grouped-payment-modal`): Reactive Forms con
-      `FormArray` de líneas, agregar/quitar medio, total/diferencia en vivo, vista previa FIFO,
-      Confirmar. Medios permitidos por input: proveedores = efectivo, transferencia, cheque de cartera;
-      clientes = efectivo, transferencia, tarjeta (banco/cuotas/recargo), cheque recibido. Dropdowns con
-      `app-searchable-select` (nunca `<select>` nativo). **Confirmar deshabilitado** mientras carguen
-      cheques en cartera / pendientes (lección del 08/08). Fecha por defecto con
-      `toLocaleDateString('en-CA')`, nunca `toISOString()`.
-- [ ] Responsive en los dos componentes: escritorio · **≤ 1100 px** (celular horizontal / tablet: tabla
-      compacta, detalle bajo el comprobante, resumen del modal fijo al costado) · **≤ 760 px** (celular
-      vertical: tarjetas, modal a pantalla completa con Confirmar fijo abajo). Botones ≥ 44 px.
-- [ ] Solo variables CSS de `styles.css`, funcionando en `theme-dark` y `theme-light`.
-- [ ] `supplier-account.component`: reemplazar las 3 tablas y el formulario de pago por los dos
-      componentes. Quedan cabecera, tarjetas y nota de crédito.
-- [ ] `customer-account.component`: ídem. Quedan los modales de detalle de venta y anular venta.
-- [ ] Actualizar `supplier-account.component.spec.ts`, `customer-account.component.spec.ts`,
-      `customer-account.transfer-bank.spec.ts`.
-- [ ] `audit.component.ts`: etiquetas de los comandos nuevos.
+- [x] Modelos en `core/models/account-ledger.models.ts` (`AccountLedger`, `LedgerRow`, `LedgerMeans`,
+      `LedgerImputation`, `PendingDocument`, `LedgerQuery`, `GroupedPaymentLine`, `GroupedPaymentSubmit`, textos
+      por cuenta `SUPPLIER_LEDGER_LABELS` / `CUSTOMER_LEDGER_LABELS`) + requests de OP y RC.
+- [x] Servicios: `getLedger`, `createPaymentOrder`, `cancelPaymentOrder` / `getLedger`, `createReceipt`,
+      `cancelReceipt`. URLs desde `environment.apiUrl`.
+- [x] **`app-account-ledger`** (OnPush): Extracto / Pendientes, Desde/Hasta, "Mostrar anulados", renglón
+      desplegable con medios e imputación (Saldada / Con saldo), totales, export Excel (números como números)
+      y PDF con la marca de la empresa. Outputs: `queryChange`, `paySelected`, `cancelRow`, `printRow`,
+      `openDocument`. Formato de fechas sin pasar por `Date` (un `2026-10-02` parseado es UTC).
+- [x] **`app-grouped-payment-modal`**: `FormArray` tipado, medio nuevo precargado con lo que falta,
+      cheque de cartera entero (no se edita el monto, no se repite), tarjeta con banco/plan/recargo, cheque
+      recibido con sus datos, banco receptor de transferencia, total/diferencia/saldo a favor y vista
+      previa FIFO. **Confirmar bloqueado mientras cargan cheques o bancos** y dice qué medio falta completar.
+      Todo con `app-searchable-select`; fecha con `toLocaleDateString('en-CA')`.
+- [x] Responsive: el extracto por **ancho del contenedor** (`@container`: tabla ≥ 1000, compacta, tarjetas
+      < 640); el modal por ventana (≤ 1100 pantalla completa en dos columnas, ≤ 760 una columna con
+      Confirmar fijo abajo). Oscuro y claro, solo variables de `styles.css`.
+- [x] `supplier-account.component` y `customer-account.component` usan los dos componentes; quedan
+      cabecera, tarjetas, nota de crédito, detalle de venta, anular venta y remitos. CSS podado (601 → ~150 y
+      2219 → ~1330 líneas).
+- [x] Specs: componentes nuevos, formato, y los de las dos pantallas. `customer-account.transfer-bank.spec.ts`
+      se borró: su caso vive ahora en el spec del modal.
+- [x] `audit.component.ts`: etiquetas de los comandos nuevos.
+- [x] Comprobante PDF del pago/cobro: código OP/RC en título y archivo, tabla de medios si hay más de uno.
 
 ## Verificación
-- [ ] En este contenedor **no hay `dotnet` ni `node_modules`**: instalar .NET 10 SDK y `npm ci` antes de
-      dar nada por hecho.
-- [ ] `dotnet build eiti.Application/eiti.Application.csproj` (con dependencias) + `dotnet test` en verde.
-- [ ] `ng build --configuration development` sin errores + `npm test` de los specs tocados.
-- [ ] Prueba de punta a punta en local: OP con 3 cheques + transferencia + efectivo → extracto cuadra,
-      caja solo mueve el efectivo, cheques `Entregado`; anular → todo vuelve. Lo mismo con un recibo de cliente.
+- [x] .NET 10 SDK instalado por apt y `npm ci` en el contenedor.
+- [x] `dotnet build` con dependencias + `dotnet test`: **416/416**.
+- [x] `ng build --configuration development` sin errores + `ng test` completo: **330/330**.
+- [x] **Punta a punta contra PostgreSQL 16 real** (API local, base vacía): la migración aplica sola al
+      arrancar; recibo RC-0001 con tarjeta + cheque + efectivo → extracto cliente 300.000 / 400.000 / 75.000;
+      OP-0001 con el cheque recibido + transferencia + efectivo → extracto proveedor 500.000 / 800.000 /
+      −50.000 (a favor), caja baja **solo** los 250.000 de efectivo, cheque `Entregado`; anular un medio
+      suelto → `PartOfOrder`; anular la OP → saldo 800.000, pendientes de vuelta, cheque `EnCartera`, caja
+      restituida; pago por el endpoint viejo → OP-0002 de un medio que se anula con él; anular el recibo →
+      saldo cliente 400.000, cheque `Anulado`. Corrido dos veces seguidas, verde.
+- [x] Visual con Playwright contra `ng serve` y API simulada: escritorio oscuro/claro, celular vertical y
+      horizontal, Pendientes, modal en los tres anchos (también scrolleado al fondo), vista de clientes.
 
 ## Orden de entrega (un commit por paso, push a la rama)
 1. Dominio + migración + repos.
@@ -177,6 +184,34 @@ real) y lo que dependa de las decisiones abiertas de abajo (cheque propio, cuent
 4. `LedgerBuilder` + endpoints de extracto + tests.
 5. Front: modelos/servicios → `app-account-ledger` → `app-grouped-payment-modal` → proveedores → clientes.
 6. Verificación completa + sección "Revisión" acá abajo.
+
+## Revisión
+
+**Entregado:** pasos 1 a 6. Backend y front en `claude/cuenta-corriente-proveedores-jkakup` (sin PR).
+
+**Decisiones tomadas en el camino (a validar con el cliente):**
+- Un medio suelto de una OP/RC de varios medios **no se anula solo**: se anula el documento entero. Un pago
+  de un solo medio sí, y arrastra su OP/RC. Evita documentos a medio anular.
+- **Anular compra / venta en modo "revertir los pagos"** se rechaza si alguno de esos pagos es parte de una
+  OP/RC de varios medios: hay que anular el grupo o elegir "saldo a favor".
+
+**Lo que encontré en la revisión visual y corregí:** saldo cortado en las tarjetas del celular, fila de
+totales rota en horizontal, código y fecha pegados en "Se imputa a", Confirmar deshabilitado sin explicar
+por qué, formulario del cheque recibido apretado en escritorio, y (el más serio) en celular, con varios
+medios, el contenido del modal se salía de su fondo y dejaba ver la página de atrás.
+
+**Hallazgos previos a este trabajo (no los toqué):**
+- El front manda `transferBankId` en las transferencias de clientes, pero `CustomerPayment` **no lo guarda**:
+  el banco receptor que elige el usuario se pierde. Ya pasaba antes con el formulario viejo.
+- Si un cobro se imputó usando saldo a favor que ya existía y después se anula, el reverso puede no devolver
+  ese saldo previo. Caso borde del reverso existente, no de lo nuevo.
+- La nota de crédito de proveedores nunca tuvo grilla en su formulario (ahora sí).
+
+**Antes de pasar a `main`:**
+- [ ] Correr `tools/LedgerCheck` contra producción y revisar cada cuenta que difiera.
+- [ ] Decisiones 1 a 3 de abajo (cliente).
+- Deploy: la migración es **aditiva** (2 tablas + 2 columnas nullable) y se aplica sola al arrancar la API.
+  El front se deploya aparte con `vercel deploy --prod`.
 
 ## Decisiones abiertas (para el usuario / el cliente)
 Estado: **4 aplicada** (`--amber-text` en `styles.css` del front). **1, 2 y 3 pendientes de respuesta del
