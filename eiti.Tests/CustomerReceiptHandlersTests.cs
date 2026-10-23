@@ -343,6 +343,52 @@ public sealed class CustomerReceiptHandlersTests
         venta.CcPendingAmount.Should().Be(300_000m);
     }
 
+    // ── Saldo a favor previo ─────────────────────────────────────────────────
+    // Al registrar un cobro se imputa TODO el saldo disponible con back-link al cobro, también el que el
+    // cliente ya tenía. Anularlo tiene que dejar la cuenta como estaba: venta pendiente y saldo previo.
+
+    [Fact]
+    public async Task AnularCobro_QueImputoSaldoAFavorPrevio_DevuelveEseSaldo()
+    {
+        var venta = AddCcSale("VENT-0101", 100_000m);
+        _customer.AddCredit(50_000m); // saldo previo conviviendo con la venta pendiente
+        (await Handler().Handle(
+            new AddCustomerReceiptCommand(_customer.Id.Value, new DateTime(2026, 10, 2), null,
+                [new AddCustomerReceiptLine((int)SalePaymentMethod.Transfer, 30_000m, "Ref. 1")]),
+            CancellationToken.None)).IsSuccess.Should().BeTrue();
+        venta.CcPendingAmount.Should().Be(20_000m, "el cobro y el saldo previo se imputan juntos");
+        _customer.CreditBalance.Should().Be(0m);
+
+        var result = await CancelPaymentHandler().Handle(
+            new CancelCustomerPaymentCommand(_customer.Id.Value, _payments.Single().Id), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        venta.CcPendingAmount.Should().Be(100_000m);
+        _customer.CreditBalance.Should().Be(50_000m, "ese saldo no lo aportó el cobro anulado");
+    }
+
+    [Fact]
+    public async Task AnularRecibo_QueImputoSaldoAFavorPrevio_DevuelveEseSaldo()
+    {
+        var venta = AddCcSale("VENT-0101", 200_000m);
+        _customer.AddCredit(50_000m);
+        (await Handler().Handle(
+            new AddCustomerReceiptCommand(_customer.Id.Value, new DateTime(2026, 10, 2), null,
+                [
+                    new AddCustomerReceiptLine((int)SalePaymentMethod.Transfer, 30_000m, "Ref. 1"),
+                    new AddCustomerReceiptLine((int)SalePaymentMethod.Cash, 20_000m, null),
+                ]),
+            CancellationToken.None)).IsSuccess.Should().BeTrue();
+        venta.CcPendingAmount.Should().Be(100_000m);
+
+        var result = await CancelReceiptHandler().Handle(
+            new CancelCustomerReceiptCommand(_customer.Id.Value, _receipts.Single().Id), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        venta.CcPendingAmount.Should().Be(200_000m);
+        _customer.CreditBalance.Should().Be(50_000m);
+    }
+
     // ── Extracto ─────────────────────────────────────────────────────────────
 
     private sealed class FixedTime(DateTimeOffset now) : TimeProvider

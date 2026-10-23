@@ -421,6 +421,65 @@ public sealed class SupplierPaymentOrderHandlersTests
         compra.PendingAmount.Should().Be(100_000m);
     }
 
+    // ── Saldo a favor previo ─────────────────────────────────────────────────
+    // Al registrar un pago se imputa TODO el saldo disponible con back-link al pago, también el que el
+    // proveedor ya tenía. Anularlo tiene que dejar la cuenta como estaba: factura pendiente y saldo previo.
+
+    [Fact]
+    public async Task AnularPago_QueImputoSaldoAFavorPrevio_DevuelveEseSaldo()
+    {
+        var compra = AddPurchase("COMP-0112", 100_000m);
+        _supplier.AddCredit(50_000m); // saldo previo conviviendo con la factura pendiente
+        (await SingleHandler().Handle(
+            new AddSupplierPaymentCommand(_supplier.Id, (int)PurchasePaymentMethod.BankTransfer, 30_000m, new DateTime(2026, 10, 2), null, null, null),
+            CancellationToken.None)).IsSuccess.Should().BeTrue();
+        compra.PendingAmount.Should().Be(20_000m, "el pago y el saldo previo se imputan juntos");
+        _supplier.CreditBalance.Should().Be(0m);
+
+        var result = await CancelPaymentHandler().Handle(
+            new CancelSupplierPaymentCommand(_supplier.Id, _payments.Single().Id), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        compra.PendingAmount.Should().Be(100_000m);
+        _supplier.CreditBalance.Should().Be(50_000m, "ese saldo no lo aportó el pago anulado");
+    }
+
+    [Fact]
+    public async Task AnularOrden_QueImputoSaldoAFavorPrevio_DevuelveEseSaldo()
+    {
+        var compra = AddPurchase("COMP-0112", 200_000m);
+        _supplier.AddCredit(50_000m);
+        (await OrderHandler().Handle(
+            new AddSupplierPaymentOrderCommand(_supplier.Id, new DateTime(2026, 10, 2), null,
+                [Line(PurchasePaymentMethod.BankTransfer, 30_000m), Line(PurchasePaymentMethod.Cash, 20_000m)]),
+            CancellationToken.None)).IsSuccess.Should().BeTrue();
+        compra.PendingAmount.Should().Be(100_000m);
+
+        var result = await CancelOrderHandler().Handle(
+            new CancelSupplierPaymentOrderCommand(_supplier.Id, _orders.Single().Id), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        compra.PendingAmount.Should().Be(200_000m);
+        _supplier.CreditBalance.Should().Be(50_000m);
+    }
+
+    [Fact]
+    public async Task AnularPago_QueGeneroSaldoAFavor_SoloDescuentaLoQueGenero()
+    {
+        var compra = AddPurchase("COMP-0112", 100_000m);
+        (await SingleHandler().Handle(
+            new AddSupplierPaymentCommand(_supplier.Id, (int)PurchasePaymentMethod.BankTransfer, 130_000m, new DateTime(2026, 10, 2), null, null, null),
+            CancellationToken.None)).IsSuccess.Should().BeTrue();
+        _supplier.CreditBalance.Should().Be(30_000m);
+
+        (await CancelPaymentHandler().Handle(
+            new CancelSupplierPaymentCommand(_supplier.Id, _payments.Single().Id), CancellationToken.None))
+            .IsSuccess.Should().BeTrue();
+
+        compra.PendingAmount.Should().Be(100_000m);
+        _supplier.CreditBalance.Should().Be(0m);
+    }
+
     // ── Extracto ─────────────────────────────────────────────────────────────
 
     private sealed class FixedTime(DateTimeOffset now) : TimeProvider

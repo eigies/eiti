@@ -1,3 +1,35 @@
+# Arreglos previos a la cuenta corriente: banco de transferencias y saldo a favor al anular
+
+Rama `claude/cuenta-corriente-proveedores-jkakup` (los dos repos). Son los dos hallazgos previos de la revisión.
+
+## A. El banco receptor de una transferencia de cliente se pierde
+`CustomerPayment` no tiene dónde guardarlo: el front lo manda y el backend lo descarta. Consecuencia: el
+cierre de caja ("Transferencias por banco") solo cuenta ventas de mostrador, nunca cobros de cuenta corriente.
+- [ ] Dominio: `CustomerPayment.TransferBankId` + `SetTransferBank(bankId)` (solo transferencia).
+- [ ] EF + migración aditiva (`AddCustomerPaymentTransferBank`, columna nullable).
+- [ ] Servicio de recibos: `TransferBankId` opcional por medio; si viene, banco activo y habilitado para
+      transferencias (`TransferBankInvalid`), igual que en la venta.
+- [ ] Comandos: línea del recibo y cobro suelto (request + comando).
+- [ ] Extracto: el medio muestra el banco de la transferencia.
+- [ ] Caja: el movimiento del cobro lleva el banco (sesión actual e historial) y el desglose por banco del
+      resumen suma los cobros CC por transferencia (neto: ingreso − anulación dentro de la sesión).
+- [ ] Auditoría: el snapshot del cobro incluye el banco.
+- [ ] Front: desglose por banco y renglón del cobro en caja; detalle del medio en extracto y comprobante.
+
+## B. Anular un pago/cobro pierde el saldo a favor previo
+Al registrar un pago, el applicator imputa **todo** el saldo a favor (el previo también) con back-link al
+pago. La reversa hace `max(0, monto − imputado)`: si lo imputado supera al pago, el saldo previo desaparece.
+Las NC ya lo hacen bien (`AddCredit(imputado); ConsumeCredit(monto)`).
+- [x] `SupplierPaymentReversal` y `CustomerPaymentReversal` con la misma cuenta que las NC.
+- [x] Tests: saldo previo + pendiente → pago → anular deja saldo y pendientes como antes (proveedor y
+      cliente, pago suelto y grupo de varios medios). Fallaban los 4 (se perdían los 50.000); ahora 421/421.
+
+## Verificación
+- [ ] `dotnet test` + `ng build` + `ng test`.
+- [ ] Postgres real: migración + e2e con transferencia con banco y con saldo previo + `LedgerCheck`.
+
+---
+
 # Cuenta corriente: pago agrupado + extracto con saldo (proveedores y clientes)
 
 **Pedido del cliente:** (1) cargar en **un solo pago** varios medios (efectivo, transferencia, varios
