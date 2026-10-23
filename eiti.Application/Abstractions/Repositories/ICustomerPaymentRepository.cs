@@ -8,6 +8,9 @@ public interface ICustomerPaymentRepository
 
     Task<List<CustomerPayment>> ListByCustomerAsync(Guid companyId, Guid customerId, CancellationToken ct = default);
 
+    // Medios de un recibo (activos y anulados).
+    Task<List<CustomerPayment>> ListByReceiptAsync(Guid receiptId, Guid companyId, CancellationToken ct = default);
+
     Task AddAsync(CustomerPayment payment, CancellationToken ct = default);
 
     // Cobros de cuenta corriente activos del período, para el reporte de medios de pago.

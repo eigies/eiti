@@ -30,6 +30,11 @@ public static class SupplierPaymentLineErrors
         "Suppliers.AddPayment.ChequeNotEnCartera",
         "El cheque seleccionado no está en cartera y no puede usarse para pagar.");
 
+    // Un medio que comparte orden con otros no se revierte solo: el número de OP quedaría mintiendo.
+    public static readonly Error PartOfOrder = Error.Conflict(
+        "Suppliers.CancelPayment.PartOfOrder",
+        "El pago es parte de una orden de pago con otros medios: hay que anular la orden completa.");
+
     public static readonly Error DuplicateCheque = Error.Validation(
         "Suppliers.AddPayment.DuplicateCheque",
         "El mismo cheque está cargado dos veces en el pago.");

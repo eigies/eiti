@@ -3,6 +3,7 @@ using eiti.Application.Abstractions.Repositories;
 using eiti.Application.Abstractions.Services;
 using eiti.Application.Common;
 using eiti.Application.Features.Purchases.Common;
+using eiti.Application.Features.Suppliers.Common;
 using eiti.Domain.Branches;
 using eiti.Domain.Cash;
 using eiti.Domain.Products;
@@ -23,7 +24,7 @@ public sealed class CancelPurchaseHandler : IRequestHandler<CancelPurchaseComman
     private readonly ISupplierPaymentRepository _supplierPaymentRepository;
     private readonly ICashDrawerRepository _cashDrawerRepository;
     private readonly ICashSessionRepository _cashSessionRepository;
-    private readonly IChequeRepository _chequeRepository;
+    private readonly ISupplierPaymentOrderService _supplierPaymentOrderService;
     private readonly IUnitOfWork _unitOfWork;
 
     public CancelPurchaseHandler(
@@ -35,7 +36,7 @@ public sealed class CancelPurchaseHandler : IRequestHandler<CancelPurchaseComman
         ISupplierPaymentRepository supplierPaymentRepository,
         ICashDrawerRepository cashDrawerRepository,
         ICashSessionRepository cashSessionRepository,
-        IChequeRepository chequeRepository,
+        ISupplierPaymentOrderService supplierPaymentOrderService,
         IUnitOfWork unitOfWork)
     {
         _currentUserService = currentUserService;
@@ -46,7 +47,7 @@ public sealed class CancelPurchaseHandler : IRequestHandler<CancelPurchaseComman
         _supplierPaymentRepository = supplierPaymentRepository;
         _cashDrawerRepository = cashDrawerRepository;
         _cashSessionRepository = cashSessionRepository;
-        _chequeRepository = chequeRepository;
+        _supplierPaymentOrderService = supplierPaymentOrderService;
         _unitOfWork = unitOfWork;
     }
 
@@ -170,6 +171,11 @@ public sealed class CancelPurchaseHandler : IRequestHandler<CancelPurchaseComman
                 payments.Add(payment);
         }
 
+        // Un pago que comparte orden con otros medios no se revierte solo: hay que anular la orden.
+        var reversible = await _supplierPaymentOrderService.EnsureReversibleAloneAsync(payments, companyId, cancellationToken);
+        if (reversible.IsFailure)
+            return reversible;
+
         // Efectivo requiere caja abierta para reintegrar; otros métodos van best-effort.
         CashSession? session;
         if (payments.Any(p => p.Method == PurchasePaymentMethod.Cash))
@@ -190,8 +196,8 @@ public sealed class CancelPurchaseHandler : IRequestHandler<CancelPurchaseComman
 
         foreach (var payment in payments)
         {
-            await SupplierPaymentReversal.ReverseAsync(
-                payment, supplier, session, _purchaseRepository, _chequeRepository, companyId, userId, cancellationToken);
+            await _supplierPaymentOrderService.ReversePaymentAsync(
+                payment, supplier, session, companyId, userId, cancellationToken);
         }
 
         // Imputaciones sin pago de proveedor asociado (SupplierPaymentId null): son saldo a favor consumido

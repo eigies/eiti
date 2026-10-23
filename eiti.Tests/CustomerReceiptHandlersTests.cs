@@ -2,6 +2,8 @@ using eiti.Application.Abstractions.Data;
 using eiti.Application.Abstractions.Repositories;
 using eiti.Application.Abstractions.Services;
 using eiti.Application.Features.Customers.Commands.AddCustomerReceipt;
+using eiti.Application.Features.Customers.Commands.CancelCustomerPayment;
+using eiti.Application.Features.Customers.Commands.CancelCustomerReceipt;
 using eiti.Application.Features.Customers.Common;
 using eiti.Domain.Banks;
 using eiti.Domain.Branches;
@@ -18,7 +20,7 @@ using Moq;
 
 namespace eiti.Tests;
 
-public sealed class AddCustomerReceiptHandlerTests
+public sealed class CustomerReceiptHandlersTests
 {
     private readonly CompanyId _companyId = CompanyId.New();
     private readonly UserId _userId = UserId.New();
@@ -31,11 +33,15 @@ public sealed class AddCustomerReceiptHandlerTests
     private readonly List<Cheque> _cheques = [];
     private readonly Mock<IStockMovementRepository> _stockMovements = new();
     private readonly Mock<IUnitOfWork> _unitOfWork = new();
+    private readonly Mock<ICustomerPaymentRepository> _paymentRepository = new();
+    private readonly Mock<ICustomerReceiptRepository> _receiptRepository = new();
     private readonly BranchProductStock _stock;
     private readonly ProductId _productId = ProductId.New();
     private Bank _bank;
+    private CustomerReceiptService _service = null!; // lo arma Handler(); los handlers de anulación lo reusan.
+    private (Mock<ICurrentUserService> User, Mock<ICustomerRepository> Customers, Mock<ICashDrawerRepository> Drawers, Mock<ICashSessionRepository> Sessions) _context;
 
-    public AddCustomerReceiptHandlerTests()
+    public CustomerReceiptHandlersTests()
     {
         _branch = Branch.Create(_companyId, "Sucursal Centro", "SC", "San Martin 123");
         var drawer = CashDrawer.Create(_companyId, _branch.Id, "Caja 1");
@@ -185,30 +191,27 @@ public sealed class AddCustomerReceiptHandlerTests
             .Setup(r => r.GetOpenByDrawerAsync(It.IsAny<CashDrawerId>(), _companyId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(_session);
 
-        var payments = new Mock<ICustomerPaymentRepository>();
-        payments
+        _paymentRepository
             .Setup(r => r.AddAsync(It.IsAny<CustomerPayment>(), It.IsAny<CancellationToken>()))
             .Callback<CustomerPayment, CancellationToken>((p, _) => _payments.Add(p))
             .Returns(Task.CompletedTask);
+        _paymentRepository
+            .Setup(r => r.GetByIdAsync(It.IsAny<Guid>(), _companyId.Value, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Guid id, Guid _, CancellationToken _) => _payments.FirstOrDefault(p => p.Id == id));
+        _paymentRepository
+            .Setup(r => r.ListByReceiptAsync(It.IsAny<Guid>(), _companyId.Value, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Guid receiptId, Guid _, CancellationToken _) => _payments.Where(p => p.ReceiptId == receiptId).ToList());
 
-        var receipts = new Mock<ICustomerReceiptRepository>();
-        receipts
+        _receiptRepository
             .Setup(r => r.CountByCompanyAsync(_companyId.Value, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(existingReceipts);
-        receipts
+            .ReturnsAsync(() => existingReceipts + _receipts.Count);
+        _receiptRepository
             .Setup(r => r.AddAsync(It.IsAny<CustomerReceipt>(), It.IsAny<CancellationToken>()))
             .Callback<CustomerReceipt, CancellationToken>((r, _) => _receipts.Add(r))
             .Returns(Task.CompletedTask);
-
-        var sales = new Mock<ISaleRepository>();
-        sales
-            .Setup(r => r.ListPendingCcSalesByCustomerAsync(_companyId, _customer.Id, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(() => _pending.ToList());
-
-        var banks = new Mock<IBankRepository>();
-        banks
-            .Setup(r => r.GetByIdAsync(It.IsAny<int>(), _companyId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(() => _bank);
+        _receiptRepository
+            .Setup(r => r.GetByIdAsync(It.IsAny<Guid>(), _companyId.Value, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Guid id, Guid _, CancellationToken _) => _receipts.FirstOrDefault(r => r.Id == id));
 
         var cheques = new Mock<IChequeRepository>();
         cheques
@@ -216,22 +219,126 @@ public sealed class AddCustomerReceiptHandlerTests
             .Callback<Cheque, CancellationToken>((c, _) => _cheques.Add(c))
             .Returns(Task.CompletedTask);
 
+        var sales = new Mock<ISaleRepository>();
+        sales
+            .Setup(r => r.ListPendingCcSalesByCustomerAsync(_companyId, _customer.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => _pending.ToList());
+        sales
+            .Setup(r => r.ListByCustomerPaymentIdAsync(_companyId, It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((CompanyId _, Guid paymentId, CancellationToken _) =>
+                _pending.Where(sale => sale.CcPayments.Any(x => x.CustomerPaymentId == paymentId)).ToList());
+        cheques
+            .Setup(r => r.GetByIdAsync(It.IsAny<Guid>(), _companyId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Guid id, CompanyId _, CancellationToken _) => _cheques.FirstOrDefault(c => c.Id == id));
+
+        var banks = new Mock<IBankRepository>();
+        banks
+            .Setup(r => r.GetByIdAsync(It.IsAny<int>(), _companyId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => _bank);
+
         var stocks = new Mock<IBranchProductStockRepository>();
         stocks
             .Setup(r => r.GetOrCreateAsync(_branch.Id, _productId, _companyId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(_stock);
 
-        var service = new CustomerReceiptService(
+        _service = new CustomerReceiptService(
             customers.Object,
-            payments.Object,
-            receipts.Object,
+            _paymentRepository.Object,
+            _receiptRepository.Object,
             sales.Object,
             banks.Object,
             cheques.Object,
             stocks.Object,
             _stockMovements.Object);
+        _context = (currentUser, customers, drawers, sessions);
 
         return new AddCustomerReceiptHandler(
-            currentUser.Object, customers.Object, drawers.Object, sessions.Object, service, _unitOfWork.Object);
+            currentUser.Object, customers.Object, drawers.Object, sessions.Object, _service, _unitOfWork.Object);
+    }
+
+    // ── Anulación ────────────────────────────────────────────────────────────
+
+    private CancelCustomerReceiptHandler CancelReceiptHandler() =>
+        new(_context.User.Object, _context.Customers.Object, _receiptRepository.Object, _paymentRepository.Object,
+            _context.Drawers.Object, _context.Sessions.Object, _service, _unitOfWork.Object);
+
+    private CancelCustomerPaymentHandler CancelPaymentHandler() =>
+        new(_context.User.Object, _context.Customers.Object, _paymentRepository.Object,
+            _context.Drawers.Object, _context.Sessions.Object, _service, _unitOfWork.Object);
+
+    private async Task<CustomerReceipt> CollectWithThreeMeansAsync()
+    {
+        var result = await Handler().Handle(
+            new AddCustomerReceiptCommand(
+                _customer.Id.Value,
+                new DateTime(2026, 10, 2),
+                null,
+                [
+                    new AddCustomerReceiptLine((int)SalePaymentMethod.Card, 200_000m, null, CardBankId: _bank.Id, CardCuotas: 3),
+                    new AddCustomerReceiptLine((int)SalePaymentMethod.Check, 100_000m, null, Cheque: new CustomerPaymentChequeInput(
+                        _bank.Id, "00045120", "Ferretería Sur", "30712345678", 100_000m,
+                        new DateTime(2026, 10, 1), new DateTime(2026, 11, 10), null)),
+                    new AddCustomerReceiptLine((int)SalePaymentMethod.Cash, 25_000m, null),
+                ]),
+            CancellationToken.None);
+        result.IsSuccess.Should().BeTrue();
+        return _receipts.Single();
+    }
+
+    [Fact]
+    public async Task AnularRecibo_RevierteTodosLosMedios_VentasStockChequeYCaja()
+    {
+        var vieja = AddCcSale("VENT-0101", 300_000m, withStock: true);
+        var nueva = AddCcSale("VENT-0102", 100_000m);
+        var receipt = await CollectWithThreeMeansAsync();
+        _stock.ReservedQuantity.Should().Be(0);
+
+        var result = await CancelReceiptHandler().Handle(
+            new CancelCustomerReceiptCommand(_customer.Id.Value, receipt.Id), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        receipt.Status.Should().Be(SaleCcPaymentStatus.Cancelled);
+        _payments.Should().OnlyContain(p => p.Status == SaleCcPaymentStatus.Cancelled);
+        vieja.CcPendingAmount.Should().Be(300_000m);
+        nueva.CcPendingAmount.Should().Be(100_000m);
+        _stock.ReservedQuantity.Should().Be(1, "la venta deja de estar paga y su stock vuelve a reservado");
+        _stock.OnHandQuantity.Should().Be(5);
+        _cheques.Single().Estado.Should().Be(ChequeStatus.Anulado);
+        _session.ExpectedClosingAmount.Should().Be(0m);
+        _customer.CreditBalance.Should().Be(0m);
+    }
+
+    [Fact]
+    public async Task AnularUnCobroSuelto_DeUnReciboConVariosMedios_SeRechaza()
+    {
+        AddCcSale("VENT-0101", 300_000m, withStock: true);
+        var receipt = await CollectWithThreeMeansAsync();
+        var cash = _payments.Single(p => p.Method == SalePaymentMethod.Cash);
+
+        var result = await CancelPaymentHandler().Handle(
+            new CancelCustomerPaymentCommand(_customer.Id.Value, cash.Id), CancellationToken.None);
+
+        result.Error.Should().Be(CancelCustomerPaymentErrors.PartOfReceipt);
+        cash.Status.Should().Be(SaleCcPaymentStatus.Active);
+        receipt.Status.Should().Be(SaleCcPaymentStatus.Active);
+    }
+
+    [Fact]
+    public async Task AnularCobroDeUnSoloMedio_AnulaTambienSuRecibo()
+    {
+        var venta = AddCcSale("VENT-0101", 300_000m);
+        (await Handler().Handle(
+            new AddCustomerReceiptCommand(_customer.Id.Value, new DateTime(2026, 10, 2), null,
+                [new AddCustomerReceiptLine((int)SalePaymentMethod.Transfer, 50_000m, "Ref. 1")]),
+            CancellationToken.None)).IsSuccess.Should().BeTrue();
+        var payment = _payments.Single();
+
+        var result = await CancelPaymentHandler().Handle(
+            new CancelCustomerPaymentCommand(_customer.Id.Value, payment.Id), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        payment.Status.Should().Be(SaleCcPaymentStatus.Cancelled);
+        _receipts.Single().Status.Should().Be(SaleCcPaymentStatus.Cancelled);
+        venta.CcPendingAmount.Should().Be(300_000m);
     }
 }

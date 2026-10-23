@@ -28,7 +28,7 @@ public sealed class CancelSaleHandler : IRequestHandler<CancelSaleCommand, Resul
     private readonly ISaleTransportAssignmentRepository _saleTransportAssignmentRepository;
     private readonly ICustomerRepository _customerRepository;
     private readonly ICustomerPaymentRepository _customerPaymentRepository;
-    private readonly IChequeRepository _chequeRepository;
+    private readonly ICustomerReceiptService _customerReceiptService;
     private readonly ISaleInvoicingService _saleInvoicingService;
     private readonly IUnitOfWork _unitOfWork;
 
@@ -42,7 +42,7 @@ public sealed class CancelSaleHandler : IRequestHandler<CancelSaleCommand, Resul
         ISaleTransportAssignmentRepository saleTransportAssignmentRepository,
         ICustomerRepository customerRepository,
         ICustomerPaymentRepository customerPaymentRepository,
-        IChequeRepository chequeRepository,
+        ICustomerReceiptService customerReceiptService,
         ISaleInvoicingService saleInvoicingService,
         IUnitOfWork unitOfWork)
     {
@@ -55,7 +55,7 @@ public sealed class CancelSaleHandler : IRequestHandler<CancelSaleCommand, Resul
         _saleTransportAssignmentRepository = saleTransportAssignmentRepository;
         _customerRepository = customerRepository;
         _customerPaymentRepository = customerPaymentRepository;
-        _chequeRepository = chequeRepository;
+        _customerReceiptService = customerReceiptService;
         _saleInvoicingService = saleInvoicingService;
         _unitOfWork = unitOfWork;
     }
@@ -354,12 +354,21 @@ public sealed class CancelSaleHandler : IRequestHandler<CancelSaleCommand, Resul
             .Distinct()
             .ToList();
 
+        var payments = new List<CustomerPayment>();
         foreach (var paymentId in paymentIds)
         {
             var payment = await _customerPaymentRepository.GetByIdAsync(paymentId, companyId.Value, cancellationToken);
-            if (payment is null || payment.Status == SaleCcPaymentStatus.Cancelled)
-                continue;
+            if (payment is not null && payment.Status != SaleCcPaymentStatus.Cancelled)
+                payments.Add(payment);
+        }
 
+        // Un cobro que comparte recibo con otros medios no se revierte solo: hay que anular el recibo.
+        var reversible = await _customerReceiptService.EnsureReversibleAloneAsync(payments, companyId, cancellationToken);
+        if (reversible.IsFailure)
+            return reversible;
+
+        foreach (var payment in payments)
+        {
             var customer = await _customerRepository.GetByIdAsync(new CustomerId(payment.CustomerId), companyId, cancellationToken);
             if (customer is null)
                 return Result.Failure(CancelSaleErrors.CustomerNotFound);
@@ -379,18 +388,8 @@ public sealed class CancelSaleHandler : IRequestHandler<CancelSaleCommand, Resul
                     _currentUserService, _cashDrawerRepository, _cashSessionRepository, userId, companyId, cancellationToken);
             }
 
-            await CustomerPaymentReversal.ReverseAsync(
-                payment,
-                customer,
-                session,
-                _saleRepository,
-                _branchProductStockRepository,
-                _stockMovementRepository,
-                _customerRepository,
-                _chequeRepository,
-                companyId,
-                userId,
-                cancellationToken);
+            await _customerReceiptService.ReversePaymentAsync(
+                payment, customer, session, companyId, userId, cancellationToken);
         }
 
         return Result.Success();

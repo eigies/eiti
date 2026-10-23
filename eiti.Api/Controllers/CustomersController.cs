@@ -5,6 +5,7 @@ using eiti.Application.Features.Customers.Commands.ApplyCustomerCredit;
 using eiti.Application.Features.Customers.Commands.CreateCustomerCreditNote;
 using eiti.Application.Features.Customers.Commands.CancelCustomerCreditNote;
 using eiti.Application.Features.Customers.Commands.CancelCustomerPayment;
+using eiti.Application.Features.Customers.Commands.CancelCustomerReceipt;
 using eiti.Application.Features.Customers.Commands.CreateCustomer;
 using eiti.Application.Features.Customers.Commands.DeleteCustomer;
 using eiti.Application.Features.Customers.Commands.UpdateCustomer;
@@ -147,6 +148,17 @@ public sealed class CustomersController : ControllerBase
                 request.Lines?.Select(l => new AddCustomerReceiptLine(
                     l.Method, l.Amount, l.Reference, l.CardBankId, l.CardCuotas, l.Cheque)).ToList() ?? []),
             cancellationToken);
+        return result.ToActionResult();
+    }
+
+    // Anula el recibo entero (todos sus medios).
+    [HttpDelete("{id:guid}/receipts/{receiptId:guid}")]
+    public async Task<IActionResult> CancelCustomerReceipt(
+        Guid id,
+        Guid receiptId,
+        CancellationToken cancellationToken)
+    {
+        var result = await _sender.Send(new CancelCustomerReceiptCommand(id, receiptId), cancellationToken);
         return result.ToActionResult();
     }
 

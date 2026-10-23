@@ -70,13 +70,21 @@ Por qué así y no "un pago con líneas hijas":
       persistido; validadores. **398/398.**
 
 ### Anular
-- [ ] `CancelSupplierPaymentOrder`: revierte **cada línea** con `SupplierPaymentReversal` (cheques
-      vuelven a cartera, caja se netea, imputaciones se cancelan) y marca la OP anulada. Una sola transacción.
-- [ ] `CancelCustomerReceipt`: ídem con la lógica de `CancelCustomerPayment` (extraer a
-      `CustomerPaymentReversal` para no duplicarla).
-- [ ] `CancelSupplierPayment` / `CancelCustomerPayment` sobre una línea que **pertenece a un grupo** →
-      `Failure(PartOfGroup)`: se anula el grupo entero, no una línea suelta (si no, el número de OP queda
-      mintiendo). Los pagos viejos sin grupo se siguen anulando como hoy.
+- [x] `CancelSupplierPaymentOrder` → `DELETE suppliers/{id}/payment-orders/{orderId}` (permiso
+      `PurchasesCancel`): revierte **cada medio** con `SupplierPaymentReversal` (cheques a cartera, efectivo
+      a caja, compras a pendiente, saldo a favor revertido) y marca la OP anulada. Una sola transacción.
+- [x] `CancelCustomerReceipt` → `DELETE customers/{id}/receipts/{receiptId}` (permiso `SalesPay`, igual que
+      anular cobro): ídem con `CustomerPaymentReversal` (ventas a pendiente y stock a reservado, cheque anulado).
+- [x] Pago/cobro suelto que **comparte grupo** con otros medios → `PartOfOrder` / `PartOfReceipt` (se anula
+      el grupo entero). Si era el **único medio**, se revierte y su OP/RC queda anulada con él.
+- [x] La misma regla vale para **anular compra / anular venta en modo "revertir los pagos"**: si un pago
+      que financió el comprobante es parte de un grupo de varios medios, se rechaza (anular el grupo o
+      elegir saldo a favor). Las dos reversas pasan por los servicios: `CancelSupplierPayment` 8 → 7 deps,
+      `CancelCustomerPayment` 10 → 7.
+- [x] Auditoría: snapshot antes/después del recibo al anularlo.
+- [x] Tests: OP de 4 medios anulada (caja, cheques, facturas, saldo a favor), ya anulada / de otro
+      proveedor, medio suelto de un grupo rechazado, pago de 1 medio anula su OP; ídem recibo (stock vuelve a
+      reservado, cheque anulado). **405/405.**
 
 ### Extracto
 - [ ] `Application/Common/Accounts/LedgerBuilder.cs`: función pura que recibe movimientos

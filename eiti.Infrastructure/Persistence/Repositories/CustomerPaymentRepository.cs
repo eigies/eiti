@@ -29,6 +29,14 @@ public sealed class CustomerPaymentRepository : ICustomerPaymentRepository
             .ToListAsync(ct);
     }
 
+    public async Task<List<CustomerPayment>> ListByReceiptAsync(Guid receiptId, Guid companyId, CancellationToken ct = default)
+    {
+        return await _db.CustomerPayments
+            .Where(p => p.CompanyId == companyId && p.ReceiptId == receiptId)
+            .OrderBy(p => p.CreatedAt)
+            .ToListAsync(ct);
+    }
+
     public async Task AddAsync(CustomerPayment payment, CancellationToken ct = default)
     {
         await _db.CustomerPayments.AddAsync(payment, ct);

@@ -42,6 +42,37 @@ public interface ISupplierPaymentOrderService
         CompanyId companyId,
         UserId userId,
         CancellationToken cancellationToken);
+
+    /// <summary>Anula la orden entera: revierte cada medio activo y la marca anulada.</summary>
+    Task CancelOrderAsync(
+        SupplierPaymentOrder order,
+        IReadOnlyList<SupplierPayment> payments,
+        Supplier supplier,
+        CashSession? session,
+        CompanyId companyId,
+        UserId userId,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Para revertir pagos sueltos (anular pago, anular compra revirtiendo el pago): falla si alguno comparte
+    /// orden con otros medios, porque entonces lo que se anula es la orden completa.
+    /// </summary>
+    Task<Result> EnsureReversibleAloneAsync(
+        IReadOnlyCollection<SupplierPayment> payments,
+        CompanyId companyId,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Revierte un pago suelto (imputaciones, saldo a favor, caja, cheque). Si era el único medio de su
+    /// orden, la orden queda anulada con él. Chequear antes con <see cref="EnsureReversibleAloneAsync"/>.
+    /// </summary>
+    Task ReversePaymentAsync(
+        SupplierPayment payment,
+        Supplier supplier,
+        CashSession? session,
+        CompanyId companyId,
+        UserId userId,
+        CancellationToken cancellationToken);
 }
 
 public sealed class SupplierPaymentOrderService : ISupplierPaymentOrderService
@@ -171,6 +202,60 @@ public sealed class SupplierPaymentOrderService : ISupplierPaymentOrderService
             Math.Max(0m, creditBefore + order.TotalAmount - creditAfter),
             Math.Max(0m, creditAfter - creditBefore),
             creditAfter));
+    }
+
+    public async Task CancelOrderAsync(
+        SupplierPaymentOrder order,
+        IReadOnlyList<SupplierPayment> payments,
+        Supplier supplier,
+        CashSession? session,
+        CompanyId companyId,
+        UserId userId,
+        CancellationToken cancellationToken)
+    {
+        foreach (var payment in payments.Where(p => p.Status == PurchasePaymentStatus.Active))
+        {
+            await SupplierPaymentReversal.ReverseAsync(
+                payment, supplier, session, _purchaseRepository, _chequeRepository, companyId, userId, cancellationToken);
+        }
+
+        order.Cancel(userId.Value);
+        _supplierRepository.Update(supplier);
+    }
+
+    public async Task<Result> EnsureReversibleAloneAsync(
+        IReadOnlyCollection<SupplierPayment> payments,
+        CompanyId companyId,
+        CancellationToken cancellationToken)
+    {
+        foreach (var payment in payments.Where(p => p.PaymentOrderId.HasValue))
+        {
+            var siblings = await _supplierPaymentRepository.ListByOrderAsync(
+                payment.PaymentOrderId!.Value, companyId.Value, cancellationToken);
+            if (siblings.Any(s => s.Id != payment.Id))
+                return Result.Failure(SupplierPaymentLineErrors.PartOfOrder);
+        }
+
+        return Result.Success();
+    }
+
+    public async Task ReversePaymentAsync(
+        SupplierPayment payment,
+        Supplier supplier,
+        CashSession? session,
+        CompanyId companyId,
+        UserId userId,
+        CancellationToken cancellationToken)
+    {
+        await SupplierPaymentReversal.ReverseAsync(
+            payment, supplier, session, _purchaseRepository, _chequeRepository, companyId, userId, cancellationToken);
+
+        if (payment.PaymentOrderId is not { } orderId)
+            return;
+
+        var order = await _supplierPaymentOrderRepository.GetByIdAsync(orderId, companyId.Value, cancellationToken);
+        if (order is { Status: PurchasePaymentStatus.Active })
+            order.Cancel(userId.Value);
     }
 
     // Dos medios pueden imputar la misma factura: al usuario se le muestra una fila por factura.

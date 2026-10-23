@@ -22,6 +22,11 @@ public static class CustomerPaymentLineErrors
         "Customers.AddPayment.ChequeRequired",
         "Para cobrar con cheque debe completar los datos del cheque.");
 
+    // Un medio que comparte recibo con otros no se revierte solo: el número de RC quedaría mintiendo.
+    public static readonly Error PartOfReceipt = Error.Conflict(
+        "Customers.CancelPayment.PartOfReceipt",
+        "El cobro es parte de un recibo con otros medios: hay que anular el recibo completo.");
+
     public static readonly Error CardBankInvalid = Error.Validation(
         "Customers.AddPayment.CardBankInvalid",
         "El banco seleccionado no esta habilitado para tarjetas.");

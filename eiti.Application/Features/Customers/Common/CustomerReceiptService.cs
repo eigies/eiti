@@ -58,6 +58,37 @@ public interface ICustomerReceiptService
         CompanyId companyId,
         UserId userId,
         CancellationToken cancellationToken);
+
+    /// <summary>Anula el recibo entero: revierte cada medio activo y lo marca anulado.</summary>
+    Task CancelReceiptAsync(
+        CustomerReceipt receipt,
+        IReadOnlyList<CustomerPayment> payments,
+        Customer customer,
+        CashSession? session,
+        CompanyId companyId,
+        UserId userId,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Para revertir cobros sueltos (anular cobro, anular venta revirtiendo los cobros): falla si alguno
+    /// comparte recibo con otros medios, porque entonces lo que se anula es el recibo completo.
+    /// </summary>
+    Task<Result> EnsureReversibleAloneAsync(
+        IReadOnlyCollection<CustomerPayment> payments,
+        CompanyId companyId,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Revierte un cobro suelto (imputaciones, stock, saldo a favor, caja, cheque). Si era el único medio de
+    /// su recibo, el recibo queda anulado con él. Chequear antes con <see cref="EnsureReversibleAloneAsync"/>.
+    /// </summary>
+    Task ReversePaymentAsync(
+        CustomerPayment payment,
+        Customer customer,
+        CashSession? session,
+        CompanyId companyId,
+        UserId userId,
+        CancellationToken cancellationToken);
 }
 
 public sealed class CustomerReceiptService : ICustomerReceiptService
@@ -249,6 +280,75 @@ public sealed class CustomerReceiptService : ICustomerReceiptService
             Math.Max(0m, creditAfter - creditBefore),
             creditAfter));
     }
+
+    public async Task CancelReceiptAsync(
+        CustomerReceipt receipt,
+        IReadOnlyList<CustomerPayment> payments,
+        Customer customer,
+        CashSession? session,
+        CompanyId companyId,
+        UserId userId,
+        CancellationToken cancellationToken)
+    {
+        foreach (var payment in payments.Where(p => p.Status == SaleCcPaymentStatus.Active))
+            await ReverseAsync(payment, customer, session, companyId, userId, cancellationToken);
+
+        receipt.Cancel(userId.Value);
+    }
+
+    public async Task<Result> EnsureReversibleAloneAsync(
+        IReadOnlyCollection<CustomerPayment> payments,
+        CompanyId companyId,
+        CancellationToken cancellationToken)
+    {
+        foreach (var payment in payments.Where(p => p.ReceiptId.HasValue))
+        {
+            var siblings = await _customerPaymentRepository.ListByReceiptAsync(
+                payment.ReceiptId!.Value, companyId.Value, cancellationToken);
+            if (siblings.Any(s => s.Id != payment.Id))
+                return Result.Failure(CustomerPaymentLineErrors.PartOfReceipt);
+        }
+
+        return Result.Success();
+    }
+
+    public async Task ReversePaymentAsync(
+        CustomerPayment payment,
+        Customer customer,
+        CashSession? session,
+        CompanyId companyId,
+        UserId userId,
+        CancellationToken cancellationToken)
+    {
+        await ReverseAsync(payment, customer, session, companyId, userId, cancellationToken);
+
+        if (payment.ReceiptId is not { } receiptId)
+            return;
+
+        var receipt = await _customerReceiptRepository.GetByIdAsync(receiptId, companyId.Value, cancellationToken);
+        if (receipt is { Status: SaleCcPaymentStatus.Active })
+            receipt.Cancel(userId.Value);
+    }
+
+    private Task ReverseAsync(
+        CustomerPayment payment,
+        Customer customer,
+        CashSession? session,
+        CompanyId companyId,
+        UserId userId,
+        CancellationToken cancellationToken) =>
+        CustomerPaymentReversal.ReverseAsync(
+            payment,
+            customer,
+            session,
+            _saleRepository,
+            _branchProductStockRepository,
+            _stockMovementRepository,
+            _customerRepository,
+            _chequeRepository,
+            companyId,
+            userId,
+            cancellationToken);
 
     // Dos medios pueden imputar la misma venta: al usuario se le muestra una fila por venta.
     private static IReadOnlyList<CustomerPaymentImputacion> MergeBySale(IEnumerable<CustomerPaymentImputacion> imputaciones) =>

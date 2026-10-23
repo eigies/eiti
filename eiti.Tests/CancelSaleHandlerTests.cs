@@ -1,6 +1,7 @@
 using eiti.Application.Abstractions.Data;
 using eiti.Application.Abstractions.Repositories;
 using eiti.Application.Abstractions.Services;
+using eiti.Application.Features.Customers.Common;
 using eiti.Application.Features.Sales.Commands.CancelSale;
 using eiti.Domain.Branches;
 using eiti.Domain.Cash;
@@ -53,7 +54,6 @@ public sealed class CancelSaleHandlerTests
         var saleTransportAssignmentRepository = new Mock<ISaleTransportAssignmentRepository>();
         var customerRepository = new Mock<ICustomerRepository>();
         var customerPaymentRepository = new Mock<ICustomerPaymentRepository>();
-        var chequeRepository = new Mock<IChequeRepository>();
         var unitOfWork = new Mock<IUnitOfWork>();
 
         currentUserService.SetupGet(x => x.IsAuthenticated).Returns(true);
@@ -82,7 +82,7 @@ public sealed class CancelSaleHandlerTests
             saleTransportAssignmentRepository.Object,
             customerRepository.Object,
             customerPaymentRepository.Object,
-            chequeRepository.Object,
+            new Mock<ICustomerReceiptService>().Object,
             new Mock<ISaleInvoicingService>().Object,
             unitOfWork.Object);
 

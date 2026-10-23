@@ -82,6 +82,11 @@ public sealed class AuditSnapshotService : IAuditSnapshotService
         "AddCustomerReceiptCommand"
     ];
 
+    private static readonly HashSet<string> CustomerReceiptActions =
+    [
+        "CancelCustomerReceiptCommand"
+    ];
+
     private static readonly HashSet<string> SupplierCreateActions =
     [
         "CreateSupplierCommand"
@@ -121,6 +126,9 @@ public sealed class AuditSnapshotService : IAuditSnapshotService
 
         if (CustomerPaymentActions.Contains(actionType) && TryGetGuid(request, "PaymentId", out var cancelPaymentId))
             return Serialize(await BuildCustomerPaymentSnapshotAsync(cancelPaymentId, companyId, cancellationToken));
+
+        if (CustomerReceiptActions.Contains(actionType) && TryGetGuid(request, "ReceiptId", out var cancelReceiptId))
+            return Serialize(await BuildCustomerReceiptSnapshotAsync(cancelReceiptId, companyId, cancellationToken));
 
         if (SupplierActions.Contains(actionType) && TryGetGuid(request, "Id", out var supplierId))
             return Serialize(await BuildSupplierSnapshotAsync(supplierId, companyId, cancellationToken));
@@ -177,7 +185,8 @@ public sealed class AuditSnapshotService : IAuditSnapshotService
             return Serialize(await BuildCustomerPaymentSnapshotAsync(customerPaymentId, companyId, cancellationToken));
         }
 
-        if (CustomerReceiptCreateActions.Contains(actionType) && TryGetResponseGuid(response, "ReceiptId", out var receiptId))
+        if ((CustomerReceiptCreateActions.Contains(actionType) && TryGetResponseGuid(response, "ReceiptId", out var receiptId))
+            || (CustomerReceiptActions.Contains(actionType) && TryGetGuid(request, "ReceiptId", out receiptId)))
         {
             return Serialize(await BuildCustomerReceiptSnapshotAsync(receiptId, companyId, cancellationToken));
         }

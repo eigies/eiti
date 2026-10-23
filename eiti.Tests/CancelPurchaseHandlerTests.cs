@@ -1,6 +1,7 @@
 using eiti.Application.Abstractions.Data;
 using eiti.Application.Abstractions.Repositories;
 using eiti.Application.Abstractions.Services;
+using eiti.Application.Features.Suppliers.Common;
 using eiti.Application.Features.Purchases.Commands.CancelPurchase;
 using eiti.Domain.Branches;
 using eiti.Domain.Companies;
@@ -96,7 +97,12 @@ public sealed class CancelPurchaseHandlerTests
             supplierPaymentRepository.Object,
             new Mock<ICashDrawerRepository>().Object,
             new Mock<ICashSessionRepository>().Object,
-            new Mock<IChequeRepository>().Object,
+            new SupplierPaymentOrderService(
+                supplierRepository.Object,
+                supplierPaymentRepository.Object,
+                new Mock<ISupplierPaymentOrderRepository>().Object,
+                purchaseRepository.Object,
+                new Mock<IChequeRepository>().Object),
             new Mock<IUnitOfWork>().Object);
 
         // Revertir el pago (ReversePayments): la porción $350 se deshace vía el pago real; la porción $150
@@ -144,7 +150,7 @@ public sealed class CancelPurchaseHandlerTests
             new Mock<ISupplierPaymentRepository>().Object,
             new Mock<ICashDrawerRepository>().Object,
             new Mock<ICashSessionRepository>().Object,
-            new Mock<IChequeRepository>().Object,
+            new Mock<ISupplierPaymentOrderService>().Object,
             new Mock<IUnitOfWork>().Object);
 
         var result = await handler.Handle(new CancelPurchaseCommand(purchase.Id), CancellationToken.None);
