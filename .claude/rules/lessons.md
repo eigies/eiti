@@ -1,5 +1,20 @@
 # Lessons Learned
 
+## Saqué la rama de la rama equivocada y arreglé dos veces lo que ya estaba en main - 2026-10-23
+
+**Síntoma:** el usuario preguntó "¿revisaste la facturación?" y después "¿de qué rama partiste?". La rama de cuenta corriente del backend había salido de `feature/facturacion-electronica` (28/09), que era donde estaba parado el contenedor al arrancar, no de `develop`. `develop`/`main` le llevaban 28 commits: toda la facturación electrónica en producción y `772b49b`, que ya guardaba el banco de las transferencias de clientes. Yo lo "arreglé" otra vez con una migración propia para la misma columna: mergeada así, la API habría fallado al arrancar con "la columna ya existe".
+
+**Causa raíz:** creé la rama con "Created from HEAD" sin mirar qué era HEAD. CLAUDE.md dice que el trabajo sale de `develop`.
+
+**Cómo se resolvió:** merge de `develop` en la rama (sin reescribir lo pusheado), quedándome con la migración y el método de `main`, y una migración de prueba sobre el resultado para confirmar que salía vacía (modelo y snapshot coinciden). Después, prueba con el camino real de producción: base migrada y cargada con la API de `main`, y mi rama levantada encima.
+
+**Esa prueba encontró un bug en `main`:** `772b49b` agregó `TransferBankId` al comando, al handler, al dominio y a la migración, pero **no al request de la API** (`AddCustomerPaymentRequest` y su mapeo en `CustomersController`). El JSON lo trae y el controller lo descarta: en producción la columna existe y queda siempre vacía. Sus tests llamaban al handler directo, así que pasaban.
+
+**Patrón a recordar:**
+- Antes de crear una rama: `git fetch` y `git log --oneline HEAD..origin/develop`. Si sale algo, la base está vieja: salir de `origin/develop`, nunca de "lo que esté en HEAD".
+- Un campo nuevo en un comando no está terminado hasta que llega por HTTP: request del controller + mapeo + un test o e2e que lo mande por la API. Un test de handler no prueba el endpoint.
+- Antes de mergear migraciones, mirar las que trae la rama destino: dos migraciones sobre la misma columna no chocan en el build, chocan en el arranque de producción.
+
 ## Anular un pago se comía el saldo a favor previo: el arreglo ya existía en las NC - 2026-10-23
 
 **Síntoma:** proveedor con factura de 100.000 pendiente y 50.000 de saldo a favor (conviven después de anular otro pago). Paga 30.000 → la factura queda en 20.000 y el saldo en 0. Anula ese pago → la factura vuelve a 100.000 pero el saldo queda en **0**: desaparecieron 50.000. Igual en clientes.

@@ -32,6 +32,20 @@ Las NC ya lo hacen bien (`AddCredit(imputado); ConsumeCredit(monto)`).
       saldo conviviendo) → pago de 30.000 → anular: proveedor y cliente vuelven a 100.000 pendiente y
       50.000 a favor, y el extracto cuadra. `LedgerCheck`: 7/7 cuentas sin diferencia.
 
+## Merge de develop y facturación (pedido "¿revisaste la facturación?")
+- [x] La rama del backend había salido de `feature/facturacion-electronica` (28/09), no de `develop`.
+      Merge de `develop` (28 commits, hasta el 19/10): quedan la migración y el `SetTransferBank` de
+      `main` (`772b49b`); se borró la migración duplicada de esta rama. Migración de prueba vacía. 487/487.
+- [x] Anular venta CC facturada: el bloqueo por recibo de varios medios corre antes de la NC electrónica
+      (que se emite al final), así que un rechazo no deja una NC emitida en ARCA.
+- [x] Extracto del cliente: cada venta facturada lleva su factura con CAE como comprobante ("Fact. B
+      00003-00001045") en el extracto, Pendientes e "Imputado a". Rechazada o en trámite: sin comprobante.
+- [x] Camino de producción probado: base migrada y cargada con la API de `main`, mi rama encima (aplica solo
+      `AddPaymentOrdersAndReceipts`). Datos viejos se ven bien en extractos; e2e y `LedgerCheck` en verde.
+- **Bug de `main` encontrado:** `772b49b` no agregó `TransferBankId` al request de la API
+  (`AddCustomerPaymentRequest`): en producción el banco de los cobros por transferencia se sigue
+  descartando. Esta rama lo mapea; los cobros cargados en producción hasta el deploy quedan sin banco.
+
 ## Revisión
 - El test del desglose de caja agarró un error mío antes del commit: `GetValueOrDefault` sobre un
   diccionario de `int` devuelve **0**, no null, así que los cobros que no eran transferencia salían con
