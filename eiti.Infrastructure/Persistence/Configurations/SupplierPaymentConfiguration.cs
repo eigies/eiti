@@ -20,6 +20,7 @@ public sealed class SupplierPaymentConfiguration : IEntityTypeConfiguration<Supp
         builder.Property(p => p.Amount).HasColumnType("decimal(18,2)").IsRequired();
         builder.Property(p => p.Status).HasConversion<int>().IsRequired();
         builder.Property(p => p.ChequeId).IsRequired(false);
+        builder.Property(p => p.PaymentOrderId).IsRequired(false);
         builder.Property(p => p.Reference).HasMaxLength(120).IsRequired(false);
         builder.Property(p => p.Notes).HasMaxLength(500).IsRequired(false);
         builder.Property(p => p.Date).IsRequired();
@@ -28,6 +29,12 @@ public sealed class SupplierPaymentConfiguration : IEntityTypeConfiguration<Supp
 
         builder.HasIndex(p => new { p.CompanyId, p.SupplierId });
         builder.HasIndex(p => p.Status);
+        builder.HasIndex(p => p.PaymentOrderId);
+
+        builder.HasOne<SupplierPaymentOrder>()
+            .WithMany()
+            .HasForeignKey(p => p.PaymentOrderId)
+            .OnDelete(DeleteBehavior.Restrict);
 
         builder.HasOne<Supplier>()
             .WithMany()

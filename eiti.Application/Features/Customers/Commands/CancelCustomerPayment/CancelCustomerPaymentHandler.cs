@@ -2,50 +2,41 @@ using eiti.Application.Abstractions.Data;
 using eiti.Application.Abstractions.Repositories;
 using eiti.Application.Abstractions.Services;
 using eiti.Application.Common;
-using eiti.Application.Common.Authorization;
+using eiti.Application.Features.Customers.Common;
 using eiti.Domain.Cash;
-using eiti.Domain.Cheques;
 using eiti.Domain.Customers;
 using eiti.Domain.Sales;
-using eiti.Domain.Stock;
 using MediatR;
 
 namespace eiti.Application.Features.Customers.Commands.CancelCustomerPayment;
 
+// Anula un cobro suelto. Si el cobro comparte recibo con otros medios se rechaza: se anula el recibo entero.
+// Si era el único medio de su recibo, el recibo queda anulado con él.
 public sealed class CancelCustomerPaymentHandler : IRequestHandler<CancelCustomerPaymentCommand, Result>
 {
     private readonly ICurrentUserService _currentUserService;
     private readonly ICustomerRepository _customerRepository;
     private readonly ICustomerPaymentRepository _customerPaymentRepository;
-    private readonly ISaleRepository _saleRepository;
-    private readonly IBranchProductStockRepository _branchProductStockRepository;
-    private readonly IStockMovementRepository _stockMovementRepository;
     private readonly ICashDrawerRepository _cashDrawerRepository;
     private readonly ICashSessionRepository _cashSessionRepository;
-    private readonly IChequeRepository _chequeRepository;
+    private readonly ICustomerReceiptService _customerReceiptService;
     private readonly IUnitOfWork _unitOfWork;
 
     public CancelCustomerPaymentHandler(
         ICurrentUserService currentUserService,
         ICustomerRepository customerRepository,
         ICustomerPaymentRepository customerPaymentRepository,
-        ISaleRepository saleRepository,
-        IBranchProductStockRepository branchProductStockRepository,
-        IStockMovementRepository stockMovementRepository,
         ICashDrawerRepository cashDrawerRepository,
         ICashSessionRepository cashSessionRepository,
-        IChequeRepository chequeRepository,
+        ICustomerReceiptService customerReceiptService,
         IUnitOfWork unitOfWork)
     {
         _currentUserService = currentUserService;
         _customerRepository = customerRepository;
         _customerPaymentRepository = customerPaymentRepository;
-        _saleRepository = saleRepository;
-        _branchProductStockRepository = branchProductStockRepository;
-        _stockMovementRepository = stockMovementRepository;
         _cashDrawerRepository = cashDrawerRepository;
         _cashSessionRepository = cashSessionRepository;
-        _chequeRepository = chequeRepository;
+        _customerReceiptService = customerReceiptService;
         _unitOfWork = unitOfWork;
     }
 
@@ -69,6 +60,10 @@ public sealed class CancelCustomerPaymentHandler : IRequestHandler<CancelCustome
         if (customer is null)
             return Result.Failure(CancelCustomerPaymentErrors.PaymentNotFound);
 
+        var reversible = await _customerReceiptService.EnsureReversibleAloneAsync([payment], companyId, cancellationToken);
+        if (reversible.IsFailure)
+            return reversible;
+
         // Para efectivo hay que reintegrar a la caja; otros métodos no movieron efectivo.
         CashSession? session = null;
         if (payment.Method == SalePaymentMethod.Cash)
@@ -90,18 +85,8 @@ public sealed class CancelCustomerPaymentHandler : IRequestHandler<CancelCustome
 
         // Reversa completa del cobro (des-imputa ventas, revierte crédito, caja y cheque). Lógica compartida
         // con "anular venta (anular pagos)".
-        await CustomerPaymentReversal.ReverseAsync(
-            payment,
-            customer,
-            session,
-            _saleRepository,
-            _branchProductStockRepository,
-            _stockMovementRepository,
-            _customerRepository,
-            _chequeRepository,
-            companyId,
-            userId,
-            cancellationToken);
+        await _customerReceiptService.ReversePaymentAsync(
+            payment, customer, session, companyId, userId, cancellationToken);
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 

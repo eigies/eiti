@@ -76,6 +76,17 @@ public sealed class AuditSnapshotService : IAuditSnapshotService
         "CancelCustomerPaymentCommand"
     ];
 
+    // Recibo (varios medios en un comprobante): se audita el recibo con el snapshot de cada cobro.
+    private static readonly HashSet<string> CustomerReceiptCreateActions =
+    [
+        "AddCustomerReceiptCommand"
+    ];
+
+    private static readonly HashSet<string> CustomerReceiptActions =
+    [
+        "CancelCustomerReceiptCommand"
+    ];
+
     private static readonly HashSet<string> SupplierCreateActions =
     [
         "CreateSupplierCommand"
@@ -115,6 +126,9 @@ public sealed class AuditSnapshotService : IAuditSnapshotService
 
         if (CustomerPaymentActions.Contains(actionType) && TryGetGuid(request, "PaymentId", out var cancelPaymentId))
             return Serialize(await BuildCustomerPaymentSnapshotAsync(cancelPaymentId, companyId, cancellationToken));
+
+        if (CustomerReceiptActions.Contains(actionType) && TryGetGuid(request, "ReceiptId", out var cancelReceiptId))
+            return Serialize(await BuildCustomerReceiptSnapshotAsync(cancelReceiptId, companyId, cancellationToken));
 
         if (SupplierActions.Contains(actionType) && TryGetGuid(request, "Id", out var supplierId))
             return Serialize(await BuildSupplierSnapshotAsync(supplierId, companyId, cancellationToken));
@@ -169,6 +183,12 @@ public sealed class AuditSnapshotService : IAuditSnapshotService
             || (CustomerPaymentActions.Contains(actionType) && TryGetGuid(request, "PaymentId", out customerPaymentId)))
         {
             return Serialize(await BuildCustomerPaymentSnapshotAsync(customerPaymentId, companyId, cancellationToken));
+        }
+
+        if ((CustomerReceiptCreateActions.Contains(actionType) && TryGetResponseGuid(response, "ReceiptId", out var receiptId))
+            || (CustomerReceiptActions.Contains(actionType) && TryGetGuid(request, "ReceiptId", out receiptId)))
+        {
+            return Serialize(await BuildCustomerReceiptSnapshotAsync(receiptId, companyId, cancellationToken));
         }
 
         if ((SupplierCreateActions.Contains(actionType) && TryGetResponseId(response, out var createdSupplierId))
@@ -463,8 +483,44 @@ public sealed class AuditSnapshotService : IAuditSnapshotService
             payment.CardSurchargePct,
             payment.CardSurchargeAmt,
             payment.TotalCobrado,
+            payment.TransferBankId,
             CustomerCreditBalance = customer?.CreditBalance,
             Imputaciones = imputaciones
+        };
+    }
+
+    private async Task<object?> BuildCustomerReceiptSnapshotAsync(Guid receiptId, Guid companyId, CancellationToken cancellationToken)
+    {
+        var receipt = await _context.CustomerReceipts
+            .AsNoTracking()
+            .FirstOrDefaultAsync(r => r.Id == receiptId && r.CompanyId == companyId, cancellationToken);
+
+        if (receipt is null)
+            return null;
+
+        var paymentIds = await _context.CustomerPayments
+            .AsNoTracking()
+            .Where(p => p.ReceiptId == receiptId && p.CompanyId == companyId)
+            .OrderBy(p => p.CreatedAt)
+            .Select(p => p.Id)
+            .ToListAsync(cancellationToken);
+
+        var payments = new List<object?>();
+        foreach (var paymentId in paymentIds)
+            payments.Add(await BuildCustomerPaymentSnapshotAsync(paymentId, companyId, cancellationToken));
+
+        return new
+        {
+            Entity = "CustomerReceipt",
+            Id = receipt.Id,
+            receipt.Code,
+            receipt.CustomerId,
+            receipt.TotalAmount,
+            Status = (int)receipt.Status,
+            StatusName = receipt.Status.ToString(),
+            receipt.Date,
+            receipt.Notes,
+            Payments = payments
         };
     }
 

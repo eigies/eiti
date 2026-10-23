@@ -69,7 +69,8 @@ public sealed class GetCurrentCashSessionHandlerTests
             cashSessionRepository.Object,
             saleRepository.Object,
             purchaseRepository.Object,
-            userRepository.Object);
+            userRepository.Object,
+            new Mock<ICustomerPaymentRepository>().Object);
 
         var result = await handler.Handle(new GetCurrentCashSessionQuery(drawerId.Value), CancellationToken.None);
 
@@ -129,7 +130,8 @@ public sealed class GetCurrentCashSessionHandlerTests
             cashSessionRepository.Object,
             saleRepository.Object,
             purchaseRepository.Object,
-            userRepository.Object);
+            userRepository.Object,
+            new Mock<ICustomerPaymentRepository>().Object);
 
         var result = await handler.Handle(new GetCurrentCashSessionQuery(drawerId.Value), CancellationToken.None);
 

@@ -15,6 +15,8 @@ public sealed class CustomerPayment
     public decimal Amount { get; private set; }
     public SaleCcPaymentStatus Status { get; private set; }
     public Guid? ChequeId { get; private set; }
+    // Recibo que agrupa este medio con otros (null en cobros anteriores a los recibos).
+    public Guid? ReceiptId { get; private set; }
     public string? Reference { get; private set; }
     public string? Notes { get; private set; }
     public DateTime Date { get; private set; }
@@ -107,6 +109,14 @@ public sealed class CustomerPayment
             throw new InvalidOperationException("Customer payment is already cancelled.");
 
         Status = SaleCcPaymentStatus.Cancelled;
+    }
+
+    internal void AttachToReceipt(Guid receiptId)
+    {
+        if (ReceiptId.HasValue)
+            throw new InvalidOperationException("Customer payment already belongs to a receipt.");
+
+        ReceiptId = receiptId;
     }
 
     private static string? NormalizeOptional(string? value, int maxLength)

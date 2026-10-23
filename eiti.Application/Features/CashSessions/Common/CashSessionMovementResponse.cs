@@ -17,4 +17,6 @@ public sealed record CashSessionMovementResponse(
     int? PaymentMethod,
     Guid? SaleCcPaymentId,
     Guid? SupplierPaymentId,
-    Guid? CustomerPaymentId);
+    Guid? CustomerPaymentId,
+    // Banco que recibió la transferencia, para los cobros de cuenta corriente por transferencia.
+    int? TransferBankId = null);

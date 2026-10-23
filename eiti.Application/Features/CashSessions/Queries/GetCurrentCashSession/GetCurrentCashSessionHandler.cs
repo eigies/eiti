@@ -17,6 +17,7 @@ public sealed class GetCurrentCashSessionHandler : IRequestHandler<GetCurrentCas
     private readonly ISaleRepository _saleRepository;
     private readonly IPurchaseRepository _purchaseRepository;
     private readonly IUserRepository _userRepository;
+    private readonly ICustomerPaymentRepository _customerPaymentRepository;
 
     public GetCurrentCashSessionHandler(
         ICurrentUserService currentUserService,
@@ -24,7 +25,8 @@ public sealed class GetCurrentCashSessionHandler : IRequestHandler<GetCurrentCas
         ICashSessionRepository cashSessionRepository,
         ISaleRepository saleRepository,
         IPurchaseRepository purchaseRepository,
-        IUserRepository userRepository)
+        IUserRepository userRepository,
+        ICustomerPaymentRepository customerPaymentRepository)
     {
         _currentUserService = currentUserService;
         _cashDrawerRepository = cashDrawerRepository;
@@ -32,6 +34,7 @@ public sealed class GetCurrentCashSessionHandler : IRequestHandler<GetCurrentCas
         _saleRepository = saleRepository;
         _purchaseRepository = purchaseRepository;
         _userRepository = userRepository;
+        _customerPaymentRepository = customerPaymentRepository;
     }
 
     public async Task<Result<CashSessionResponse>> Handle(GetCurrentCashSessionQuery request, CancellationToken cancellationToken)
@@ -98,6 +101,14 @@ public sealed class GetCurrentCashSessionHandler : IRequestHandler<GetCurrentCas
 
         var usernames = await _userRepository.GetUsernamesByIdsAsync(userIds, cancellationToken);
 
-        return Result<CashSessionResponse>.Success(CashSessionMapper.Map(session, payments, saleCodes, usernames, ccPayments));
+        var customerPaymentIds = session.Movements
+            .Where(m => m.CustomerPaymentId.HasValue)
+            .Select(m => m.CustomerPaymentId!.Value)
+            .ToHashSet();
+        var customerTransferBanks = await _customerPaymentRepository.GetTransferBanksAsync(
+            customerPaymentIds, session.CompanyId.Value, cancellationToken);
+
+        return Result<CashSessionResponse>.Success(
+            CashSessionMapper.Map(session, payments, saleCodes, usernames, ccPayments, customerTransferBanks));
     }
 }

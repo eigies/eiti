@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <NuGetAudit>false</NuGetAudit>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Configuración, DI y logging sin bajar paquetes: vienen con el runtime de ASP.NET. -->
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <ProjectReference Include="..\..\eiti.Application\eiti.Application.csproj" />
+    <ProjectReference Include="..\..\eiti.Infrastructure\eiti.Infrastructure.csproj" />
+  </ItemGroup>
+</Project>

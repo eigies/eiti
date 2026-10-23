@@ -10,8 +10,8 @@ using eiti.Domain.Users;
 namespace eiti.Application.Common;
 
 // Reversa de un cobro de cuenta corriente, compartida entre "anular cobro" y "anular venta (anular pagos)".
-// Des-imputa las ventas que financió (vuelven a pendiente; stock a reservado si estaban pagas), revierte el
-// saldo a favor que generó, registra la reversa en la caja recibida y anula el cheque si aplica. NO hace
+// Des-imputa las ventas que financió (vuelven a pendiente; stock a reservado si estaban pagas), deja el saldo
+// a favor como estaba antes del cobro, registra la reversa en la caja recibida y anula el cheque si aplica. NO hace
 // SaveChanges — lo hace el handler. La resolución de la caja (y sus errores) queda en cada caller.
 internal static class CustomerPaymentReversal
 {
@@ -67,12 +67,13 @@ internal static class CustomerPaymentReversal
             }
         }
 
-        // Si el cobro generó saldo a favor, la anulación lo revierte.
-        var creditGeneratedByPayment = Math.Max(0m, payment.Amount - imputedTotal);
-        if (creditGeneratedByPayment > 0m)
-        {
-            customer.ConsumeCredit(creditGeneratedByPayment);
-        }
+        // Desimputar devuelve `imputedTotal` al saldo disponible; de ahí sale lo que aportó ESTE cobro. Misma
+        // cuenta que anular una NC: el applicator imputa todo el saldo (también el que el cliente ya tenía)
+        // con back-link al cobro, así que lo imputado puede superar su importe. La resta ingenua
+        // max(0, importe − imputado) se comía ese saldo previo.
+        if (imputedTotal > 0m)
+            customer.AddCredit(imputedTotal);
+        customer.ConsumeCredit(payment.Amount);
         customerRepository.Update(customer);
 
         // Reversa de caja: el efectivo sale del cajón (Out); el resto reversa neutra (None) para trazabilidad.

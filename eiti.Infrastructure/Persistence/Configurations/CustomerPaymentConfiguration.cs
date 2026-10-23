@@ -20,6 +20,7 @@ public sealed class CustomerPaymentConfiguration : IEntityTypeConfiguration<Cust
         builder.Property(p => p.Amount).HasColumnType("decimal(18,2)").IsRequired();
         builder.Property(p => p.Status).HasConversion<int>().IsRequired();
         builder.Property(p => p.ChequeId).IsRequired(false);
+        builder.Property(p => p.ReceiptId).IsRequired(false);
         builder.Property(p => p.Reference).HasMaxLength(120).IsRequired(false);
         builder.Property(p => p.Notes).HasMaxLength(500).IsRequired(false);
         builder.Property(p => p.Date).IsRequired();
@@ -35,6 +36,12 @@ public sealed class CustomerPaymentConfiguration : IEntityTypeConfiguration<Cust
 
         builder.HasIndex(p => new { p.CompanyId, p.CustomerId });
         builder.HasIndex(p => p.Status);
+        builder.HasIndex(p => p.ReceiptId);
+
+        builder.HasOne<CustomerReceipt>()
+            .WithMany()
+            .HasForeignKey(p => p.ReceiptId)
+            .OnDelete(DeleteBehavior.Restrict);
 
         // No se modela FK navegable a Customer: su PK es el value object CustomerId y aquí CustomerId es Guid
         // (mismo patrón que SaleCcPayment, que no navega a Customer). El índice por CustomerId cubre las consultas.

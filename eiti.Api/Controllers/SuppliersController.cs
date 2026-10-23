@@ -1,10 +1,13 @@
 using eiti.Api.Extensions;
 using eiti.Application.Features.Suppliers.Commands.AddSupplierPayment;
+using eiti.Application.Features.Suppliers.Commands.AddSupplierPaymentOrder;
 using eiti.Application.Features.Suppliers.Commands.CancelSupplierPayment;
+using eiti.Application.Features.Suppliers.Commands.CancelSupplierPaymentOrder;
 using eiti.Application.Features.Suppliers.Commands.CreateSupplier;
 using eiti.Application.Features.Suppliers.Commands.DeactivateSupplier;
 using eiti.Application.Features.Suppliers.Commands.UpdateSupplier;
 using eiti.Application.Features.Suppliers.Queries.GetSupplierAccount;
+using eiti.Application.Features.Suppliers.Queries.GetSupplierLedger;
 using eiti.Application.Features.Suppliers.Queries.ListSupplierAccounts;
 using eiti.Application.Features.Suppliers.Queries.ListSuppliers;
 using MediatR;
@@ -85,6 +88,19 @@ public sealed class SuppliersController : ControllerBase
         return result.ToActionResult();
     }
 
+    // Extracto: renglones en orden cronológico con saldo acumulado + facturas pendientes.
+    [HttpGet("{id:guid}/ledger")]
+    public async Task<IActionResult> GetSupplierLedger(
+        Guid id,
+        [FromQuery] DateTime? dateFrom,
+        [FromQuery] DateTime? dateTo,
+        [FromQuery] bool includeCancelled,
+        CancellationToken cancellationToken)
+    {
+        var result = await _sender.Send(new GetSupplierLedgerQuery(id, dateFrom, dateTo, includeCancelled), cancellationToken);
+        return result.ToActionResult();
+    }
+
     [HttpPost("{id:guid}/payments")]
     public async Task<IActionResult> AddSupplierPayment(
         Guid id,
@@ -94,6 +110,34 @@ public sealed class SuppliersController : ControllerBase
         var result = await _sender.Send(
             new AddSupplierPaymentCommand(id, request.Method, request.Amount, request.Date, request.Reference, request.Notes, request.ChequeId),
             cancellationToken);
+        return result.ToActionResult();
+    }
+
+    // Pago con varios medios (cheques de cartera, transferencia, efectivo) bajo una orden de pago.
+    [HttpPost("{id:guid}/payment-orders")]
+    public async Task<IActionResult> AddSupplierPaymentOrder(
+        Guid id,
+        [FromBody] AddSupplierPaymentOrderRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _sender.Send(
+            new AddSupplierPaymentOrderCommand(
+                id,
+                request.Date,
+                request.Notes,
+                request.Lines?.Select(l => new AddSupplierPaymentOrderLine(l.Method, l.Amount, l.ChequeId, l.Reference)).ToList() ?? []),
+            cancellationToken);
+        return result.ToActionResult();
+    }
+
+    // Anula la orden entera (todos sus medios).
+    [HttpDelete("{id:guid}/payment-orders/{paymentOrderId:guid}")]
+    public async Task<IActionResult> CancelSupplierPaymentOrder(
+        Guid id,
+        Guid paymentOrderId,
+        CancellationToken cancellationToken)
+    {
+        var result = await _sender.Send(new CancelSupplierPaymentOrderCommand(id, paymentOrderId), cancellationToken);
         return result.ToActionResult();
     }
 
@@ -146,3 +190,14 @@ public sealed record AddSupplierPaymentRequest(
     string? Reference,
     string? Notes,
     Guid? ChequeId = null);
+
+public sealed record AddSupplierPaymentOrderLineRequest(
+    int Method,
+    decimal Amount,
+    Guid? ChequeId = null,
+    string? Reference = null);
+
+public sealed record AddSupplierPaymentOrderRequest(
+    DateTime Date,
+    string? Notes,
+    IReadOnlyList<AddSupplierPaymentOrderLineRequest>? Lines);

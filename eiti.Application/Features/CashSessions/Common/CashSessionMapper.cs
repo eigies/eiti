@@ -19,7 +19,8 @@ internal static class CashSessionMapper
         IReadOnlyList<SalePayment>? payments = null,
         Dictionary<Guid, string?>? saleCodes = null,
         Dictionary<Guid, string>? usernames = null,
-        IReadOnlyList<SaleCcPayment>? ccPayments = null)
+        IReadOnlyList<SaleCcPayment>? ccPayments = null,
+        IReadOnlyDictionary<Guid, int>? customerTransferBanks = null)
     {
         var breakdown = BuildBreakdown(session.Movements, payments ?? []);
 
@@ -57,7 +58,12 @@ internal static class CashSessionMapper
                     movement.PaymentMethod,
                     movement.SaleCcPaymentId,
                     movement.SupplierPaymentId,
-                    movement.CustomerPaymentId))
+                    movement.CustomerPaymentId,
+                    movement.CustomerPaymentId is { } customerPaymentId
+                        && customerTransferBanks is not null
+                        && customerTransferBanks.TryGetValue(customerPaymentId, out var transferBankId)
+                            ? transferBankId
+                            : null))
                 .ToList(),
             breakdown);
     }
@@ -66,7 +72,8 @@ internal static class CashSessionMapper
         CashSession session,
         IReadOnlyList<SalePayment>? payments = null,
         IReadOnlyDictionary<int, string>? bankNames = null,
-        IReadOnlyList<SaleCcPayment>? ccPayments = null)
+        IReadOnlyList<SaleCcPayment>? ccPayments = null,
+        IReadOnlyDictionary<Guid, int>? customerTransferBanks = null)
     {
         var salesIncome = session.Movements
             .Where(movement =>
@@ -92,7 +99,11 @@ internal static class CashSessionMapper
             .Where(movement => movement.Type is CashMovementType.SaleCancellation or CashMovementType.CuentaCorrienteCancellation)
             .Sum(movement => movement.Amount);
 
-        var transferBreakdown = BuildTransferBankBreakdown(payments ?? [], bankNames ?? new Dictionary<int, string>());
+        var transferBreakdown = BuildTransferBankBreakdown(
+            payments ?? [],
+            session.Movements,
+            customerTransferBanks ?? new Dictionary<Guid, int>(),
+            bankNames ?? new Dictionary<int, string>());
 
         return new CashSessionSummaryResponse(
             session.Id.Value,
@@ -109,15 +120,32 @@ internal static class CashSessionMapper
 
     private static IReadOnlyList<TransferBankBreakdownItem> BuildTransferBankBreakdown(
         IReadOnlyList<SalePayment> payments,
+        IEnumerable<CashMovement> movements,
+        IReadOnlyDictionary<Guid, int> customerTransferBanks,
         IReadOnlyDictionary<int, string> bankNames)
     {
-        return payments
+        var saleEntries = payments
             .Where(p => p.Method == SalePaymentMethod.Transfer && p.TransferBankId.HasValue)
-            .GroupBy(p => p.TransferBankId!.Value)
+            .Select(p => (BankId: p.TransferBankId!.Value, p.Amount));
+
+        // Cobros de cuenta corriente por transferencia: el banco está en el cobro y el importe en los
+        // movimientos de ESTA sesión (el ingreso suma, la anulación resta), igual que el desglose por medio.
+        var customerEntries = movements
+            .Where(m => m.CustomerPaymentId.HasValue
+                && (m.Type is CashMovementType.TransferIncome or CashMovementType.CuentaCorrienteCancellation)
+                && customerTransferBanks.ContainsKey(m.CustomerPaymentId.Value))
+            .Select(m => (
+                BankId: customerTransferBanks[m.CustomerPaymentId!.Value],
+                Amount: m.Type == CashMovementType.CuentaCorrienteCancellation ? -m.Amount : m.Amount));
+
+        return saleEntries
+            .Concat(customerEntries)
+            .GroupBy(e => e.BankId)
             .Select(g => new TransferBankBreakdownItem(
                 g.Key,
                 bankNames.GetValueOrDefault(g.Key, "Banco desconocido"),
-                g.Sum(p => p.Amount)))
+                g.Sum(e => e.Amount)))
+            .Where(item => item.Amount != 0)
             .OrderBy(x => x.BankName)
             .ToList();
     }

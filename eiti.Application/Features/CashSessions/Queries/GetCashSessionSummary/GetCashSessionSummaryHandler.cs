@@ -15,19 +15,22 @@ public sealed class GetCashSessionSummaryHandler : IRequestHandler<GetCashSessio
     private readonly ICashSessionRepository _cashSessionRepository;
     private readonly ISaleRepository _saleRepository;
     private readonly IBankRepository _bankRepository;
+    private readonly ICustomerPaymentRepository _customerPaymentRepository;
 
     public GetCashSessionSummaryHandler(
         ICurrentUserService currentUserService,
         ICashDrawerRepository cashDrawerRepository,
         ICashSessionRepository cashSessionRepository,
         ISaleRepository saleRepository,
-        IBankRepository bankRepository)
+        IBankRepository bankRepository,
+        ICustomerPaymentRepository customerPaymentRepository)
     {
         _currentUserService = currentUserService;
         _cashDrawerRepository = cashDrawerRepository;
         _cashSessionRepository = cashSessionRepository;
         _saleRepository = saleRepository;
         _bankRepository = bankRepository;
+        _customerPaymentRepository = customerPaymentRepository;
     }
 
     public async Task<Result<CashSessionSummaryResponse>> Handle(GetCashSessionSummaryQuery request, CancellationToken cancellationToken)
@@ -58,6 +61,14 @@ public sealed class GetCashSessionSummaryHandler : IRequestHandler<GetCashSessio
         var banks = await _bankRepository.ListAsync(activeOnly: false, companyId, cancellationToken);
         var bankNames = banks.ToDictionary(b => b.Id, b => b.Name);
 
-        return Result<CashSessionSummaryResponse>.Success(CashSessionMapper.MapSummary(session, payments, bankNames));
+        var customerPaymentIds = session.Movements
+            .Where(m => m.CustomerPaymentId.HasValue)
+            .Select(m => m.CustomerPaymentId!.Value)
+            .ToHashSet();
+        var customerTransferBanks = await _customerPaymentRepository.GetTransferBanksAsync(
+            customerPaymentIds, companyId.Value, cancellationToken);
+
+        return Result<CashSessionSummaryResponse>.Success(
+            CashSessionMapper.MapSummary(session, payments, bankNames, customerTransferBanks: customerTransferBanks));
     }
 }
