@@ -2,12 +2,14 @@ using eiti.Application.Abstractions.Repositories;
 using eiti.Application.Abstractions.Services;
 using eiti.Application.Common;
 using eiti.Application.Common.Accounts;
+using eiti.Application.Features.Sales.Queries.GetSaleInvoicePrint;
 using eiti.Domain.Cheques;
 using eiti.Domain.Common;
 using eiti.Domain.Customers;
 using eiti.Domain.Sales;
 using MediatR;
 
+using eiti.Application.Features.Sales.Queries.GetSaleInvoicePrint;
 namespace eiti.Application.Features.Customers.Queries.GetCustomerLedger;
 
 // Arma el extracto con lo que ya está guardado (ventas CC, recibos, cobros sin recibo, cobros cargados en la
@@ -24,6 +26,7 @@ public sealed class GetCustomerLedgerHandler : IRequestHandler<GetCustomerLedger
     private readonly ICustomerCreditNoteRepository _creditNoteRepository;
     private readonly IChequeRepository _chequeRepository;
     private readonly IBankRepository _bankRepository;
+    private readonly ISaleFiscalDocumentRepository _fiscalDocumentRepository;
     private readonly TimeProvider _timeProvider;
 
     public GetCustomerLedgerHandler(
@@ -35,6 +38,7 @@ public sealed class GetCustomerLedgerHandler : IRequestHandler<GetCustomerLedger
         ICustomerCreditNoteRepository creditNoteRepository,
         IChequeRepository chequeRepository,
         IBankRepository bankRepository,
+        ISaleFiscalDocumentRepository fiscalDocumentRepository,
         TimeProvider timeProvider)
     {
         _currentUserService = currentUserService;
@@ -45,6 +49,7 @@ public sealed class GetCustomerLedgerHandler : IRequestHandler<GetCustomerLedger
         _creditNoteRepository = creditNoteRepository;
         _chequeRepository = chequeRepository;
         _bankRepository = bankRepository;
+        _fiscalDocumentRepository = fiscalDocumentRepository;
         _timeProvider = timeProvider;
     }
 
@@ -80,6 +85,16 @@ public sealed class GetCustomerLedgerHandler : IRequestHandler<GetCustomerLedger
             ? new Dictionary<int, string>()
             : (await _bankRepository.GetByIdsAsync(bankIds, companyId, cancellationToken)).ToDictionary(b => b.Id, b => b.Name);
 
+        // Factura electrónica de cada venta: es su comprobante en el extracto, como el Nº de factura del
+        // proveedor en las compras. Vale la que tuvo CAE, vigente o anulada (SaleInvoicingView.PrintableInvoice).
+        var invoiceLabels = sales.Count == 0
+            ? new Dictionary<Guid, string>()
+            : (await _fiscalDocumentRepository.ListBySaleIdsAsync(sales.Select(s => s.Id).ToList(), companyId, cancellationToken))
+                .GroupBy(d => d.SaleId.Value)
+                .Select(g => (SaleId: g.Key, Label: InvoiceLabel(SaleInvoicingView.From(g.ToList()).PrintableInvoice)))
+                .Where(x => x.Label is not null)
+                .ToDictionary(x => x.SaleId, x => x.Label!);
+
         // Imputaciones: a qué venta fue cada cobro / nota de crédito (solo filas activas).
         var byPayment = new Dictionary<Guid, List<LedgerImputationResponse>>();
         var byNote = new Dictionary<Guid, List<LedgerImputationResponse>>();
@@ -87,7 +102,8 @@ public sealed class GetCustomerLedgerHandler : IRequestHandler<GetCustomerLedger
         {
             foreach (var row in sale.CcPayments.Where(r => r.Status == SaleCcPaymentStatus.Active))
             {
-                var imputation = new LedgerImputationResponse(sale.Id.Value, sale.Code ?? string.Empty, null, row.Amount);
+                var imputation = new LedgerImputationResponse(
+                    sale.Id.Value, sale.Code ?? string.Empty, invoiceLabels.GetValueOrDefault(sale.Id.Value), row.Amount);
                 if (row.CustomerPaymentId is { } paymentId)
                     Add(byPayment, paymentId, imputation);
                 else if (row.CreditNoteId is { } noteId)
@@ -132,7 +148,7 @@ public sealed class GetCustomerLedgerHandler : IRequestHandler<GetCustomerLedger
                 credit: 0m,
                 sale.SaleStatus == SaleStatus.Cancel,
                 new LedgerRowResponse(
-                    "invoice", "sale", sale.Id.Value, default, sale.Code, null, "Venta",
+                    "invoice", "sale", sale.Id.Value, default, sale.Code, invoiceLabels.GetValueOrDefault(sale.Id.Value), "Venta",
                     0m, 0m, 0m, false, [], [])));
 
             // Cobros cargados en la venta antes de la cuenta corriente: son haber, sin recibo ni número.
@@ -219,7 +235,7 @@ public sealed class GetCustomerLedgerHandler : IRequestHandler<GetCustomerLedger
             {
                 var date = BusinessCalendar.ToBusinessDate(s.CreatedAt);
                 return new PendingDocumentResponse(
-                    s.Id.Value, date, s.Code ?? string.Empty, null, s.TotalAmount, s.TotalAmount - s.CcPendingAmount,
+                    s.Id.Value, date, s.Code ?? string.Empty, invoiceLabels.GetValueOrDefault(s.Id.Value), s.TotalAmount, s.TotalAmount - s.CcPendingAmount,
                     s.CcPendingAmount, Math.Max(0, (today - date).Days));
             })
             .ToList();
@@ -256,4 +272,11 @@ public sealed class GetCustomerLedgerHandler : IRequestHandler<GetCustomerLedger
             map[key] = list = [];
         list.Add(value);
     }
+
+    // "B 00003-00001045": letra y número, como el Nº de factura del proveedor (el front antepone "Fact.").
+    private static string? InvoiceLabel(SaleFiscalDocument? invoice) =>
+        invoice is { PointOfSale: { } pointOfSale, Number: { } number }
+            && FiscalPrintLabels.DescribeType(invoice.DocumentType) is { } type
+                ? $"{type.Letter} {pointOfSale:D5}-{number:D8}"
+                : null;
 }

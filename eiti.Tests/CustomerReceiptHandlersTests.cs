@@ -34,6 +34,7 @@ public sealed class CustomerReceiptHandlersTests
     private readonly List<CustomerReceipt> _receipts = [];
     private readonly List<CustomerPayment> _payments = [];
     private readonly List<Cheque> _cheques = [];
+    private readonly List<SaleFiscalDocument> _fiscalDocuments = [];
     private readonly Mock<IStockMovementRepository> _stockMovements = new();
     private readonly Mock<IUnitOfWork> _unitOfWork = new();
     private readonly Mock<ICustomerPaymentRepository> _paymentRepository = new();
@@ -345,6 +346,27 @@ public sealed class CustomerReceiptHandlersTests
         venta.CcPendingAmount.Should().Be(300_000m);
     }
 
+    // La venta CC se factura igual que la de mostrador: en el extracto su comprobante es la factura con CAE,
+    // como el Nº de factura del proveedor en las compras. Una factura rechazada no es comprobante.
+    [Fact]
+    public async Task Extracto_UnaVentaFacturada_MuestraSuFacturaComoComprobante()
+    {
+        var facturada = AddCcSale("VENT-0101", 300_000m);
+        var rechazada = AddCcSale("VENT-0102", 100_000m);
+        var invoice = SaleFiscalDocument.CreateInvoice(_companyId, facturada.Id, 1);
+        invoice.Authorize(Guid.NewGuid(), "invoiceB", 3, 1045, "75123", new DateTime(2026, 11, 2), "https://qr", DateTime.UtcNow);
+        var rejected = SaleFiscalDocument.CreateInvoice(_companyId, rechazada.Id, 1);
+        rejected.Reject(null, "CUIT inválido");
+        _fiscalDocuments.AddRange([invoice, rejected]);
+        Handler(); // arma el contexto que reusa el extracto
+
+        var ledger = (await LedgerHandler().Handle(new GetCustomerLedgerQuery(_customer.Id.Value), CancellationToken.None)).Value;
+
+        ledger.Rows.Single(r => r.Code == "VENT-0101").Document.Should().Be("B 00003-00001045");
+        ledger.Rows.Single(r => r.Code == "VENT-0102").Document.Should().BeNull();
+        ledger.Pending.Single(p => p.Code == "VENT-0101").Document.Should().Be("B 00003-00001045");
+    }
+
     // ── Saldo a favor previo ─────────────────────────────────────────────────
     // Al registrar un cobro se imputa TODO el saldo disponible con back-link al cobro, también el que el
     // cliente ya tenía. Anularlo tiene que dejar la cuenta como estaba: venta pendiente y saldo previo.
@@ -423,9 +445,16 @@ public sealed class CustomerReceiptHandlersTests
             .Setup(r => r.GetByIdsAsync(It.IsAny<IEnumerable<int>>(), _companyId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => [_bank]);
 
+        var fiscalDocuments = new Mock<ISaleFiscalDocumentRepository>();
+        fiscalDocuments
+            .Setup(r => r.ListBySaleIdsAsync(It.IsAny<IReadOnlyCollection<SaleId>>(), _companyId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IReadOnlyCollection<SaleId> ids, CompanyId _, CancellationToken _) =>
+                _fiscalDocuments.Where(d => ids.Contains(d.SaleId)).ToList());
+
         return new GetCustomerLedgerHandler(
             _context.User.Object, _context.Customers.Object, sales.Object, _paymentRepository.Object,
-            _receiptRepository.Object, creditNotes.Object, cheques.Object, banks.Object, new FixedTime(DateTimeOffset.UtcNow));
+            _receiptRepository.Object, creditNotes.Object, cheques.Object, banks.Object, fiscalDocuments.Object,
+            new FixedTime(DateTimeOffset.UtcNow));
     }
 
     [Fact]
