@@ -9,7 +9,8 @@ public sealed record BranchProductStockResponse(
     string Name,
     decimal Price,
     decimal PublicPrice,
-    decimal CostPrice,
+    // null = sin products.view_cost (ver ProductListItemResponse).
+    decimal? CostPrice,
     decimal? UnitPrice,
     bool AllowsManualValueInSale,
     int OnHandQuantity,
@@ -19,4 +20,4 @@ public sealed record BranchProductStockResponse(
     decimal? CostOverride = null,
     decimal? SalePriceOverride = null,
     decimal EffectivePrice = 0,
-    decimal EffectiveCost = 0);
+    decimal? EffectiveCost = null);

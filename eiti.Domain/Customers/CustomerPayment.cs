@@ -30,8 +30,7 @@ public sealed class CustomerPayment
     public decimal? CardSurchargeAmt { get; private set; }
     public decimal? TotalCobrado { get; private set; }
 
-    // Banco que recibió la transferencia (espejo de SalePayment.TransferBankId). Null en otros medios y en
-    // cobros anteriores a guardarlo.
+    // Banco/billetera que recibió la transferencia (conciliación contra extractos).
     public int? TransferBankId { get; private set; }
 
     private CustomerPayment()
@@ -88,6 +87,8 @@ public sealed class CustomerPayment
             Guid.NewGuid(), companyId, customerId, branchId, method, amount, date, reference, notes, chequeId, createdByUserId);
     }
 
+    public void SetTransferBank(int? bankId) => TransferBankId = bankId;
+
     public void SetCardData(int bankId, int cuotas, decimal surchargePct, decimal surchargeAmt)
     {
         CardBankId = bankId;
@@ -95,14 +96,6 @@ public sealed class CustomerPayment
         CardSurchargePct = surchargePct;
         CardSurchargeAmt = surchargeAmt;
         TotalCobrado = Amount + surchargeAmt;
-    }
-
-    public void SetTransferBank(int bankId)
-    {
-        if (Method != SalePaymentMethod.Transfer)
-            throw new InvalidOperationException("Only a transfer payment has a receiving bank.");
-
-        TransferBankId = bankId;
     }
 
     public void SetChequeId(Guid chequeId)

@@ -92,6 +92,7 @@ public sealed class SaleInvoicingService : ISaleInvoicingService
         // comprobante. Solo se abre un intento nuevo cuando el anterior quedó rechazado.
         var document = SaleFiscalDocumentRules.InFlight(documents, SaleFiscalDocumentKind.Invoice);
         var customer = await LoadCustomerAsync(sale, cancellationToken);
+        var branch = await _branchRepository.GetByIdAsync(sale.BranchId, sale.CompanyId, cancellationToken);
 
         if (document is null)
         {
@@ -105,7 +106,7 @@ public sealed class SaleInvoicingService : ISaleInvoicingService
             // ese se re-envía siempre, para que el servicio devuelva lo que ya autorizó.
             // El intento queda Rechazado con el motivo, igual que un rechazo del fisco: el
             // usuario lo ve en la venta, completa el dato y reintenta.
-            var receiverError = SaleInvoicingReceiverRules.Validate(customer);
+            var receiverError = SaleInvoicingBranchRules.Validate(branch) ?? SaleInvoicingReceiverRules.Validate(customer);
             if (receiverError is not null)
             {
                 document.Reject(null, receiverError);
@@ -119,7 +120,10 @@ public sealed class SaleInvoicingService : ISaleInvoicingService
             RequestedType: FiscalRequestedDocumentType.Auto,
             Receiver: BuildReceiver(customer),
             Amounts: BuildAmounts(sale),
-            Date: DateOnly.FromDateTime(sale.CreatedAt));
+            Date: DateOnly.FromDateTime(sale.CreatedAt),
+            // Se factura en el punto de venta de la sucursal que vende. Si es un re-envío de un intento
+            // en vuelo y la sucursal ya no tiene uno, el servicio igual lo encuentra por su RequestId.
+            PointOfSale: branch?.FiscalPointOfSale?.Number);
 
         var result = await _fiscalizationService.RequestDocumentAsync(request, cancellationToken);
         return Apply(document, result);

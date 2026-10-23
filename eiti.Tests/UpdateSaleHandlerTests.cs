@@ -54,6 +54,7 @@ public sealed class UpdateSaleHandlerTests
             new Mock<ISaleTransportAssignmentRepository>().Object,
             new Mock<IAddressRepository>().Object,
             new Mock<IBankRepository>().Object,
+            NoFiscalDocuments(),
             new Mock<IUnitOfWork>().Object);
 
         var result = await handler.Handle(
@@ -128,6 +129,84 @@ public sealed class UpdateSaleHandlerTests
         result.Error!.Code.Should().Be("Sales.Update.TransferBankInvalid");
     }
 
+    // Regresión: MAT-3358 se facturó al crearla por $ 154.900 y después se editó a $ 174.900. La
+    // factura quedó con el importe viejo y la venta con el nuevo, sin NC ni ND que lo explique.
+    [Fact]
+    public async Task Handle_ShouldRejectAmountChange_WhenSaleHasLiveInvoice()
+    {
+        var companyId = CompanyId.New();
+        var scenario = CreateScenario(companyId);
+        var unitOfWork = new Mock<IUnitOfWork>();
+        var handler = CreateHandler(companyId, scenario, new Mock<IBankRepository>().Object,
+            [AuthorizedInvoice(companyId, scenario.Sale)], unitOfWork);
+
+        var result = await handler.Handle(
+            UpdateCommand(scenario, quantity: 2),
+            CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error!.Code.Should().Be("Sales.Update.InvoicedAmountChange");
+        unitOfWork.Verify(work => work.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Handle_ShouldRejectAmountChange_WhenInvoicingIsInProgress()
+    {
+        var companyId = CompanyId.New();
+        var scenario = CreateScenario(companyId);
+        var handler = CreateHandler(companyId, scenario, new Mock<IBankRepository>().Object,
+            [SaleFiscalDocument.CreateInvoice(companyId, scenario.Sale.Id, 1)]);
+
+        var result = await handler.Handle(
+            UpdateCommand(scenario, quantity: 2),
+            CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error!.Code.Should().Be("Sales.Update.InvoicedAmountChange");
+    }
+
+    [Fact]
+    public async Task Handle_ShouldAllowUpdate_WhenSaleHasLiveInvoiceAndAmountDoesNotChange()
+    {
+        var companyId = CompanyId.New();
+        var scenario = CreateScenario(companyId);
+        var handler = CreateHandler(companyId, scenario, new Mock<IBankRepository>().Object,
+            [AuthorizedInvoice(companyId, scenario.Sale)]);
+
+        var result = await handler.Handle(
+            UpdateCommand(scenario, quantity: 1) with { ContactPhone = "2964 123456" },
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+    }
+
+    private static ISaleFiscalDocumentRepository NoFiscalDocuments()
+    {
+        var repository = new Mock<ISaleFiscalDocumentRepository>();
+        repository
+            .Setup(fiscalDocuments => fiscalDocuments.ListBySaleAsync(It.IsAny<SaleId>(), It.IsAny<CompanyId>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+        return repository.Object;
+    }
+
+    private static UpdateSaleCommand UpdateCommand(UpdateSaleScenario scenario, int quantity) =>
+        new(
+            scenario.Sale.Id.Value,
+            null,
+            (int)SaleStatus.OnHold,
+            false,
+            null,
+            [new UpdateSaleDetailItemRequest(scenario.Product.Id.Value, quantity)],
+            [],
+            []);
+
+    private static SaleFiscalDocument AuthorizedInvoice(CompanyId companyId, eiti.Domain.Sales.Sale sale)
+    {
+        var invoice = SaleFiscalDocument.CreateInvoice(companyId, sale.Id, 1);
+        invoice.Authorize(Guid.NewGuid(), "invoiceB", 10, 1, "86428447195933", DateTime.UtcNow.AddDays(10), "https://qr", DateTime.UtcNow);
+        return invoice;
+    }
+
     private static UpdateSaleScenario CreateScenario(CompanyId companyId)
     {
         var branch = Branch.Create(companyId, "Sucursal Centro", "SC", "San Martin 123");
@@ -149,7 +228,9 @@ public sealed class UpdateSaleHandlerTests
     private static UpdateSaleHandler CreateHandler(
         CompanyId companyId,
         UpdateSaleScenario scenario,
-        IBankRepository bankRepository)
+        IBankRepository bankRepository,
+        IReadOnlyList<SaleFiscalDocument>? fiscalDocuments = null,
+        Mock<IUnitOfWork>? unitOfWork = null)
     {
         var currentUserService = new Mock<ICurrentUserService>();
         var saleRepository = new Mock<ISaleRepository>();
@@ -158,7 +239,12 @@ public sealed class UpdateSaleHandlerTests
         var branchProductStockRepository = new Mock<IBranchProductStockRepository>();
         var stockMovementRepository = new Mock<IStockMovementRepository>();
         var cashSessionRepository = new Mock<ICashSessionRepository>();
-        var unitOfWork = new Mock<IUnitOfWork>();
+        var fiscalDocumentRepository = new Mock<ISaleFiscalDocumentRepository>();
+        unitOfWork ??= new Mock<IUnitOfWork>();
+
+        fiscalDocumentRepository
+            .Setup(repository => repository.ListBySaleAsync(scenario.Sale.Id, companyId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(fiscalDocuments ?? []);
 
         currentUserService.SetupGet(service => service.IsAuthenticated).Returns(true);
         currentUserService.SetupGet(service => service.CompanyId).Returns(companyId);
@@ -187,6 +273,7 @@ public sealed class UpdateSaleHandlerTests
             new Mock<ISaleTransportAssignmentRepository>().Object,
             new Mock<IAddressRepository>().Object,
             bankRepository,
+            fiscalDocumentRepository.Object,
             unitOfWork.Object);
     }
 

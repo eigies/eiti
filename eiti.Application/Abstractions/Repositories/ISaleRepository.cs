@@ -19,6 +19,13 @@ public interface ISaleRepository
 
     void Remove(Sale sale);
 
+    // Venta por código exacto (sin distinguir mayúsculas), de cualquier fecha y canal, incluida la
+    // cuenta corriente. Devuelve 0 o 1 elemento, con la misma forma que el listado.
+    Task<IReadOnlyList<Sale>> ListByCodeAsync(
+        CompanyId companyId,
+        string code,
+        CancellationToken cancellationToken = default);
+
     Task<IReadOnlyList<Sale>> ListByCompanyAsync(
         CompanyId companyId,
         DateTime? dateFrom,

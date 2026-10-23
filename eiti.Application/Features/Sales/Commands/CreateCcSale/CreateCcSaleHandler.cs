@@ -81,6 +81,12 @@ public sealed class CreateCcSaleHandler : IRequestHandler<CreateCcSaleCommand, R
         // antes de guardar. La facturación automática no bloquea: el rechazo queda en la venta.
         if (request.RequestInvoicing && _saleInvoicingService.IsEnabled)
         {
+            var branchError = SaleInvoicingBranchRules.Validate(branch);
+            if (branchError is not null)
+            {
+                return Result<CreateCcSaleResponse>.Failure(CreateCcSaleErrors.BranchWithoutPointOfSale(branchError));
+            }
+
             var receiverError = SaleInvoicingReceiverRules.Validate(customer, request.InvoiceLetter);
             if (receiverError is not null)
             {

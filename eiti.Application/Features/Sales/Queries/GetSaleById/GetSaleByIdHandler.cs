@@ -1,6 +1,7 @@
 using eiti.Application.Abstractions.Repositories;
 using eiti.Application.Abstractions.Services;
 using eiti.Application.Common;
+using eiti.Domain.Addresses;
 using eiti.Domain.Customers;
 using eiti.Domain.Products;
 using eiti.Domain.Sales;
@@ -15,19 +16,22 @@ public sealed class GetSaleByIdHandler : IRequestHandler<GetSaleByIdQuery, Resul
     private readonly ICustomerRepository _customerRepository;
     private readonly IProductRepository _productRepository;
     private readonly ISaleFiscalDocumentRepository _fiscalDocuments;
+    private readonly IAddressRepository _addressRepository;
 
     public GetSaleByIdHandler(
         ICurrentUserService currentUserService,
         ISaleRepository saleRepository,
         ICustomerRepository customerRepository,
         IProductRepository productRepository,
-        ISaleFiscalDocumentRepository fiscalDocuments)
+        ISaleFiscalDocumentRepository fiscalDocuments,
+        IAddressRepository addressRepository)
     {
         _currentUserService = currentUserService;
         _saleRepository = saleRepository;
         _customerRepository = customerRepository;
         _productRepository = productRepository;
         _fiscalDocuments = fiscalDocuments;
+        _addressRepository = addressRepository;
     }
 
     public async Task<Result<GetSaleByIdResponse>> Handle(GetSaleByIdQuery request, CancellationToken cancellationToken)
@@ -60,6 +64,13 @@ public sealed class GetSaleByIdHandler : IRequestHandler<GetSaleByIdQuery, Resul
             customer = await _customerRepository.GetByIdAsync(sale.CustomerId, companyId, cancellationToken);
         }
 
+        string? customerAddress = null;
+        if (customer?.AddressId is not null)
+        {
+            var address = await _addressRepository.GetByIdAsync(customer.AddressId, cancellationToken);
+            customerAddress = address is null ? null : FormatAddress(address);
+        }
+
         var productIds = sale.Details.Select(d => d.ProductId)
             .Concat(sale.TradeIns.Select(t => t.ProductId))
             .Distinct().ToList();
@@ -88,6 +99,10 @@ public sealed class GetSaleByIdHandler : IRequestHandler<GetSaleByIdQuery, Resul
                 customer?.FullName,
                 customerDocument,
                 customer?.TaxId,
+                customerAddress,
+                string.IsNullOrWhiteSpace(customer?.Phone) ? null : customer.Phone,
+                sale.DeliveryAddress,
+                sale.ContactPhone,
                 sale.CashDrawerId?.Value,
                 sale.HasDelivery,
                 (int)sale.SaleStatus,
@@ -166,5 +181,21 @@ public sealed class GetSaleByIdHandler : IRequestHandler<GetSaleByIdQuery, Resul
     private static string GetProductBrand(IDictionary<Guid, Product> productMap, Guid productId)
     {
         return productMap.TryGetValue(productId, out var product) ? product.Brand : "Unknown";
+    }
+
+    private static string? FormatAddress(Address address)
+    {
+        if (string.IsNullOrWhiteSpace(address.Street))
+            return null;
+
+        var street = address.Street;
+        if (!string.IsNullOrWhiteSpace(address.StreetNumber))
+            street += $" {address.StreetNumber}";
+        if (!string.IsNullOrWhiteSpace(address.Floor))
+            street += $", Piso {address.Floor}";
+        if (!string.IsNullOrWhiteSpace(address.Apartment))
+            street += $", Depto {address.Apartment}";
+
+        return street;
     }
 }

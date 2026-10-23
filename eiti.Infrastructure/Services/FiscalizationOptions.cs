@@ -13,9 +13,6 @@ public sealed class FiscalizationOptions
     /// <summary>Régimen fiscal del tenant. Discriminador del contrato multi-régimen.</summary>
     public string Regime { get; init; } = "AR-ARCA";
 
-    /// <summary>Punto de venta por defecto cuando la sucursal no define uno.</summary>
-    public int DefaultPointOfSale { get; init; } = 1;
-
     /// <summary>URL pública del callback de EITI que recibe la resolución diferida.</summary>
     public string? CallbackUrl { get; init; }
 

@@ -57,13 +57,20 @@ public sealed class ListSalesHandler : IRequestHandler<ListSalesQuery, Result<IR
         var from = request.DateFrom.HasValue ? BusinessCalendar.StartOfDayUtc(request.DateFrom.Value) : (DateTime?)null;
         var to = request.DateTo.HasValue ? BusinessCalendar.EndOfDayUtc(request.DateTo.Value) : (DateTime?)null;
 
-        var sales = await _saleRepository.ListByCompanyAsync(
-            _currentUserService.CompanyId,
-            from,
-            to,
-            request.IdSaleStatus,
-            request.IncludeCuentaCorriente,
-            cancellationToken);
+        // Por código se busca en cualquier fecha y canal: quien pregunta por "SUCU-123-179" no sabe
+        // de qué día es ni si fue de cuenta corriente.
+        var sales = string.IsNullOrWhiteSpace(request.Code)
+            ? await _saleRepository.ListByCompanyAsync(
+                _currentUserService.CompanyId,
+                from,
+                to,
+                request.IdSaleStatus,
+                request.IncludeCuentaCorriente,
+                cancellationToken)
+            : await _saleRepository.ListByCodeAsync(
+                _currentUserService.CompanyId,
+                request.Code.Trim(),
+                cancellationToken);
 
         if (!_currentUserService.CanViewAllBranches)
         {

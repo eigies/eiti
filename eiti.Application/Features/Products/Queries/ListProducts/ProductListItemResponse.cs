@@ -9,7 +9,9 @@ public sealed record ProductListItemResponse(
     string? Description,
     decimal Price,
     decimal PublicPrice,
-    decimal CostPrice,
+    // null = el usuario no tiene products.view_cost, no "costo cero". Enmascarar con 0m
+    // hacia que ese 0 volviera al backend en el siguiente update y pisara el costo real.
+    decimal? CostPrice,
     decimal? UnitPrice,
     bool AllowsManualValueInSale,
     decimal? NoDeliverySurcharge,

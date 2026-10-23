@@ -64,7 +64,7 @@ public sealed class ListBranchStockHandler : IRequestHandler<ListBranchStockQuer
                     product.Name,
                     product.Price,
                     product.Price,
-                    canViewCost ? product.CostPrice : 0m,
+                    canViewCost ? product.CostPrice : null,
                     product.UnitPrice,
                     product.AllowsManualValueInSale,
                     stock?.OnHandQuantity ?? 0,
@@ -74,7 +74,7 @@ public sealed class ListBranchStockHandler : IRequestHandler<ListBranchStockQuer
                     canViewCost ? stock?.CostOverride : null,
                     stock?.SalePriceOverride,
                     stock?.SalePriceOverride ?? product.Price,
-                    canViewCost ? (stock?.CostOverride ?? product.CostPrice) : 0m);
+                    canViewCost ? (stock?.CostOverride ?? product.CostPrice) : null);
             }).ToList());
     }
 }

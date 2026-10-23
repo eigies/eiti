@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using eiti.Application.Abstractions.Services;
+using eiti.Domain.Customers;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -54,7 +55,8 @@ public sealed class FiscalizationService : IFiscalizationService
             requestId = request.RequestId,
             tenantId = request.TenantId,
             regime = options.Regime,
-            pointOfSale = request.PointOfSale ?? options.DefaultPointOfSale,
+            // Sin punto de venta el servicio usa el del perfil del emisor: cada cliente tiene el suyo en ARCA.
+            pointOfSale = request.PointOfSale,
             requestedType = request.RequestedType,
             receiver = request.Receiver is null
                 ? null
@@ -269,6 +271,149 @@ public sealed class FiscalizationService : IFiscalizationService
     private static Uri BuildUri(FiscalizationOptions options, string relativePath) =>
         new(new Uri(options.BaseUrl!.TrimEnd('/') + "/"), relativePath);
 
+    public async Task<FiscalOperationResult> RegisterPointOfSaleAsync(
+        Guid tenantId,
+        int number,
+        CancellationToken cancellationToken = default)
+    {
+        var options = _options.Value;
+        if (!options.IsConfigured)
+        {
+            return new FiscalOperationResult(false, "El servicio de facturación no está configurado.");
+        }
+
+        try
+        {
+            using var httpRequest = new HttpRequestMessage(
+                HttpMethod.Put,
+                BuildUri(options, $"api/admin/fiscal-points-of-sale?tenantId={tenantId}"))
+            {
+                Content = JsonContent.Create(new { number }, options: JsonOptions)
+            };
+            httpRequest.Headers.Add("X-Api-Key", options.ApiKey);
+
+            using var response = await _httpClient.SendAsync(httpRequest, cancellationToken);
+            if (response.IsSuccessStatusCode)
+            {
+                return new FiscalOperationResult(true);
+            }
+
+            var body = await response.Content.ReadAsStringAsync(cancellationToken);
+            _logger.LogWarning(
+                "Could not register point of sale {Number} for tenant {TenantId}. Status: {StatusCode}, Body: {Body}",
+                number,
+                tenantId,
+                (int)response.StatusCode,
+                body);
+            return new FiscalOperationResult(false, ExtractErrorMessage(body, (int)response.StatusCode));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error while registering point of sale {Number} for tenant {TenantId}.", number, tenantId);
+            return new FiscalOperationResult(false, "No se pudo contactar al servicio de facturación.");
+        }
+    }
+
+    public Task<FiscalIssuerProfileResult> GetIssuerAsync(Guid tenantId, CancellationToken cancellationToken = default) =>
+        SendIssuerAsync(HttpMethod.Get, $"api/admin/fiscal-profiles/active?tenantId={tenantId}", null, tenantId, cancellationToken);
+
+    public Task<FiscalIssuerProfileResult> UpdateIssuerAsync(Guid tenantId, FiscalIssuerUpdate update, CancellationToken cancellationToken = default) =>
+        SendIssuerAsync(HttpMethod.Put, $"api/admin/fiscal-profiles/active/issuer?tenantId={tenantId}", new
+        {
+            legalName = update.LegalName,
+            vatCondition = ToServiceVatCondition(update.VatCondition),
+            iibb = update.Iibb,
+            activityStartDate = update.ActivityStartDate,
+            commercialAddress = update.CommercialAddress
+        }, tenantId, cancellationToken);
+
+    private async Task<FiscalIssuerProfileResult> SendIssuerAsync(HttpMethod method, string path, object? body, Guid tenantId, CancellationToken cancellationToken)
+    {
+        var options = _options.Value;
+        if (!options.IsConfigured)
+        {
+            return new FiscalIssuerProfileResult(false, ErrorMessage: "El servicio de facturación no está configurado.");
+        }
+
+        try
+        {
+            using var httpRequest = new HttpRequestMessage(method, BuildUri(options, path));
+            if (body is not null)
+            {
+                httpRequest.Content = JsonContent.Create(body, options: JsonOptions);
+            }
+            httpRequest.Headers.Add("X-Api-Key", options.ApiKey);
+
+            using var response = await _httpClient.SendAsync(httpRequest, cancellationToken);
+            var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning(
+                    "Fiscal issuer {Method} failed for tenant {TenantId}. Status: {StatusCode}, Body: {Body}",
+                    method, tenantId, (int)response.StatusCode, responseBody);
+                return new FiscalIssuerProfileResult(false, ErrorCode: ExtractErrorCode(responseBody),
+                    ErrorMessage: ExtractErrorMessage(responseBody, (int)response.StatusCode));
+            }
+
+            var profile = JsonSerializer.Deserialize<ServiceIssuerProfile>(responseBody, JsonOptions)
+                ?? throw new JsonException("Empty fiscal profile.");
+            return new FiscalIssuerProfileResult(true, new FiscalIssuerProfile(profile.Cuit, profile.LegalName, ToIvaCondition(profile.VatCondition),
+                profile.Iibb, profile.ActivityStartDate, profile.CommercialAddress, profile.Environment == ServiceEnvironment.Production,
+                profile.PointsOfSale ?? [], profile.CertificateNotAfter));
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogError(ex, "Unexpected error on fiscal issuer {Method} for tenant {TenantId}.", method, tenantId);
+            return new FiscalIssuerProfileResult(false, ErrorMessage: "No se pudo contactar al servicio de facturación.");
+        }
+    }
+
+    private static string ToServiceVatCondition(IvaCondition condition) => condition switch
+    {
+        IvaCondition.ResponsableInscripto => "registered",
+        IvaCondition.Monotributo => "monotribute",
+        IvaCondition.Exento => "exempt",
+        _ => "finalConsumer"
+    };
+
+    private static IvaCondition ToIvaCondition(ServiceVatCondition condition) => condition switch
+    {
+        ServiceVatCondition.Registered => IvaCondition.ResponsableInscripto,
+        ServiceVatCondition.Monotribute => IvaCondition.Monotributo,
+        ServiceVatCondition.Exempt => IvaCondition.Exento,
+        _ => IvaCondition.ConsumidorFinal
+    };
+
+    private static string? ExtractErrorCode(string body)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(body);
+            return document.RootElement.TryGetProperty("code", out var code) && code.ValueKind == JsonValueKind.String
+                ? code.GetString()
+                : null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    private enum ServiceVatCondition { Registered, Monotribute, FinalConsumer, Exempt }
+
+    private enum ServiceEnvironment { Certification, Production }
+
+    private sealed record ServiceIssuerProfile(
+        string Cuit,
+        string LegalName,
+        ServiceVatCondition VatCondition,
+        string? Iibb,
+        DateOnly ActivityStartDate,
+        string? CommercialAddress,
+        ServiceEnvironment Environment,
+        IReadOnlyCollection<int>? PointsOfSale,
+        DateTimeOffset? CertificateNotAfter);
+
     private static FiscalDocumentResult MapResponse(string body)
     {
         var payload = JsonSerializer.Deserialize<FiscalDocumentResponsePayload>(body, JsonOptions);
@@ -297,7 +442,31 @@ public sealed class FiscalizationService : IFiscalizationService
             payload.Number,
             payload.AuthorizationCode,
             payload.ValidUntil?.ToDateTime(TimeOnly.MinValue),
-            payload.Qr);
+            payload.Qr,
+            ErrorMessage: outcome is FiscalDocumentOutcome.Rejected or FiscalDocumentOutcome.Unavailable
+                ? FriendlyRejectionReason(payload.FailureReason)
+                : null);
+    }
+
+    /// <summary>
+    /// Rechazos del fisco que el vendedor tiene que entender sin saber de ARCA. Clave: el codigo que
+    /// ARCA antepone al mensaje ("10069: ..."). El resto pasa tal cual: ARCA ya escribe en castellano.
+    /// </summary>
+    private static readonly Dictionary<string, string> KnownArcaRejections = new(StringComparer.Ordinal)
+    {
+        ["10069"] = "El cliente tiene el mismo CUIT que quien factura: ARCA no permite facturarse a uno mismo. Elegí otro cliente."
+    };
+
+    private static string? FriendlyRejectionReason(string? reason)
+    {
+        if (string.IsNullOrWhiteSpace(reason))
+        {
+            return null;
+        }
+
+        var separator = reason.IndexOf(':');
+        var code = separator > 0 ? reason[..separator].Trim() : string.Empty;
+        return KnownArcaRejections.TryGetValue(code, out var friendly) ? friendly : $"ARCA: {reason.Trim()}";
     }
 
     /// <summary>
@@ -308,6 +477,13 @@ public sealed class FiscalizationService : IFiscalizationService
     {
         ["Arca.ReceiverCuitRequired"] =
             "El cliente es Responsable Inscripto o Monotributista: para facturarle hay que cargar su CUIT en la ficha del cliente.",
+        ["FiscalIssuer.InvalidActivityStartDate"] = "La fecha de inicio de actividades no puede ser futura.",
+        ["FiscalProfile.NotFound"] =
+            "El servicio de facturación todavía no tiene un perfil fiscal activo para esta empresa.",
+        ["FiscalProfile.Ambiguous"] =
+            "La empresa tiene más de un perfil fiscal activo en el servicio de facturación: hay que desactivar el que ya no se usa.",
+        ["Arca.ReceiverIsIssuer"] =
+            "El cliente tiene el mismo CUIT que quien factura: no se puede facturar a uno mismo. Elegí otro cliente.",
         ["Arca.ReceiverIdentificationRequired"] =
             "El monto supera el tope de ARCA para facturar a un consumidor final sin identificar. Asigná un cliente a la venta con su DNI o CUIT cargado y volvé a facturar."
     };
@@ -360,7 +536,9 @@ public sealed class FiscalizationService : IFiscalizationService
         DateOnly? ValidUntil,
         string? Qr,
         bool IsQueued,
-        bool IsDuplicate);
+        bool IsDuplicate,
+        // Motivo del rechazo: del fisco ("10069: ...") o de la validacion previa del servicio.
+        string? FailureReason = null);
 
     // Respuesta de GET /api/fiscal-documents/{id}: los campos del alta más emisor, fecha, importes,
     // receptor y comprobante asociado (los del pedido que se autorizó).

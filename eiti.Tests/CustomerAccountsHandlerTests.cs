@@ -204,6 +204,52 @@ public sealed class CustomerAccountsHandlerTests
     }
 
     [Fact]
+    public async Task GetCustomerAccount_ShouldExposeReceivingBankOfTransferCollections()
+    {
+        var companyId = CompanyId.New();
+        var branchId = BranchId.New();
+        var customer = Customer.Create(companyId, "Soler", "Emiliano", null);
+        var transfer = CustomerPayment.Create(
+            companyId.Value, customer.Id.Value, branchId.Value, SalePaymentMethod.Transfer, 1500m,
+            DateTime.UtcNow, null, null, Guid.NewGuid());
+        transfer.SetTransferBank(7);
+
+        var currentUserService = new Mock<ICurrentUserService>();
+        currentUserService.SetupGet(service => service.IsAuthenticated).Returns(true);
+        currentUserService.SetupGet(service => service.CompanyId).Returns(companyId);
+        var customerRepository = new Mock<ICustomerRepository>();
+        customerRepository
+            .Setup(repository => repository.GetByIdAsync(customer.Id, companyId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(customer);
+        var saleRepository = new Mock<ISaleRepository>();
+        saleRepository
+            .Setup(repository => repository.ListCcSalesByCustomerAsync(companyId, customer.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+        var customerPaymentRepository = new Mock<ICustomerPaymentRepository>();
+        customerPaymentRepository
+            .Setup(repository => repository.ListByCustomerAsync(companyId.Value, customer.Id.Value, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([transfer]);
+        var creditNoteRepository = new Mock<ICustomerCreditNoteRepository>();
+        creditNoteRepository
+            .Setup(repository => repository.ListByCustomerAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+
+        var handler = new GetCustomerAccountHandler(
+            currentUserService.Object,
+            customerRepository.Object,
+            customerPaymentRepository.Object,
+            creditNoteRepository.Object,
+            saleRepository.Object,
+            new Mock<IChequeRepository>().Object);
+
+        var result = await handler.Handle(new GetCustomerAccountQuery(customer.Id.Value), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Movements.Should().ContainSingle(m => m.Type == "cobro")
+            .Which.TransferBankId.Should().Be(7);
+    }
+
+    [Fact]
     public async Task ListCustomerAccounts_ShouldIncludeCustomerWithCcHistoryEvenWhenBalanceIsZero()
     {
         var companyId = CompanyId.New();

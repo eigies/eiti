@@ -34,6 +34,17 @@ public sealed class BranchConfiguration : IEntityTypeConfiguration<Branch>
             .IsRequired(false);
 
         builder.Property(branch => branch.AutomaticInvoicing).IsRequired(false);
+
+        builder.Property(branch => branch.FiscalPointOfSaleId)
+            .HasConversion(id => id!.Value, value => new FiscalPointOfSaleId(value))
+            .IsRequired(false);
+
+        // 1:1: cada sucursal su punto de venta y ninguno compartido (índice único sobre la FK).
+        builder.HasOne(branch => branch.FiscalPointOfSale)
+            .WithOne()
+            .HasForeignKey<Branch>(branch => branch.FiscalPointOfSaleId)
+            .OnDelete(DeleteBehavior.Restrict);
+        builder.HasIndex(branch => branch.FiscalPointOfSaleId).IsUnique();
         builder.Property(branch => branch.CreatedAt).IsRequired();
         builder.Property(branch => branch.UpdatedAt).IsRequired(false);
 

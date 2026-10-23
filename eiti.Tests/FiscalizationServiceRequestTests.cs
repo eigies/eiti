@@ -38,6 +38,28 @@ public sealed class FiscalizationServiceRequestTests
         CallbackUrl(handler).GetString().Should().Be("https://api.eiticloud.com/api/fiscal/callback");
     }
 
+    [Fact]
+    public async Task Without_a_point_of_sale_none_is_sent_so_the_service_uses_the_issuer_one()
+    {
+        // Cada cliente tiene su punto de venta en ARCA: EITI ya no manda un número global.
+        var handler = new CapturingHandler();
+
+        await Service(handler, null).RequestDocumentAsync(Request());
+
+        JsonDocument.Parse(handler.Body!).RootElement.GetProperty("pointOfSale").ValueKind.Should().Be(JsonValueKind.Null);
+    }
+
+    [Fact]
+    public async Task A_given_point_of_sale_is_sent_as_is()
+    {
+        // La nota de crédito va al punto de venta de la factura que anula.
+        var handler = new CapturingHandler();
+
+        await Service(handler, null).RequestDocumentAsync(Request() with { PointOfSale = 5 });
+
+        JsonDocument.Parse(handler.Body!).RootElement.GetProperty("pointOfSale").GetInt32().Should().Be(5);
+    }
+
     private static JsonElement CallbackUrl(CapturingHandler handler) =>
         JsonDocument.Parse(handler.Body!).RootElement.GetProperty("callbackUrl");
 

@@ -95,6 +95,12 @@ public sealed class Company : AggregateRoot<CompanyId>
         AutomaticInvoicing = automaticInvoicing;
     }
 
+    /// <summary>Default de la empresa; cada sucursal puede sobrescribirlo.</summary>
+    public void SetAutomaticInvoicing(bool enabled)
+    {
+        AutomaticInvoicing = enabled;
+    }
+
     private static string? NormalizeSenderPhone(string? value)
     {
         if (string.IsNullOrWhiteSpace(value))

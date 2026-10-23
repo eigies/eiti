@@ -12,7 +12,7 @@ using eiti.Infrastructure.Persistence;
 namespace eiti.Infrastructure.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    [Migration("20261023032207_AddCustomerPaymentTransferBank")]
+    [Migration("20260925002122_AddCustomerPaymentTransferBank")]
     partial class AddCustomerPaymentTransferBank
     {
         /// <inheritdoc />
@@ -218,9 +218,6 @@ namespace eiti.Infrastructure.Migrations
                     b.Property<string>("Address")
                         .HasMaxLength(255)
                         .HasColumnType("character varying(255)");
-
-                    b.Property<bool?>("AutomaticInvoicing")
-                        .HasColumnType("boolean");
 
                     b.Property<string>("Code")
                         .HasMaxLength(40)
@@ -523,11 +520,6 @@ namespace eiti.Infrastructure.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid");
 
-                    b.Property<bool>("AutomaticInvoicing")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(false);
-
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp without time zone");
 
@@ -629,9 +621,6 @@ namespace eiti.Infrastructure.Migrations
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
-
-                    b.Property<int?>("IvaCondition")
-                        .HasColumnType("integer");
 
                     b.Property<string>("LastName")
                         .IsRequired()
@@ -780,9 +769,6 @@ namespace eiti.Infrastructure.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
 
-                    b.Property<Guid?>("ReceiptId")
-                        .HasColumnType("uuid");
-
                     b.Property<string>("Reference")
                         .HasMaxLength(120)
                         .HasColumnType("character varying(120)");
@@ -798,69 +784,11 @@ namespace eiti.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("ReceiptId");
-
                     b.HasIndex("Status");
 
                     b.HasIndex("CompanyId", "CustomerId");
 
                     b.ToTable("CustomerPayments", (string)null);
-                });
-
-            modelBuilder.Entity("eiti.Domain.Customers.CustomerReceipt", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("BranchId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime?>("CancelledAt")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<Guid?>("CancelledByUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Code")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
-
-                    b.Property<Guid>("CompanyId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<Guid>("CreatedByUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("CustomerId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("Date")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<string>("Notes")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
-
-                    b.Property<int>("Status")
-                        .HasColumnType("integer");
-
-                    b.Property<decimal>("TotalAmount")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("Status");
-
-                    b.HasIndex("CompanyId", "Code")
-                        .IsUnique();
-
-                    b.HasIndex("CompanyId", "CustomerId");
-
-                    b.ToTable("CustomerReceipts", (string)null);
                 });
 
             modelBuilder.Entity("eiti.Domain.Employees.DriverProfile", b =>
@@ -1846,80 +1774,6 @@ namespace eiti.Infrastructure.Migrations
                     b.ToTable("SaleDetails", (string)null);
                 });
 
-            modelBuilder.Entity("eiti.Domain.Sales.SaleFiscalDocument", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("AuthorizationCode")
-                        .HasMaxLength(30)
-                        .HasColumnType("character varying(30)");
-
-                    b.Property<DateTime?>("AuthorizationExpiry")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<Guid>("CompanyId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<string>("DocumentType")
-                        .HasMaxLength(30)
-                        .HasColumnType("character varying(30)");
-
-                    b.Property<Guid?>("FiscalDocumentId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime?>("IssuedAt")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<int>("Kind")
-                        .HasColumnType("integer");
-
-                    b.Property<long?>("Number")
-                        .HasColumnType("bigint");
-
-                    b.Property<int?>("PointOfSale")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("QrUrl")
-                        .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)");
-
-                    b.Property<string>("RejectionReason")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
-
-                    b.Property<Guid?>("ReversedDocumentId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("SaleId")
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("Sequence")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("Status")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CompanyId");
-
-                    b.HasIndex("FiscalDocumentId");
-
-                    b.HasIndex("ReversedDocumentId");
-
-                    b.HasIndex("SaleId", "Kind", "Sequence")
-                        .IsUnique();
-
-                    b.ToTable("SaleFiscalDocuments", (string)null);
-                });
-
             modelBuilder.Entity("eiti.Domain.Sales.SalePayment", b =>
                 {
                     b.Property<Guid>("SaleId")
@@ -2214,9 +2068,6 @@ namespace eiti.Infrastructure.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
 
-                    b.Property<Guid?>("PaymentOrderId")
-                        .HasColumnType("uuid");
-
                     b.Property<string>("Reference")
                         .HasMaxLength(120)
                         .HasColumnType("character varying(120)");
@@ -2229,8 +2080,6 @@ namespace eiti.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("PaymentOrderId");
-
                     b.HasIndex("Status");
 
                     b.HasIndex("SupplierId");
@@ -2238,64 +2087,6 @@ namespace eiti.Infrastructure.Migrations
                     b.HasIndex("CompanyId", "SupplierId");
 
                     b.ToTable("SupplierPayments", (string)null);
-                });
-
-            modelBuilder.Entity("eiti.Domain.Suppliers.SupplierPaymentOrder", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("BranchId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime?>("CancelledAt")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<Guid?>("CancelledByUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Code")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
-
-                    b.Property<Guid>("CompanyId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<Guid>("CreatedByUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("Date")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<string>("Notes")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
-
-                    b.Property<int>("Status")
-                        .HasColumnType("integer");
-
-                    b.Property<Guid>("SupplierId")
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("TotalAmount")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("Status");
-
-                    b.HasIndex("SupplierId");
-
-                    b.HasIndex("CompanyId", "Code")
-                        .IsUnique();
-
-                    b.HasIndex("CompanyId", "SupplierId");
-
-                    b.ToTable("SupplierPaymentOrders", (string)null);
                 });
 
             modelBuilder.Entity("eiti.Domain.Transport.SaleTransportAssignment", b =>
@@ -2722,14 +2513,6 @@ namespace eiti.Infrastructure.Migrations
                         .IsRequired();
                 });
 
-            modelBuilder.Entity("eiti.Domain.Customers.CustomerPayment", b =>
-                {
-                    b.HasOne("eiti.Domain.Customers.CustomerReceipt", null)
-                        .WithMany()
-                        .HasForeignKey("ReceiptId")
-                        .OnDelete(DeleteBehavior.Restrict);
-                });
-
             modelBuilder.Entity("eiti.Domain.Payroll.PayrollLiquidationAdvanceLine", b =>
                 {
                     b.HasOne("eiti.Domain.Payroll.PayrollLiquidation", null)
@@ -2886,15 +2669,6 @@ namespace eiti.Infrastructure.Migrations
                         .IsRequired();
                 });
 
-            modelBuilder.Entity("eiti.Domain.Sales.SaleFiscalDocument", b =>
-                {
-                    b.HasOne("eiti.Domain.Sales.Sale", null)
-                        .WithMany()
-                        .HasForeignKey("SaleId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
             modelBuilder.Entity("eiti.Domain.Sales.SalePayment", b =>
                 {
                     b.HasOne("eiti.Domain.Sales.Sale", null)
@@ -2968,20 +2742,6 @@ namespace eiti.Infrastructure.Migrations
                 });
 
             modelBuilder.Entity("eiti.Domain.Suppliers.SupplierPayment", b =>
-                {
-                    b.HasOne("eiti.Domain.Suppliers.SupplierPaymentOrder", null)
-                        .WithMany()
-                        .HasForeignKey("PaymentOrderId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.HasOne("eiti.Domain.Suppliers.Supplier", null)
-                        .WithMany()
-                        .HasForeignKey("SupplierId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("eiti.Domain.Suppliers.SupplierPaymentOrder", b =>
                 {
                     b.HasOne("eiti.Domain.Suppliers.Supplier", null)
                         .WithMany()

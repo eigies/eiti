@@ -32,6 +32,7 @@ public sealed class ApplicationDbContext : DbContext
     public DbSet<BankInstallmentPlan> BankInstallmentPlans => Set<BankInstallmentPlan>();
     public DbSet<Cheque> Cheques => Set<Cheque>();
     public DbSet<Branch> Branches { get; set; }
+    public DbSet<FiscalPointOfSale> FiscalPointsOfSale { get; set; }
     public DbSet<Address> Addresses { get; set; }
     public DbSet<CashDrawer> CashDrawers { get; set; }
     public DbSet<CashDrawerUserAssignment> CashDrawerUserAssignments { get; set; }

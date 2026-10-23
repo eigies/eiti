@@ -29,5 +29,7 @@ public static class AddCustomerPaymentErrors
 
     public static readonly Error CardBankInvalid = CustomerPaymentLineErrors.CardBankInvalid;
 
+    public static readonly Error TransferBankInvalid = CustomerPaymentLineErrors.TransferBankInvalid;
+
     public static readonly Error ChequeBankInvalid = CustomerPaymentLineErrors.ChequeBankInvalid;
 }

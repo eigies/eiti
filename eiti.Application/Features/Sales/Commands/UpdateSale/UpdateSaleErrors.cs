@@ -20,6 +20,10 @@ public static class UpdateSaleErrors
         "Sales.Update.NotEditable",
         "Only sales in OnHold status can be modified.");
 
+    public static readonly Error InvoicedAmountChange = Error.Conflict(
+        "Sales.Update.InvoicedAmountChange",
+        "The sale is already invoiced: void the invoice with a credit note before changing its amount.");
+
     public static readonly Error CustomerNotFound = Error.NotFound(
         "Sales.Update.CustomerNotFound",
         "The selected customer was not found.");
