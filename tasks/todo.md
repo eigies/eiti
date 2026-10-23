@@ -166,6 +166,9 @@ real) y lo que dependa de las decisiones abiertas de abajo (cheque propio, cuent
 6. Verificación completa + sección "Revisión" acá abajo.
 
 ## Decisiones abiertas (para el usuario / el cliente)
+Estado: **4 aplicada** (`--amber-text` en `styles.css` del front). **1, 2 y 3 pendientes de respuesta del
+cliente**; las tres son agregados sobre la base (OP/RC + extracto), no la cambian, así que la base avanza igual.
+
 1. **Cheque propio** (de chequera de la empresa): hoy **no existe** en el sistema; solo hay cheques de
    cartera (de terceros) que se endosan. El mockup lo muestra. Propuesta: v1 sin cheque propio y
    sumarlo después como entidad aparte (chequera, número, vencimiento, estado debitado).
