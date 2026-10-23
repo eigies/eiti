@@ -108,6 +108,14 @@ El 21/09 a las 11:13 el encargado de una sucursal — sin `products.view_cost` �
 
 **Patrón a recordar:** cuando una entidad tiene dos modalidades de negocio (venta normal vs. CC, compra con pago inmediato vs. cuenta de proveedor), **cualquier acción que mute el estado de pago debe chequear la modalidad primero**. Si un handler genérico (`UpdateSale`) puede aplicarse a ambas modalidades sin distinguir, tarde o temprano alguien dispara el camino equivocado para la modalidad equivocada — y como cada modalidad tiene su propio ledger, el resultado no es un error visible sino datos duplicados/perdidos en silencio. Mismo espíritu que la lección de "cancelar el padre" de más abajo, pero del lado de "cobrar", no de "anular".
 
+## Otra vez un control nativo: checkbox en vez del `toggle-check` de la app - 2026-10-23
+
+**Síntoma:** el usuario marcó que "Mostrar anulados" del extracto de cuenta corriente era un checkbox nativo y no el interruptor que usa la app.
+
+**Causa raíz:** la misma que la del `<select>` de abajo. Para un filtro on/off escribí `<input type="checkbox">` sin buscar antes cómo lo resuelve la app. El patrón es `toggle-check` (`<label class="toggle-check">` + `input` + `__track` + `__text` con el estado), con los estilos en cada componente; el caso más parecido era "Mostrar sin stock" del reporte de stock. Pasó el build, 332 tests, el e2e en el navegador y las capturas: nada de eso mira consistencia.
+
+**Patrón a recordar:** antes de escribir **cualquier** control (select, checkbox/interruptor, fecha, botón de acción), `grep` del mismo tipo en otras pantallas y copiar el patrón. Para interruptores: `grep -rn "toggle-check" src/app --include=*.html`. Distinción útil: casilla para **elegir filas** (selector de productos, permisos), `toggle-check` para **prender/apagar** algo (filtros, opciones).
+
 ## Usé un `<select>` HTML nativo en vez de `app-searchable-select` - 2026-07-22
 
 **Síntoma:** el usuario notó que el selector de IVA (21% / 10,5% / Exento) en `quote-form.component.html` se veía "nativo del HTML", distinto al resto de los dropdowns de la app.
