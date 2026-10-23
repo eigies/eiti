@@ -50,20 +50,24 @@ Por qué así y no "un pago con líneas hijas":
 - [x] Migración `AddPaymentOrdersAndReceipts`.
 
 ### Registrar el pago agrupado
-- [ ] Extraer la lógica de **una línea** de `AddSupplierPaymentHandler` a `SupplierPaymentRegistrar`
-      (`Features/Suppliers/Common`): valida medio, cheque en cartera, asiento de caja, endoso, `AddCredit`
-      + FIFO. Lo usan el endpoint viejo y el nuevo, así no hay dos copias de la regla.
-- [ ] Ídem `CustomerPaymentRegistrar` (tarjeta + recargo, cheque a cartera, caja, FIFO, **confirmación de
-      stock de ventas que quedan pagas**). Esto además baja `AddCustomerPaymentHandler` a menos de 10 deps.
-- [ ] `AddSupplierPaymentOrder` (`Command`/`Validator`/`Handler`/`Response`/`Errors`):
-      `SupplierId, Date, Notes, Lines[{ Method, Amount, ChequeId?, Reference? }]`.
-      Validador: ≥ 1 línea, `Enum.IsDefined`, montos > 0, **sin cheques repetidos**. Handler: auth →
-      caja abierta (una vez) → crea la OP → registra cada línea con el registrar → **un solo
-      `SaveChangesAsync`** (todo o nada). Responde OP, total, imputaciones, saldo a favor generado.
-- [ ] `AddCustomerReceipt`: igual, con `CardBankId/CardCuotas` y `Cheque` por línea.
-- [ ] El endpoint viejo (`POST suppliers/{id}/payments`, `POST customers/{id}/payments`) pasa a crear una
-      OP/RC **de una línea**, así todo pago nuevo tiene número y el extracto es uniforme. El contrato
-      HTTP no cambia.
+- [x] `SupplierPaymentOrderService` (`Features/Suppliers/Common`, inyectable): valida **todos** los medios
+      primero (método, monto, cheque en cartera, sin cheques repetidos), después crea la OP y registra cada
+      medio con la regla de siempre (caja, endoso, `AddCredit` + FIFO con back-link por medio). Lo usan el
+      endpoint viejo y el nuevo: una sola copia de la regla. Errores de medio en `SupplierPaymentLineErrors`
+      (mismos códigos `Suppliers.AddPayment.*` de antes).
+- [x] `CustomerReceiptService` (ídem clientes: tarjeta + recargo, cheque a cartera, caja, FIFO y
+      **confirmación de stock una sola vez** por venta que queda paga). `AddCustomerPaymentHandler` bajó de
+      11 a 6 dependencias.
+- [x] `AddSupplierPaymentOrder` → `POST suppliers/{id}/payment-orders` (`Date, Notes, Lines[{ Method,
+      Amount, ChequeId?, Reference? }]`). Validador: 1–50 medios, `Enum.IsDefined` y **no** `SupplierCredit`,
+      montos > 0, cheque obligatorio con método cheque, **sin cheques repetidos**. Un solo `SaveChangesAsync`.
+- [x] `AddCustomerReceipt` → `POST customers/{id}/receipts` (líneas con `CardBankId/CardCuotas` y `Cheque`).
+- [x] Los endpoints viejos (`POST …/payments`) crean una OP/RC **de un medio**; contrato HTTP sin cambios.
+- [x] Auditoría: snapshot del recibo con sus cobros (`AddCustomerReceiptCommand`).
+- [x] Tests: 5 medios en una OP (solo el efectivo mueve caja, cheques `Entregado`, FIFO entre facturas),
+      excedente a saldo a favor, cheque fuera de cartera / repetido → nada persistido, pago suelto = OP de
+      1 medio; recibo con tarjeta + cheque + efectivo, stock confirmado una vez, banco inválido → nada
+      persistido; validadores. **398/398.**
 
 ### Anular
 - [ ] `CancelSupplierPaymentOrder`: revierte **cada línea** con `SupplierPaymentReversal` (cheques

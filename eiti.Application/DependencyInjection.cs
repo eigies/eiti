@@ -1,6 +1,8 @@
 using System.Reflection;
 using eiti.Application.Common.Behaviors;
+using eiti.Application.Features.Customers.Common;
 using eiti.Application.Features.Sales.Common;
+using eiti.Application.Features.Suppliers.Common;
 using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -23,6 +25,8 @@ public static class DependencyInjection
         services.AddValidatorsFromAssembly(assembly);
         services.AddSingleton(TimeProvider.System);
         services.AddScoped<ISaleInvoicingService, SaleInvoicingService>();
+        services.AddScoped<ISupplierPaymentOrderService, SupplierPaymentOrderService>();
+        services.AddScoped<ICustomerReceiptService, CustomerReceiptService>();
 
         return services;
     }

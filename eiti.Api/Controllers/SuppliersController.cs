@@ -1,5 +1,6 @@
 using eiti.Api.Extensions;
 using eiti.Application.Features.Suppliers.Commands.AddSupplierPayment;
+using eiti.Application.Features.Suppliers.Commands.AddSupplierPaymentOrder;
 using eiti.Application.Features.Suppliers.Commands.CancelSupplierPayment;
 using eiti.Application.Features.Suppliers.Commands.CreateSupplier;
 using eiti.Application.Features.Suppliers.Commands.DeactivateSupplier;
@@ -97,6 +98,23 @@ public sealed class SuppliersController : ControllerBase
         return result.ToActionResult();
     }
 
+    // Pago con varios medios (cheques de cartera, transferencia, efectivo) bajo una orden de pago.
+    [HttpPost("{id:guid}/payment-orders")]
+    public async Task<IActionResult> AddSupplierPaymentOrder(
+        Guid id,
+        [FromBody] AddSupplierPaymentOrderRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _sender.Send(
+            new AddSupplierPaymentOrderCommand(
+                id,
+                request.Date,
+                request.Notes,
+                request.Lines?.Select(l => new AddSupplierPaymentOrderLine(l.Method, l.Amount, l.ChequeId, l.Reference)).ToList() ?? []),
+            cancellationToken);
+        return result.ToActionResult();
+    }
+
     [HttpDelete("{id:guid}/payments/{paymentId:guid}")]
     public async Task<IActionResult> CancelSupplierPayment(
         Guid id,
@@ -146,3 +164,14 @@ public sealed record AddSupplierPaymentRequest(
     string? Reference,
     string? Notes,
     Guid? ChequeId = null);
+
+public sealed record AddSupplierPaymentOrderLineRequest(
+    int Method,
+    decimal Amount,
+    Guid? ChequeId = null,
+    string? Reference = null);
+
+public sealed record AddSupplierPaymentOrderRequest(
+    DateTime Date,
+    string? Notes,
+    IReadOnlyList<AddSupplierPaymentOrderLineRequest>? Lines);

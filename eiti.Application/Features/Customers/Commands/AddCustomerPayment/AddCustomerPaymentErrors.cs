@@ -1,4 +1,5 @@
 using eiti.Application.Common;
+using eiti.Application.Features.Customers.Common;
 
 namespace eiti.Application.Features.Customers.Commands.AddCustomerPayment;
 
@@ -8,13 +9,9 @@ public static class AddCustomerPaymentErrors
         "Customers.AddPayment.CustomerNotFound",
         "El cliente no existe.");
 
-    public static readonly Error InvalidPaymentMethod = Error.Validation(
-        "Customers.AddPayment.InvalidPaymentMethod",
-        "El método de cobro es inválido.");
+    public static readonly Error InvalidPaymentMethod = CustomerPaymentLineErrors.InvalidPaymentMethod;
 
-    public static readonly Error InvalidAmount = Error.Validation(
-        "Customers.AddPayment.InvalidAmount",
-        "El monto debe ser mayor a cero.");
+    public static readonly Error InvalidAmount = CustomerPaymentLineErrors.InvalidAmount;
 
     public static readonly Error NoCashSessionOpen = Error.Conflict(
         "Customers.AddPayment.NoCashSessionOpen",
@@ -28,15 +25,9 @@ public static class AddCustomerPaymentErrors
         "Customers.AddPayment.CashSessionFromPreviousDay",
         "La sesión de caja está abierta desde un día anterior. Cerrá la sesión antes de registrar cobros.");
 
-    public static readonly Error ChequeRequired = Error.Validation(
-        "Customers.AddPayment.ChequeRequired",
-        "Para cobrar con cheque debe completar los datos del cheque.");
+    public static readonly Error ChequeRequired = CustomerPaymentLineErrors.ChequeRequired;
 
-    public static readonly Error CardBankInvalid = Error.Validation(
-        "Customers.AddPayment.CardBankInvalid",
-        "El banco seleccionado no esta habilitado para tarjetas.");
+    public static readonly Error CardBankInvalid = CustomerPaymentLineErrors.CardBankInvalid;
 
-    public static readonly Error ChequeBankInvalid = Error.Validation(
-        "Customers.AddPayment.ChequeBankInvalid",
-        "El banco seleccionado no esta habilitado como banco emisor de cheques.");
+    public static readonly Error ChequeBankInvalid = CustomerPaymentLineErrors.ChequeBankInvalid;
 }

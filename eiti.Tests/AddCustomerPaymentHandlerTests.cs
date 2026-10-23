@@ -2,6 +2,7 @@ using eiti.Application.Abstractions.Data;
 using eiti.Application.Abstractions.Repositories;
 using eiti.Application.Abstractions.Services;
 using eiti.Application.Features.Customers.Commands.AddCustomerPayment;
+using eiti.Application.Features.Customers.Common;
 using eiti.Domain.Banks;
 using eiti.Domain.Branches;
 using eiti.Domain.Cash;
@@ -127,17 +128,24 @@ public sealed class AddCustomerPaymentHandlerTests
             .Setup(repository => repository.AddAsync(It.IsAny<Cheque>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
 
+        var receiptRepository = new Mock<ICustomerReceiptRepository>();
+
+        var receiptService = new CustomerReceiptService(
+            customerRepository.Object,
+            customerPaymentRepository.Object,
+            receiptRepository.Object,
+            saleRepository.Object,
+            bankRepository,
+            chequeRepository.Object,
+            branchProductStockRepository.Object,
+            stockMovementRepository.Object);
+
         return (new AddCustomerPaymentHandler(
             currentUserService.Object,
             customerRepository.Object,
-            customerPaymentRepository.Object,
-            saleRepository.Object,
-            branchProductStockRepository.Object,
-            stockMovementRepository.Object,
             cashDrawerRepository.Object,
             cashSessionRepository.Object,
-            bankRepository,
-            chequeRepository.Object,
+            receiptService,
             unitOfWork.Object), customer);
     }
 }
