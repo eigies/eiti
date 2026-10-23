@@ -44,7 +44,9 @@ Las NC ya lo hacen bien (`AddCredit(imputado); ConsumeCredit(monto)`).
       `AddPaymentOrdersAndReceipts`). Datos viejos se ven bien en extractos; e2e y `LedgerCheck` en verde.
 - **Bug de `main` encontrado:** `772b49b` no agregó `TransferBankId` al request de la API
   (`AddCustomerPaymentRequest`): en producción el banco de los cobros por transferencia se sigue
-  descartando. Esta rama lo mapea; los cobros cargados en producción hasta el deploy quedan sin banco.
+  descartando. Esta rama lo mapea y sale junto con todo (decisión del usuario). Test de controller
+  (JSON → request → comando) para cobro suelto y recibo; sacando el mapeo, falla. Los cobros cargados en
+  producción hasta el deploy quedan sin banco.
 
 ## Revisión
 - El test del desglose de caja agarró un error mío antes del commit: `GetValueOrDefault` sobre un
