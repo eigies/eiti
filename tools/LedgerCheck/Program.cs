@@ -6,6 +6,7 @@
 // Una diferencia significa que el extracto y la cuenta cuentan historias distintas sobre los mismos datos.
 //
 // Uso: dotnet run --project tools/LedgerCheck -- "<connection string>"
+// La base tiene que tener las migraciones de esta rama aplicadas (usa el mismo modelo que la API).
 // No escribe nada: solo manda queries (ninguna termina en "Command", así que tampoco audita).
 using eiti.Application;
 using eiti.Application.Abstractions.Services;

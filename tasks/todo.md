@@ -178,7 +178,11 @@ Por qué así y no "un pago con líneas hijas":
 - [x] Herramienta de cuadre **`tools/LedgerCheck`** (solo lectura): corre los mismos handlers de la API
       sobre cada proveedor y cliente con movimientos y lista las cuentas donde el saldo del extracto no da
       `pendiente − a favor`. Probada en Postgres local: 4/4 cuentas cuadran y detecta una diferencia inyectada.
-- [ ] **Correrla contra producción antes del release** (necesita la connection string, no la tengo):
+- [ ] **Correrla sobre los datos de producción.** Ojo: usa el modelo de esta rama, así que la base tiene que
+      tener la migración `AddPaymentOrdersAndReceipts` aplicada; contra la base actual de producción falla
+      ("la columna no existe"). Dos caminos: (a) antes del deploy, sobre una copia (`pg_dump` de Railway →
+      `pg_restore` local → levantar la API de la rama una vez contra la copia para que migre → correrla);
+      (b) contra producción justo después del deploy, que migra solo. Es de solo lectura en los dos casos:
       `dotnet run --project tools/LedgerCheck -- "<connection string>"`.
 - [x] `GetSupplierAccount` / `GetCustomerAccount` **no se tocaron**.
 
@@ -279,7 +283,7 @@ medios, el contenido del modal se salía de su fondo y dejaba ver la página de 
 - La nota de crédito de proveedores nunca tuvo grilla en su formulario (ahora sí).
 
 **Antes de pasar a `main`:**
-- [ ] Correr `tools/LedgerCheck` contra producción y revisar cada cuenta que difiera.
+- [ ] Correr `tools/LedgerCheck` sobre los datos de producción (copia migrada, o prod recién deployado) y revisar cada cuenta que difiera.
 - [ ] Decisiones 1 a 3 de abajo (cliente).
 - Deploy: la migración es **aditiva** (2 tablas + 2 columnas nullable) y se aplica sola al arrancar la API.
   El front se deploya aparte con `vercel deploy --prod`.
