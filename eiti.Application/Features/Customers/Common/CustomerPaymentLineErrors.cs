@@ -31,6 +31,10 @@ public static class CustomerPaymentLineErrors
         "Customers.AddPayment.CardBankInvalid",
         "El banco seleccionado no esta habilitado para tarjetas.");
 
+    public static readonly Error TransferBankInvalid = Error.Validation(
+        "Customers.AddPayment.TransferBankInvalid",
+        "El banco seleccionado no esta habilitado para transferencias.");
+
     public static readonly Error ChequeBankInvalid = Error.Validation(
         "Customers.AddPayment.ChequeBankInvalid",
         "El banco seleccionado no esta habilitado como banco emisor de cheques.");

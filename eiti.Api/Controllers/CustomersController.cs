@@ -142,7 +142,8 @@ public sealed class CustomersController : ControllerBase
                 request.Notes,
                 request.CardBankId,
                 request.CardCuotas,
-                request.Cheque),
+                request.Cheque,
+                request.TransferBankId),
             cancellationToken);
         return result.ToActionResult();
     }
@@ -160,7 +161,7 @@ public sealed class CustomersController : ControllerBase
                 request.Date,
                 request.Notes,
                 request.Lines?.Select(l => new AddCustomerReceiptLine(
-                    l.Method, l.Amount, l.Reference, l.CardBankId, l.CardCuotas, l.Cheque)).ToList() ?? []),
+                    l.Method, l.Amount, l.Reference, l.CardBankId, l.CardCuotas, l.Cheque, l.TransferBankId)).ToList() ?? []),
             cancellationToken);
         return result.ToActionResult();
     }
@@ -235,7 +236,8 @@ public sealed record AddCustomerPaymentRequest(
     string? Notes,
     int? CardBankId = null,
     int? CardCuotas = null,
-    AddCustomerPaymentChequeData? Cheque = null);
+    AddCustomerPaymentChequeData? Cheque = null,
+    int? TransferBankId = null);
 
 public sealed record AddCustomerReceiptLineRequest(
     int Method,
@@ -243,7 +245,8 @@ public sealed record AddCustomerReceiptLineRequest(
     string? Reference = null,
     int? CardBankId = null,
     int? CardCuotas = null,
-    CustomerPaymentChequeInput? Cheque = null);
+    CustomerPaymentChequeInput? Cheque = null,
+    int? TransferBankId = null);
 
 public sealed record AddCustomerReceiptRequest(
     DateTime Date,

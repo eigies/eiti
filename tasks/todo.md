@@ -5,15 +5,15 @@ Rama `claude/cuenta-corriente-proveedores-jkakup` (los dos repos). Son los dos h
 ## A. El banco receptor de una transferencia de cliente se pierde
 `CustomerPayment` no tiene dónde guardarlo: el front lo manda y el backend lo descarta. Consecuencia: el
 cierre de caja ("Transferencias por banco") solo cuenta ventas de mostrador, nunca cobros de cuenta corriente.
-- [ ] Dominio: `CustomerPayment.TransferBankId` + `SetTransferBank(bankId)` (solo transferencia).
-- [ ] EF + migración aditiva (`AddCustomerPaymentTransferBank`, columna nullable).
-- [ ] Servicio de recibos: `TransferBankId` opcional por medio; si viene, banco activo y habilitado para
+- [x] Dominio: `CustomerPayment.TransferBankId` + `SetTransferBank(bankId)` (solo transferencia).
+- [x] EF + migración aditiva (`AddCustomerPaymentTransferBank`, columna nullable).
+- [x] Servicio de recibos: `TransferBankId` opcional por medio; si viene, banco activo y habilitado para
       transferencias (`TransferBankInvalid`), igual que en la venta.
-- [ ] Comandos: línea del recibo y cobro suelto (request + comando).
-- [ ] Extracto: el medio muestra el banco de la transferencia.
-- [ ] Caja: el movimiento del cobro lleva el banco (sesión actual e historial) y el desglose por banco del
+- [x] Comandos: línea del recibo y cobro suelto (request + comando).
+- [x] Extracto: el medio muestra el banco de la transferencia.
+- [x] Caja: el movimiento del cobro lleva el banco (sesión actual e historial) y el desglose por banco del
       resumen suma los cobros CC por transferencia (neto: ingreso − anulación dentro de la sesión).
-- [ ] Auditoría: el snapshot del cobro incluye el banco.
+- [x] Auditoría: el snapshot del cobro incluye el banco.
 - [ ] Front: desglose por banco y renglón del cobro en caja; detalle del medio en extracto y comprobante.
 
 ## B. Anular un pago/cobro pierde el saldo a favor previo

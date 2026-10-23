@@ -5,14 +5,16 @@ using MediatR;
 
 namespace eiti.Application.Features.Customers.Commands.AddCustomerReceipt;
 
-// Un medio del recibo. Tarjeta: banco + cuotas para el recargo. Cheque recibido: sus datos (entra a cartera).
+// Un medio del recibo. Tarjeta: banco + cuotas para el recargo. Transferencia: banco que la recibió.
+// Cheque recibido: sus datos (entra a cartera).
 public sealed record AddCustomerReceiptLine(
     int Method,
     decimal Amount,
     string? Reference,
     int? CardBankId = null,
     int? CardCuotas = null,
-    CustomerPaymentChequeInput? Cheque = null);
+    CustomerPaymentChequeInput? Cheque = null,
+    int? TransferBankId = null);
 
 public sealed record AddCustomerReceiptCommand(
     Guid CustomerId,

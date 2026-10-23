@@ -65,13 +65,14 @@ public sealed class GetCustomerLedgerHandler : IRequestHandler<GetCustomerLedger
         var receipts = await _customerReceiptRepository.ListByCustomerAsync(companyId.Value, customer.Id.Value, cancellationToken);
         var creditNotes = await _creditNoteRepository.ListByCustomerAsync(companyId.Value, customer.Id.Value, cancellationToken);
 
-        // Datos de los cheques recibidos y de los bancos (cheques y tarjetas), sin N+1.
+        // Datos de los cheques recibidos y de los bancos (cheques, tarjetas y transferencias), sin N+1.
         var chequeIds = payments.Where(p => p.ChequeId.HasValue).Select(p => p.ChequeId!.Value).Distinct().ToList();
         var cheques = chequeIds.Count == 0
             ? new Dictionary<Guid, Cheque>()
             : (await _chequeRepository.ListByIdsAsync(chequeIds, companyId, cancellationToken)).ToDictionary(c => c.Id);
         var bankIds = cheques.Values.Select(c => c.BankId)
             .Concat(payments.Where(p => p.CardBankId.HasValue).Select(p => p.CardBankId!.Value))
+            .Concat(payments.Where(p => p.TransferBankId.HasValue).Select(p => p.TransferBankId!.Value))
             .Concat(sales.SelectMany(s => s.CcPayments).Where(r => r.CardBankId.HasValue).Select(r => r.CardBankId!.Value))
             .Distinct()
             .ToList();
@@ -98,7 +99,7 @@ public sealed class GetCustomerLedgerHandler : IRequestHandler<GetCustomerLedger
         {
             var (method, label) = PaymentMeansLabels.For(payment.Method);
             var cheque = payment.ChequeId is { } id ? cheques.GetValueOrDefault(id) : null;
-            var bankId = cheque?.BankId ?? payment.CardBankId;
+            var bankId = cheque?.BankId ?? payment.CardBankId ?? payment.TransferBankId;
             return new LedgerMeansResponse(
                 payment.Id,
                 method,

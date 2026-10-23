@@ -1,6 +1,8 @@
 using eiti.Application.Abstractions.Data;
 using eiti.Application.Abstractions.Repositories;
 using eiti.Application.Abstractions.Services;
+using eiti.Application.Features.CashSessions.Queries.GetCashSessionSummary;
+using eiti.Application.Features.CashSessions.Queries.GetCurrentCashSession;
 using eiti.Application.Features.Customers.Commands.AddCustomerReceipt;
 using eiti.Application.Features.Customers.Commands.CancelCustomerPayment;
 using eiti.Application.Features.Customers.Commands.CancelCustomerReceipt;
@@ -458,5 +460,126 @@ public sealed class CustomerReceiptHandlersTests
         ledger.Pending[0].Code.Should().Be("VENT-0102");
         ledger.Pending[0].Imputed.Should().Be(25_000m);
         ledger.Pending[0].Pending.Should().Be(75_000m);
+    }
+
+    // ── Banco de la transferencia ────────────────────────────────────────────
+    // Antes el front lo mandaba y el cobro no tenía dónde guardarlo: el cierre de caja nunca veía las
+    // transferencias de cuenta corriente en su desglose por banco.
+
+    [Fact]
+    public async Task Transferencia_GuardaElBancoQueLaRecibio_YElExtractoLoMuestra()
+    {
+        AddCcSale("VENT-0101", 300_000m);
+
+        (await Handler().Handle(
+            new AddCustomerReceiptCommand(_customer.Id.Value, new DateTime(2026, 10, 2), null,
+                [
+                    new AddCustomerReceiptLine((int)SalePaymentMethod.Transfer, 50_000m, "Ref. 88213", TransferBankId: _bank.Id),
+                    new AddCustomerReceiptLine((int)SalePaymentMethod.Cash, 10_000m, null, TransferBankId: _bank.Id),
+                ]),
+            CancellationToken.None)).IsSuccess.Should().BeTrue();
+
+        _payments.Single(p => p.Method == SalePaymentMethod.Transfer).TransferBankId.Should().Be(_bank.Id);
+        _payments.Single(p => p.Method == SalePaymentMethod.Cash).TransferBankId
+            .Should().BeNull("el banco receptor es solo de las transferencias");
+
+        var ledger = (await LedgerHandler().Handle(new GetCustomerLedgerQuery(_customer.Id.Value), CancellationToken.None)).Value;
+        var transfer = ledger.Rows.Single(r => r.Source == "receipt").Means.Single(m => m.Method == "transfer");
+        transfer.BankName.Should().Be("Banco Nación");
+        transfer.Reference.Should().Be("Ref. 88213");
+    }
+
+    [Fact]
+    public async Task Transferencia_AUnBancoNoHabilitado_NoRegistraNada()
+    {
+        AddCcSale("VENT-0101", 300_000m);
+        _bank = Bank.Create(_companyId, "Solo tarjetas", useForCard: true, useForTransfer: false, useForCheque: false);
+
+        var result = await Handler().Handle(
+            new AddCustomerReceiptCommand(_customer.Id.Value, new DateTime(2026, 10, 2), null,
+                [
+                    new AddCustomerReceiptLine((int)SalePaymentMethod.Cash, 10_000m, null),
+                    new AddCustomerReceiptLine((int)SalePaymentMethod.Transfer, 50_000m, null, TransferBankId: _bank.Id),
+                ]),
+            CancellationToken.None);
+
+        result.Error.Should().Be(CustomerPaymentLineErrors.TransferBankInvalid);
+        _payments.Should().BeEmpty();
+        _receipts.Should().BeEmpty();
+    }
+
+    // La caja que ve el usuario: el resumen (desglose por banco) y la sesión actual (movimientos).
+    private (GetCashSessionSummaryHandler Summary, GetCurrentCashSessionHandler Current) CashHandlers()
+    {
+        var user = new Mock<ICurrentUserService>();
+        user.SetupGet(x => x.IsAuthenticated).Returns(true);
+        user.SetupGet(x => x.CompanyId).Returns(_companyId);
+        user.SetupGet(x => x.UserId).Returns(_userId);
+        user.Setup(x => x.HasPermission(It.IsAny<string>())).Returns(true);
+
+        var sessions = new Mock<ICashSessionRepository>();
+        sessions
+            .Setup(r => r.GetByIdAsync(_session.Id, _companyId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(_session);
+        sessions
+            .Setup(r => r.GetOpenByDrawerAsync(_session.CashDrawerId, _companyId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(_session);
+
+        var sales = new Mock<ISaleRepository>();
+        sales
+            .Setup(r => r.GetPaymentsByCashSessionIdAsync(_session.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+        var banks = new Mock<IBankRepository>();
+        banks
+            .Setup(r => r.ListAsync(false, _companyId, It.IsAny<CancellationToken>(), BankUsage.All))
+            .ReturnsAsync(() => [_bank]);
+        var users = new Mock<IUserRepository>();
+        users
+            .Setup(r => r.GetUsernamesByIdsAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+
+        // Lo que resuelve la base: el banco receptor de cada cobro por transferencia pedido.
+        var payments = new Mock<ICustomerPaymentRepository>();
+        payments
+            .Setup(r => r.GetTransferBanksAsync(It.IsAny<IReadOnlyCollection<Guid>>(), _companyId.Value, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IReadOnlyCollection<Guid> ids, Guid _, CancellationToken _) => _payments
+                .Where(p => ids.Contains(p.Id) && p.TransferBankId.HasValue)
+                .ToDictionary(p => p.Id, p => p.TransferBankId!.Value));
+
+        var drawers = new Mock<ICashDrawerRepository>();
+        return (
+            new GetCashSessionSummaryHandler(user.Object, drawers.Object, sessions.Object, sales.Object, banks.Object, payments.Object),
+            new GetCurrentCashSessionHandler(user.Object, drawers.Object, sessions.Object, sales.Object,
+                new Mock<IPurchaseRepository>().Object, users.Object, payments.Object));
+    }
+
+    [Fact]
+    public async Task Caja_ElDesglosePorBancoSumaLasTransferenciasCobradas_YRestaLasAnuladas()
+    {
+        AddCcSale("VENT-0101", 300_000m);
+        (await Handler().Handle(
+            new AddCustomerReceiptCommand(_customer.Id.Value, new DateTime(2026, 10, 2), null,
+                [
+                    new AddCustomerReceiptLine((int)SalePaymentMethod.Transfer, 50_000m, null, TransferBankId: _bank.Id),
+                    new AddCustomerReceiptLine((int)SalePaymentMethod.Cash, 10_000m, null),
+                ]),
+            CancellationToken.None)).IsSuccess.Should().BeTrue();
+        var transfer = _payments.Single(p => p.Method == SalePaymentMethod.Transfer);
+        var (summary, current) = CashHandlers();
+
+        (await summary.Handle(new GetCashSessionSummaryQuery(_session.Id.Value), CancellationToken.None))
+            .Value.TransferBankBreakdown.Select(b => (b.BankName, b.Amount))
+            .Should().Equal(("Banco Nación", 50_000m));
+        var movements = (await current.Handle(new GetCurrentCashSessionQuery(_session.CashDrawerId.Value), CancellationToken.None))
+            .Value.Movements;
+        movements.Single(m => m.CustomerPaymentId == transfer.Id).TransferBankId.Should().Be(_bank.Id);
+        movements.Where(m => m.CustomerPaymentId != transfer.Id).Should().OnlyContain(m => m.TransferBankId == null);
+
+        (await CancelReceiptHandler().Handle(
+            new CancelCustomerReceiptCommand(_customer.Id.Value, _receipts.Single().Id), CancellationToken.None))
+            .IsSuccess.Should().BeTrue();
+
+        (await summary.Handle(new GetCashSessionSummaryQuery(_session.Id.Value), CancellationToken.None))
+            .Value.TransferBankBreakdown.Should().BeEmpty("cobrada y anulada en la misma sesión: neto cero");
     }
 }

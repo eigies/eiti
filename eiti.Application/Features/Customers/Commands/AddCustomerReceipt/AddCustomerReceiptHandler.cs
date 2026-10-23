@@ -69,7 +69,7 @@ public sealed class AddCustomerReceiptHandler
             command.Date,
             command.Notes,
             command.Lines
-                .Select(l => new CustomerPaymentLineInput(l.Method, l.Amount, l.Reference, l.CardBankId, l.CardCuotas, l.Cheque))
+                .Select(l => new CustomerPaymentLineInput(l.Method, l.Amount, l.Reference, l.CardBankId, l.CardCuotas, l.Cheque, l.TransferBankId))
                 .ToList(),
             companyId,
             userId,

@@ -483,6 +483,7 @@ public sealed class AuditSnapshotService : IAuditSnapshotService
             payment.CardSurchargePct,
             payment.CardSurchargeAmt,
             payment.TotalCobrado,
+            payment.TransferBankId,
             CustomerCreditBalance = customer?.CreditBalance,
             Imputaciones = imputaciones
         };

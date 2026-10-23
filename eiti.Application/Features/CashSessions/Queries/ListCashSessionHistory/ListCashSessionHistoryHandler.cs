@@ -17,6 +17,7 @@ public sealed class ListCashSessionHistoryHandler : IRequestHandler<ListCashSess
     private readonly ISaleRepository _saleRepository;
     private readonly IPurchaseRepository _purchaseRepository;
     private readonly IUserRepository _userRepository;
+    private readonly ICustomerPaymentRepository _customerPaymentRepository;
 
     public ListCashSessionHistoryHandler(
         ICurrentUserService currentUserService,
@@ -24,7 +25,8 @@ public sealed class ListCashSessionHistoryHandler : IRequestHandler<ListCashSess
         ICashSessionRepository cashSessionRepository,
         ISaleRepository saleRepository,
         IPurchaseRepository purchaseRepository,
-        IUserRepository userRepository)
+        IUserRepository userRepository,
+        ICustomerPaymentRepository customerPaymentRepository)
     {
         _currentUserService = currentUserService;
         _cashDrawerRepository = cashDrawerRepository;
@@ -32,6 +34,7 @@ public sealed class ListCashSessionHistoryHandler : IRequestHandler<ListCashSess
         _saleRepository = saleRepository;
         _purchaseRepository = purchaseRepository;
         _userRepository = userRepository;
+        _customerPaymentRepository = customerPaymentRepository;
     }
 
     public async Task<Result<IReadOnlyList<CashSessionResponse>>> Handle(ListCashSessionHistoryQuery request, CancellationToken cancellationToken)
@@ -114,6 +117,14 @@ public sealed class ListCashSessionHistoryHandler : IRequestHandler<ListCashSess
 
         var allUsernames = await _userRepository.GetUsernamesByIdsAsync(allUserIds, cancellationToken);
 
+        var allCustomerPaymentIds = sessions
+            .SelectMany(s => s.Movements)
+            .Where(m => m.CustomerPaymentId.HasValue)
+            .Select(m => m.CustomerPaymentId!.Value)
+            .ToHashSet();
+        var customerTransferBanks = await _customerPaymentRepository.GetTransferBanksAsync(
+            allCustomerPaymentIds, _currentUserService.CompanyId!.Value, cancellationToken);
+
         // Group payments by SaleId for efficient per-session lookup
         var paymentsBySaleId = allPayments
             .GroupBy(payment => payment.SaleId.Value)
@@ -143,7 +154,7 @@ public sealed class ListCashSessionHistoryHandler : IRequestHandler<ListCashSess
                 ? allCcPayments.Where(p => p.GroupId.HasValue && sessionGroupIds.Contains(p.GroupId!.Value)).ToList()
                 : [];
 
-            return CashSessionMapper.Map(session, sessionPayments, allSaleCodes, allUsernames, sessionCcPayments);
+            return CashSessionMapper.Map(session, sessionPayments, allSaleCodes, allUsernames, sessionCcPayments, customerTransferBanks);
         }).ToList();
 
         return Result<IReadOnlyList<CashSessionResponse>>.Success(result);

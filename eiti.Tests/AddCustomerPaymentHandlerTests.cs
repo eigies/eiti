@@ -79,6 +79,33 @@ public sealed class AddCustomerPaymentHandlerTests
         result.Error!.Code.Should().Be("Customers.AddPayment.ChequeBankInvalid");
     }
 
+    // Prueba además que el cobro suelto pasa el banco al servicio: antes se descartaba sin validar.
+    [Fact]
+    public async Task Handle_ShouldRejectTransferPayment_WhenBankIsNotEnabledForTransfer()
+    {
+        var companyId = CompanyId.New();
+        var bank = Bank.Create(companyId, "Banco transferencia", useForCard: true, useForTransfer: false, useForCheque: true);
+        var bankRepository = new Mock<IBankRepository>();
+        bankRepository
+            .Setup(repository => repository.GetByIdAsync(bank.Id, companyId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(bank);
+        var (handler, customer) = CreateHandler(companyId, bankRepository.Object);
+
+        var result = await handler.Handle(
+            new AddCustomerPaymentCommand(
+                customer.Id.Value,
+                (int)SalePaymentMethod.Transfer,
+                100m,
+                DateTime.UtcNow.Date,
+                "Ref. 1",
+                null,
+                TransferBankId: bank.Id),
+            CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error!.Code.Should().Be("Customers.AddPayment.TransferBankInvalid");
+    }
+
     private static (AddCustomerPaymentHandler Handler, Customer Customer) CreateHandler(
         CompanyId companyId,
         IBankRepository bankRepository)

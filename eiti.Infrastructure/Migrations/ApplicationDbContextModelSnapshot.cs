@@ -790,6 +790,9 @@ namespace eiti.Infrastructure.Migrations
                     b.Property<decimal?>("TotalCobrado")
                         .HasColumnType("decimal(18,2)");
 
+                    b.Property<int?>("TransferBankId")
+                        .HasColumnType("integer");
+
                     b.HasKey("Id");
 
                     b.HasIndex("ReceiptId");

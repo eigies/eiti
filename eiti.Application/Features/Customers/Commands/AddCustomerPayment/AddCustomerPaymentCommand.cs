@@ -24,7 +24,8 @@ public sealed record AddCustomerPaymentCommand(
     string? Notes,
     int? CardBankId = null,
     int? CardCuotas = null,
-    AddCustomerPaymentChequeData? Cheque = null
+    AddCustomerPaymentChequeData? Cheque = null,
+    int? TransferBankId = null
 ) : IRequest<Result<AddCustomerPaymentResponse>>, IRequirePermissions
 {
     public IReadOnlyCollection<string> RequiredPermissions => [PermissionCodes.SalesPay];

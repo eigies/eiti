@@ -23,14 +23,16 @@ public sealed record CustomerPaymentChequeInput(
     DateTime FechaVencimiento,
     string? Notas);
 
-// Un medio dentro de un cobro. Tarjeta: banco + cuotas para el recargo. Cheque: sus datos.
+// Un medio dentro de un cobro. Tarjeta: banco + cuotas para el recargo. Transferencia: banco que la recibió
+// (opcional, como en la venta). Cheque: sus datos.
 public sealed record CustomerPaymentLineInput(
     int Method,
     decimal Amount,
     string? Reference,
     int? CardBankId,
     int? CardCuotas,
-    CustomerPaymentChequeInput? Cheque);
+    CustomerPaymentChequeInput? Cheque,
+    int? TransferBankId = null);
 
 public sealed record CustomerReceiptOutcome(
     CustomerReceipt Receipt,
@@ -162,6 +164,13 @@ public sealed class CustomerReceiptService : ICustomerReceiptService
                     cardPlan = CardSurchargeCalculator.FindPlan(bank, line.CardCuotas.Value);
             }
 
+            if (method == SalePaymentMethod.Transfer && line.TransferBankId.HasValue)
+            {
+                var transferBank = await _bankRepository.GetByIdAsync(line.TransferBankId.Value, companyId, cancellationToken);
+                if (!BankUsageRules.Supports(transferBank, BankUsage.Transfer))
+                    return Result<CustomerReceiptOutcome>.Failure(CustomerPaymentLineErrors.TransferBankInvalid);
+            }
+
             if (method == SalePaymentMethod.Check && line.Cheque is not null)
             {
                 var chequeBank = await _bankRepository.GetByIdAsync(line.Cheque.BankId, companyId, cancellationToken);
@@ -206,6 +215,9 @@ public sealed class CustomerReceiptService : ICustomerReceiptService
                 var surchargeAmt = CardSurchargeCalculator.Compute(line.Amount, cardPlan.SurchargePct);
                 payment.SetCardData(cardBankId!.Value, cardPlan.Cuotas, cardPlan.SurchargePct, surchargeAmt);
             }
+
+            if (method == SalePaymentMethod.Transfer && line.TransferBankId is { } transferBankId)
+                payment.SetTransferBank(transferBankId);
 
             if (line.Cheque is { } c && method == SalePaymentMethod.Check)
             {

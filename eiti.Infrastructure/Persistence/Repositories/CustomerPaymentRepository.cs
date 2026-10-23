@@ -37,6 +37,18 @@ public sealed class CustomerPaymentRepository : ICustomerPaymentRepository
             .ToListAsync(ct);
     }
 
+    public async Task<IReadOnlyDictionary<Guid, int>> GetTransferBanksAsync(
+        IReadOnlyCollection<Guid> paymentIds, Guid companyId, CancellationToken ct = default)
+    {
+        if (paymentIds.Count == 0)
+            return new Dictionary<Guid, int>();
+
+        return await _db.CustomerPayments
+            .AsNoTracking()
+            .Where(p => p.CompanyId == companyId && paymentIds.Contains(p.Id) && p.TransferBankId != null)
+            .ToDictionaryAsync(p => p.Id, p => p.TransferBankId!.Value, ct);
+    }
+
     public async Task AddAsync(CustomerPayment payment, CancellationToken ct = default)
     {
         await _db.CustomerPayments.AddAsync(payment, ct);

@@ -76,7 +76,8 @@ public sealed class AddCustomerPaymentHandler : IRequestHandler<AddCustomerPayme
                     c is null
                         ? null
                         : new CustomerPaymentChequeInput(
-                            c.BankId, c.Numero, c.Titular, c.CuitDni, c.Monto, c.FechaEmision, c.FechaVencimiento, c.Notas))
+                            c.BankId, c.Numero, c.Titular, c.CuitDni, c.Monto, c.FechaEmision, c.FechaVencimiento, c.Notas),
+                    command.TransferBankId)
             ],
             companyId,
             userId,
