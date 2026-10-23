@@ -2,43 +2,40 @@ using eiti.Application.Abstractions.Data;
 using eiti.Application.Abstractions.Repositories;
 using eiti.Application.Abstractions.Services;
 using eiti.Application.Common;
-using eiti.Application.Common.Authorization;
-using eiti.Application.Features.Purchases.Common;
+using eiti.Application.Features.Suppliers.Common;
 using eiti.Domain.Cash;
-using eiti.Domain.Cheques;
 using eiti.Domain.Purchases;
 using MediatR;
 
 namespace eiti.Application.Features.Suppliers.Commands.CancelSupplierPayment;
 
+// Anula un pago suelto. Si el pago comparte orden con otros medios se rechaza: se anula la orden entera.
+// Si era el único medio de su orden, la orden queda anulada con él.
 public sealed class CancelSupplierPaymentHandler : IRequestHandler<CancelSupplierPaymentCommand, Result>
 {
     private readonly ICurrentUserService _currentUserService;
     private readonly ISupplierRepository _supplierRepository;
     private readonly ISupplierPaymentRepository _supplierPaymentRepository;
-    private readonly IPurchaseRepository _purchaseRepository;
     private readonly ICashDrawerRepository _cashDrawerRepository;
     private readonly ICashSessionRepository _cashSessionRepository;
-    private readonly IChequeRepository _chequeRepository;
+    private readonly ISupplierPaymentOrderService _supplierPaymentOrderService;
     private readonly IUnitOfWork _unitOfWork;
 
     public CancelSupplierPaymentHandler(
         ICurrentUserService currentUserService,
         ISupplierRepository supplierRepository,
         ISupplierPaymentRepository supplierPaymentRepository,
-        IPurchaseRepository purchaseRepository,
         ICashDrawerRepository cashDrawerRepository,
         ICashSessionRepository cashSessionRepository,
-        IChequeRepository chequeRepository,
+        ISupplierPaymentOrderService supplierPaymentOrderService,
         IUnitOfWork unitOfWork)
     {
         _currentUserService = currentUserService;
         _supplierRepository = supplierRepository;
         _supplierPaymentRepository = supplierPaymentRepository;
-        _purchaseRepository = purchaseRepository;
         _cashDrawerRepository = cashDrawerRepository;
         _cashSessionRepository = cashSessionRepository;
-        _chequeRepository = chequeRepository;
+        _supplierPaymentOrderService = supplierPaymentOrderService;
         _unitOfWork = unitOfWork;
     }
 
@@ -62,6 +59,10 @@ public sealed class CancelSupplierPaymentHandler : IRequestHandler<CancelSupplie
         if (supplier is null)
             return Result.Failure(CancelSupplierPaymentErrors.PaymentNotFound);
 
+        var reversible = await _supplierPaymentOrderService.EnsureReversibleAloneAsync([payment], companyId, cancellationToken);
+        if (reversible.IsFailure)
+            return reversible;
+
         // Para efectivo hay que reintegrar a la caja; otros métodos no movieron efectivo.
         // Exige caja propia (drawer asignado) o permiso CashDrawerViewAll.
         CashSession? session = null;
@@ -76,8 +77,8 @@ public sealed class CancelSupplierPaymentHandler : IRequestHandler<CancelSupplie
             session = resolve.Session;
         }
 
-        await SupplierPaymentReversal.ReverseAsync(
-            payment, supplier, session, _purchaseRepository, _chequeRepository, companyId, userId, cancellationToken);
+        await _supplierPaymentOrderService.ReversePaymentAsync(
+            payment, supplier, session, companyId, userId, cancellationToken);
         _supplierRepository.Update(supplier);
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);

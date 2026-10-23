@@ -9,8 +9,8 @@ using eiti.Domain.Users;
 namespace eiti.Application.Features.Purchases.Common;
 
 // Revierte un pago de proveedor COMPLETO, reutilizado por "anular pago" y por "anular compra (revertir el pago)".
-// Deshace las imputaciones FIFO que generó el pago (sus compras vuelven a Pendiente), revierte el saldo a favor
-// que haya generado, reintegra la caja (solo efectivo) con la sesión provista y devuelve el cheque a cartera.
+// Deshace las imputaciones FIFO que generó el pago (sus compras vuelven a Pendiente), deja el saldo a favor
+// como estaba antes del pago, reintegra la caja (solo efectivo) con la sesión provista y devuelve el cheque a cartera.
 // NO llama SaveChanges ni Update del proveedor: eso queda a cargo del handler.
 internal static class SupplierPaymentReversal
 {
@@ -39,10 +39,13 @@ internal static class SupplierPaymentReversal
             }
         }
 
-        // Si el pago generó saldo a favor, la anulación lo revierte.
-        var creditGeneratedByPayment = Math.Max(0m, payment.Amount - imputedTotal);
-        if (creditGeneratedByPayment > 0m)
-            supplier.ConsumeCredit(creditGeneratedByPayment);
+        // Desimputar devuelve `imputedTotal` al saldo disponible; de ahí sale lo que aportó ESTE pago. Misma
+        // cuenta que anular una NC: el applicator imputa todo el saldo (también el que el proveedor ya tenía)
+        // con back-link al pago, así que lo imputado puede superar su importe. La resta ingenua
+        // max(0, importe − imputado) se comía ese saldo previo.
+        if (imputedTotal > 0m)
+            supplier.AddCredit(imputedTotal);
+        supplier.ConsumeCredit(payment.Amount);
 
         // Reintegro de caja (solo efectivo) y devolución del cheque a cartera.
         session?.RegisterSupplierPaymentCancel(payment.Amount, payment.Id, userId, payment.Method);

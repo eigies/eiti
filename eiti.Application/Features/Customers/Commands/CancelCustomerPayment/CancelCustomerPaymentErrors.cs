@@ -1,4 +1,5 @@
 using eiti.Application.Common;
+using eiti.Application.Features.Customers.Common;
 
 namespace eiti.Application.Features.Customers.Commands.CancelCustomerPayment;
 
@@ -19,4 +20,6 @@ public static class CancelCustomerPaymentErrors
     public static readonly Error NoAssignedCashDrawer = Error.Conflict(
         "Customers.CancelPayment.NoAssignedCashDrawer",
         "No tenés una caja asignada para reintegrar el efectivo del cobro.");
+
+    public static readonly Error PartOfReceipt = CustomerPaymentLineErrors.PartOfReceipt;
 }

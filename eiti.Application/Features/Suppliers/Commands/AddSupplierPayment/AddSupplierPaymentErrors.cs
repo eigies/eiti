@@ -1,4 +1,5 @@
 using eiti.Application.Common;
+using eiti.Application.Features.Suppliers.Common;
 
 namespace eiti.Application.Features.Suppliers.Commands.AddSupplierPayment;
 
@@ -8,13 +9,9 @@ public static class AddSupplierPaymentErrors
         "Suppliers.AddPayment.SupplierNotFound",
         "El proveedor no existe.");
 
-    public static readonly Error InvalidPaymentMethod = Error.Validation(
-        "Suppliers.AddPayment.InvalidPaymentMethod",
-        "El método de pago es inválido.");
+    public static readonly Error InvalidPaymentMethod = SupplierPaymentLineErrors.InvalidPaymentMethod;
 
-    public static readonly Error InvalidAmount = Error.Validation(
-        "Suppliers.AddPayment.InvalidAmount",
-        "El monto debe ser mayor a cero.");
+    public static readonly Error InvalidAmount = SupplierPaymentLineErrors.InvalidAmount;
 
     public static readonly Error NoCashSessionOpen = Error.Conflict(
         "Suppliers.AddPayment.NoCashSessionOpen",
@@ -28,15 +25,9 @@ public static class AddSupplierPaymentErrors
         "Suppliers.AddPayment.CashSessionFromPreviousDay",
         "La sesión de caja está abierta desde un día anterior. Cerrá la sesión antes de registrar pagos.");
 
-    public static readonly Error ChequeRequired = Error.Validation(
-        "Suppliers.AddPayment.ChequeRequired",
-        "Para pagar con cheque debe seleccionar un cheque en cartera.");
+    public static readonly Error ChequeRequired = SupplierPaymentLineErrors.ChequeRequired;
 
-    public static readonly Error ChequeNotFound = Error.NotFound(
-        "Suppliers.AddPayment.ChequeNotFound",
-        "El cheque seleccionado no existe.");
+    public static readonly Error ChequeNotFound = SupplierPaymentLineErrors.ChequeNotFound;
 
-    public static readonly Error ChequeNotEnCartera = Error.Conflict(
-        "Suppliers.AddPayment.ChequeNotEnCartera",
-        "El cheque seleccionado no está en cartera y no puede usarse para pagar.");
+    public static readonly Error ChequeNotEnCartera = SupplierPaymentLineErrors.ChequeNotEnCartera;
 }

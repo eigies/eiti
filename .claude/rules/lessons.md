@@ -1,5 +1,32 @@
 # Lessons Learned
 
+## Saqué la rama de la rama equivocada y arreglé dos veces lo que ya estaba en main - 2026-10-23
+
+**Síntoma:** el usuario preguntó "¿revisaste la facturación?" y después "¿de qué rama partiste?". La rama de cuenta corriente del backend había salido de `feature/facturacion-electronica` (28/09), que era donde estaba parado el contenedor al arrancar, no de `develop`. `develop`/`main` le llevaban 28 commits: toda la facturación electrónica en producción y `772b49b`, que ya guardaba el banco de las transferencias de clientes. Yo lo "arreglé" otra vez con una migración propia para la misma columna: mergeada así, la API habría fallado al arrancar con "la columna ya existe".
+
+**Causa raíz:** creé la rama con "Created from HEAD" sin mirar qué era HEAD. CLAUDE.md dice que el trabajo sale de `develop`.
+
+**Cómo se resolvió:** merge de `develop` en la rama (sin reescribir lo pusheado), quedándome con la migración y el método de `main`, y una migración de prueba sobre el resultado para confirmar que salía vacía (modelo y snapshot coinciden). Después, prueba con el camino real de producción: base migrada y cargada con la API de `main`, y mi rama levantada encima.
+
+**Esa prueba encontró un bug en `main`:** `772b49b` agregó `TransferBankId` al comando, al handler, al dominio y a la migración, pero **no al request de la API** (`AddCustomerPaymentRequest` y su mapeo en `CustomersController`). El JSON lo trae y el controller lo descarta: en producción la columna existe y queda siempre vacía. Sus tests llamaban al handler directo, así que pasaban.
+
+**Patrón a recordar:**
+- Antes de crear una rama: `git fetch` y `git log --oneline HEAD..origin/develop`. Si sale algo, la base está vieja: salir de `origin/develop`, nunca de "lo que esté en HEAD".
+- Un campo nuevo en un comando no está terminado hasta que llega por HTTP: request del controller + mapeo + un test o e2e que lo mande por la API. Un test de handler no prueba el endpoint.
+- Antes de mergear migraciones, mirar las que trae la rama destino: dos migraciones sobre la misma columna no chocan en el build, chocan en el arranque de producción.
+
+## Anular un pago se comía el saldo a favor previo: el arreglo ya existía en las NC - 2026-10-23
+
+**Síntoma:** proveedor con factura de 100.000 pendiente y 50.000 de saldo a favor (conviven después de anular otro pago). Paga 30.000 → la factura queda en 20.000 y el saldo en 0. Anula ese pago → la factura vuelve a 100.000 pero el saldo queda en **0**: desaparecieron 50.000. Igual en clientes.
+
+**Causa raíz:** el applicator (`SupplierCreditApplicator` / `CustomerCreditApplicator`) imputa **todo** el saldo disponible, no solo el del pago nuevo, y marca todas esas imputaciones con el id del pago. La reversa (`SupplierPaymentReversal` / `CustomerPaymentReversal`) hacía `max(0, importe − imputado)`: cuando lo imputado superaba al pago (80.000 contra 30.000), el piso en cero se tragaba el saldo previo.
+
+**Lo que más enseña:** `CancelSupplierCreditNoteHandler` y `CancelCustomerCreditNoteHandler` **ya tenían este mismo bug arreglado**, con un comentario que lo explica ("La resta ingenua ... destruía el saldo que el cliente ya tenía"). Nadie llevó el arreglo a los pagos, que usan el mismo applicator. **Fix:** la misma cuenta que las NC: `AddCredit(imputado); ConsumeCredit(importe)`, o sea devolver lo imputado y descontar lo que aportó el pago.
+
+**Patrón a recordar:** el saldo a favor es un pozo, no una suma de aportes etiquetados. Revertir algo que alimentó el pozo es "devolver lo que sacó + sacar lo que puso", nunca `max(0, puso − sacó)`. Y cuando se arregla un bug en un camino, **grepear la misma fórmula en los caminos hermanos** (acá: `Math.Max(0m, ... - imputedTotal)`): si el arreglo queda en uno solo, el otro sigue rompiendo datos en silencio. Las cuentas históricas afectadas aparecen en `tools/LedgerCheck` con diferencia negativa.
+
+**Bonus del mismo día:** `IReadOnlyDictionary<Guid, int>.GetValueOrDefault(clave)` devuelve **0** si falta la clave, no null, aunque el resultado se asigne a un `int?`. Para "valor o null" usar `TryGetValue`. Lo agarró un test que verificaba que los movimientos que no son transferencia NO tuvieran banco.
+
 ## Enmascarar un costo con 0 en la API lo borró de la base al siguiente guardado - 2026-09-24
 
 **Síntoma:** Emiliano (Baterías Soler) reporta que "desaparecieron todos los costos de la marca MOURA". Al mirar la base los costos estaban bien: el import del 23/09 16:34 los había restaurado. El daño real estaba en las **ventas**: 26 ventas de MOURA salieron con `SaleDetail.UnitCost = 0`, $5.156.860 facturados con $2.993.652 de costo no imputado, o sea rentabilidad inflada.
@@ -80,6 +107,14 @@ El 21/09 a las 11:13 el encargado de una sucursal — sin `products.view_cost` �
 **Fix:** front redirige a `/clients-cc/customer/:customerId` si `sale.isCuentaCorriente` en vez de ejecutar el cobro rápido (esa pantalla ya permite un cobro que se imputa FIFO contra *todas* las ventas pendientes del cliente, así que no se pierde la posibilidad de cobrar varias juntas). Backend: `UpdateSaleHandler` rechaza explícitamente marcar Pagada una venta `IsCuentaCorriente` (`Sales.Update.CannotChargeCuentaCorriente`) — defensa en profundidad para que ningún otro camino (API directa, futuro bug de UI) pueda repetirlo. Dato en prod corregido a mano: se borró el `SalePayment` fantasma y se insertó un movimiento reverso en caja (mismo patrón que `RegisterSaleCancellation`) para netear el efectivo esperado a $0, sin tocar el cobro real ni el estado de la venta.
 
 **Patrón a recordar:** cuando una entidad tiene dos modalidades de negocio (venta normal vs. CC, compra con pago inmediato vs. cuenta de proveedor), **cualquier acción que mute el estado de pago debe chequear la modalidad primero**. Si un handler genérico (`UpdateSale`) puede aplicarse a ambas modalidades sin distinguir, tarde o temprano alguien dispara el camino equivocado para la modalidad equivocada — y como cada modalidad tiene su propio ledger, el resultado no es un error visible sino datos duplicados/perdidos en silencio. Mismo espíritu que la lección de "cancelar el padre" de más abajo, pero del lado de "cobrar", no de "anular".
+
+## Otra vez un control nativo: checkbox en vez del `toggle-check` de la app - 2026-10-23
+
+**Síntoma:** el usuario marcó que "Mostrar anulados" del extracto de cuenta corriente era un checkbox nativo y no el interruptor que usa la app.
+
+**Causa raíz:** la misma que la del `<select>` de abajo. Para un filtro on/off escribí `<input type="checkbox">` sin buscar antes cómo lo resuelve la app. El patrón es `toggle-check` (`<label class="toggle-check">` + `input` + `__track` + `__text` con el estado), con los estilos en cada componente; el caso más parecido era "Mostrar sin stock" del reporte de stock. Pasó el build, 332 tests, el e2e en el navegador y las capturas: nada de eso mira consistencia.
+
+**Patrón a recordar:** antes de escribir **cualquier** control (select, checkbox/interruptor, fecha, botón de acción), `grep` del mismo tipo en otras pantallas y copiar el patrón. Para interruptores: `grep -rn "toggle-check" src/app --include=*.html`. Distinción útil: casilla para **elegir filas** (selector de productos, permisos), `toggle-check` para **prender/apagar** algo (filtros, opciones).
 
 ## Usé un `<select>` HTML nativo en vez de `app-searchable-select` - 2026-07-22
 

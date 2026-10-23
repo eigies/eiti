@@ -2,6 +2,7 @@ using eiti.Application.Abstractions.Data;
 using eiti.Application.Abstractions.Repositories;
 using eiti.Application.Abstractions.Services;
 using eiti.Application.Features.Suppliers.Commands.CancelSupplierPayment;
+using eiti.Application.Features.Suppliers.Common;
 using eiti.Domain.Branches;
 using eiti.Domain.Cash;
 using eiti.Domain.Companies;
@@ -93,10 +94,14 @@ public sealed class CancelSupplierPaymentHandlerTests
             currentUserService.Object,
             supplierRepository.Object,
             supplierPaymentRepository.Object,
-            purchaseRepository.Object,
             cashDrawerRepository.Object,
             cashSessionRepository.Object,
-            new Mock<IChequeRepository>().Object,
+            new SupplierPaymentOrderService(
+                supplierRepository.Object,
+                supplierPaymentRepository.Object,
+                new Mock<ISupplierPaymentOrderRepository>().Object,
+                purchaseRepository.Object,
+                new Mock<IChequeRepository>().Object),
             unitOfWork.Object);
 
         var result = await handler.Handle(

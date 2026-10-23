@@ -1,16 +1,20 @@
 using eiti.Api.Extensions;
 using eiti.Application.Features.Customers.Commands.AddCustomerPayment;
+using eiti.Application.Features.Customers.Commands.AddCustomerReceipt;
 using eiti.Application.Features.Customers.Commands.ApplyCustomerCredit;
 using eiti.Application.Features.Customers.Commands.CreateCustomerCreditNote;
 using eiti.Application.Features.Customers.Commands.CancelCustomerCreditNote;
 using eiti.Application.Features.Customers.Commands.CancelCustomerPayment;
+using eiti.Application.Features.Customers.Commands.CancelCustomerReceipt;
 using eiti.Application.Features.Customers.Commands.CreateCustomer;
 using eiti.Application.Features.Customers.Commands.DeleteCustomer;
 using eiti.Application.Features.Customers.Commands.UpdateCustomer;
 using eiti.Application.Features.Customers.Queries.GetCustomerAccount;
+using eiti.Application.Features.Customers.Queries.GetCustomerLedger;
 using eiti.Application.Features.Customers.Queries.GetCustomerById;
 using eiti.Application.Features.Customers.Queries.GetCustomerPaymentLink;
 using eiti.Application.Features.Customers.Queries.SearchCustomers;
+using eiti.Application.Features.Customers.Common;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -109,6 +113,19 @@ public sealed class CustomersController : ControllerBase
         return result.ToActionResult();
     }
 
+    // Extracto: renglones en orden cronológico con saldo acumulado + ventas pendientes.
+    [HttpGet("{id:guid}/ledger")]
+    public async Task<IActionResult> GetCustomerLedger(
+        Guid id,
+        [FromQuery] DateTime? dateFrom,
+        [FromQuery] DateTime? dateTo,
+        [FromQuery] bool includeCancelled,
+        CancellationToken cancellationToken)
+    {
+        var result = await _sender.Send(new GetCustomerLedgerQuery(id, dateFrom, dateTo, includeCancelled), cancellationToken);
+        return result.ToActionResult();
+    }
+
     [HttpPost("{id:guid}/payments")]
     public async Task<IActionResult> AddCustomerPayment(
         Guid id,
@@ -125,8 +142,38 @@ public sealed class CustomersController : ControllerBase
                 request.Notes,
                 request.CardBankId,
                 request.CardCuotas,
-                request.Cheque),
+                request.Cheque,
+                request.TransferBankId),
             cancellationToken);
+        return result.ToActionResult();
+    }
+
+    // Cobro con varios medios (tarjeta, cheques, transferencia, efectivo) bajo un recibo.
+    [HttpPost("{id:guid}/receipts")]
+    public async Task<IActionResult> AddCustomerReceipt(
+        Guid id,
+        [FromBody] AddCustomerReceiptRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _sender.Send(
+            new AddCustomerReceiptCommand(
+                id,
+                request.Date,
+                request.Notes,
+                request.Lines?.Select(l => new AddCustomerReceiptLine(
+                    l.Method, l.Amount, l.Reference, l.CardBankId, l.CardCuotas, l.Cheque, l.TransferBankId)).ToList() ?? []),
+            cancellationToken);
+        return result.ToActionResult();
+    }
+
+    // Anula el recibo entero (todos sus medios).
+    [HttpDelete("{id:guid}/receipts/{receiptId:guid}")]
+    public async Task<IActionResult> CancelCustomerReceipt(
+        Guid id,
+        Guid receiptId,
+        CancellationToken cancellationToken)
+    {
+        var result = await _sender.Send(new CancelCustomerReceiptCommand(id, receiptId), cancellationToken);
         return result.ToActionResult();
     }
 
@@ -189,4 +236,19 @@ public sealed record AddCustomerPaymentRequest(
     string? Notes,
     int? CardBankId = null,
     int? CardCuotas = null,
-    AddCustomerPaymentChequeData? Cheque = null);
+    AddCustomerPaymentChequeData? Cheque = null,
+    int? TransferBankId = null);
+
+public sealed record AddCustomerReceiptLineRequest(
+    int Method,
+    decimal Amount,
+    string? Reference = null,
+    int? CardBankId = null,
+    int? CardCuotas = null,
+    CustomerPaymentChequeInput? Cheque = null,
+    int? TransferBankId = null);
+
+public sealed record AddCustomerReceiptRequest(
+    DateTime Date,
+    string? Notes,
+    IReadOnlyList<AddCustomerReceiptLineRequest>? Lines);

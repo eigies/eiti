@@ -1,4 +1,5 @@
 using eiti.Application.Common;
+using eiti.Application.Features.Suppliers.Common;
 
 namespace eiti.Application.Features.Suppliers.Commands.CancelSupplierPayment;
 
@@ -19,4 +20,6 @@ public static class CancelSupplierPaymentErrors
     public static readonly Error NoAssignedCashDrawer = Error.Conflict(
         "Suppliers.CancelPayment.NoAssignedCashDrawer",
         "No tenés una caja asignada para reintegrar el efectivo del pago.");
+
+    public static readonly Error PartOfOrder = SupplierPaymentLineErrors.PartOfOrder;
 }

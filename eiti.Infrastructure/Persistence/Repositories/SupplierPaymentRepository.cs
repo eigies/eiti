@@ -27,6 +27,14 @@ public sealed class SupplierPaymentRepository : ISupplierPaymentRepository
             .ToListAsync(ct);
     }
 
+    public async Task<List<SupplierPayment>> ListByOrderAsync(Guid paymentOrderId, Guid companyId, CancellationToken ct = default)
+    {
+        return await _db.SupplierPayments
+            .Where(p => p.CompanyId == companyId && p.PaymentOrderId == paymentOrderId)
+            .OrderBy(p => p.CreatedAt)
+            .ToListAsync(ct);
+    }
+
     public async Task AddAsync(SupplierPayment payment, CancellationToken ct = default)
     {
         await _db.SupplierPayments.AddAsync(payment, ct);
