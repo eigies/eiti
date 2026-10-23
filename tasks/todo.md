@@ -184,6 +184,9 @@ Por qué así y no "un pago con líneas hijas":
       `pg_restore` local → levantar la API de la rama una vez contra la copia para que migre → correrla);
       (b) contra producción justo después del deploy, que migra solo. Es de solo lectura en los dos casos:
       `dotnet run --project tools/LedgerCheck -- "<connection string>"`.
+      **Elegida (a)**: instructivo completo en `tasks/ledgercheck-copia-prod.md` (para una sesión local), con
+      la consulta de diagnóstico `saldo-a-favor-perdido.sql` y la corrección `devolver-saldo-a-favor.sql`.
+      Ensayado de punta a punta reproduciendo el bug con la API de `main`.
 - [x] `GetSupplierAccount` / `GetCustomerAccount` **no se tocaron**.
 
 ### Permisos
