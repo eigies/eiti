@@ -48,6 +48,8 @@ public sealed record GetSaleByIdResponse(
     DateTime? InvoicedAt,
     int? CreditNoteStatus,
     long? CreditNoteNumber,
+    int? DebitNoteStatus,
+    long? DebitNoteNumber,
     IReadOnlyList<GetSaleByIdDetailResponse> Details,
     IReadOnlyList<GetSaleByIdPaymentResponse> Payments,
     IReadOnlyList<GetSaleByIdCcPaymentResponse> CcPayments,

@@ -96,6 +96,19 @@ public sealed class CancelSaleHandler : IRequestHandler<CancelSaleCommand, Resul
         // Saldo a favor que vuelve al cliente al anular. "Saldo a favor": todo lo cobrado.
         var creditToReturn = hasCcPayments && command.RefundMode == CcCancellationRefundMode.Credit ? ccTotal : 0m;
 
+        // La NC sale al receptor de la factura, no al de la ficha: si la ficha cambió después de facturar, el
+        // usuario tiene que verlo antes de emitir un comprobante fiscal a un receptor que no es el de la ficha.
+        // Si el servicio fiscal no responde, se anula igual (anular es una decisión del negocio) y la NC no
+        // sale hasta poder verificarlo: queda para reintentar desde el detalle de la venta.
+        if (_saleInvoicingService.IsEnabled && !command.ConfirmInvoiceReceiver)
+        {
+            var receivers = await _saleInvoicingService.GetFiscalReceiversAsync(sale, cancellationToken);
+            if (receivers.IsAvailable && receivers.InvoiceIsLive && !receivers.CustomerMatchesInvoice)
+            {
+                return Result.Failure(CancelSaleErrors.InvoiceReceiverChanged);
+            }
+        }
+
         // "Anular los pagos": se revierten los cobros vinculados PRIMERO (vuelven la venta a pendiente y el
         // stock a reservado), y luego se cancela la venta como pendiente. Así el stock no se maneja dos veces.
         if (hasCcPayments && command.RefundMode == CcCancellationRefundMode.ReversePayments)

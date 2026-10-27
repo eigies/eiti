@@ -10,6 +10,8 @@ public static class PermissionCodes
     public const string SalesCreditNoteCreate = "sales.credit_note.create";
     public const string SalesCreditNoteCancel = "sales.credit_note.cancel";
     public const string SalesInvoice = "sales.invoice";
+    // Regularizar una NC mal emitida: emite una nota de débito y una nota de crédito que no se deshacen.
+    public const string SalesInvoiceRegularize = "sales.invoice.regularize";
 
     public const string QuotesAccess = "quotes.access";
     public const string QuotesCreate = "quotes.create";

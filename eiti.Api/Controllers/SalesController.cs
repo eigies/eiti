@@ -5,9 +5,12 @@ using eiti.Application.Features.Sales.Commands.CreateCcSale;
 using eiti.Application.Features.Sales.Commands.CreateSale;
 using eiti.Application.Features.Sales.Commands.DeleteSale;
 using eiti.Application.Features.Sales.Commands.InvoiceSale;
+using eiti.Application.Features.Sales.Commands.RegularizeSaleCreditNote;
+using eiti.Application.Features.Sales.Commands.RetrySaleCreditNote;
 using eiti.Application.Features.Sales.Commands.SendSaleWhatsApp;
 using eiti.Application.Features.Sales.Commands.UpdateSale;
 using eiti.Application.Features.Sales.Queries.GetSaleById;
+using eiti.Application.Features.Sales.Queries.GetSaleFiscalReceivers;
 using eiti.Application.Features.Sales.Queries.GetSaleInvoicePdf;
 using eiti.Application.Features.Sales.Queries.GetSaleInvoicePrint;
 using eiti.Domain.Sales;
@@ -73,10 +76,11 @@ public sealed class SalesController : ControllerBase
     public async Task<IActionResult> CancelSale(
         Guid id,
         [FromQuery] int? refundMode,
+        [FromQuery] bool confirmInvoiceReceiver,
         CancellationToken cancellationToken)
     {
         var mode = refundMode.HasValue ? (CcCancellationRefundMode?)refundMode.Value : null;
-        var result = await _sender.Send(new CancelSaleCommand(id, mode), cancellationToken);
+        var result = await _sender.Send(new CancelSaleCommand(id, mode, confirmInvoiceReceiver), cancellationToken);
         return result.ToActionResult();
     }
 
@@ -120,6 +124,44 @@ public sealed class SalesController : ControllerBase
     public async Task<IActionResult> GetCreditNotePrint(Guid id, CancellationToken cancellationToken)
     {
         var result = await _sender.Send(new GetSaleInvoicePrintQuery(id, SaleFiscalDocumentKind.CreditNote), cancellationToken);
+        return result.ToActionResult();
+    }
+
+    /// <summary>Datos para que el front arme el PDF de la nota de débito que neutralizó una NC mal emitida.</summary>
+    [HttpGet("{id:guid}/debit-note/print")]
+    public async Task<IActionResult> GetDebitNotePrint(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await _sender.Send(new GetSaleInvoicePrintQuery(id, SaleFiscalDocumentKind.DebitNote), cancellationToken);
+        return result.ToActionResult();
+    }
+
+    /// <summary>A quién se emitieron la factura y su NC (según el servicio fiscal) contra la ficha del cliente.</summary>
+    [HttpGet("{id:guid}/fiscal-receivers")]
+    public async Task<IActionResult> GetFiscalReceivers(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await _sender.Send(new GetSaleFiscalReceiversQuery(id), cancellationToken);
+        return result.ToActionResult();
+    }
+
+    /// <summary>Vuelve a pedir la NC de una venta anulada cuya factura sigue vigente.</summary>
+    [HttpPost("{id:guid}/credit-note")]
+    public async Task<IActionResult> RetryCreditNote(
+        Guid id,
+        [FromQuery] bool confirmInvoiceReceiver,
+        CancellationToken cancellationToken)
+    {
+        var result = await _sender.Send(new RetrySaleCreditNoteCommand(id, confirmInvoiceReceiver), cancellationToken);
+        return result.ToActionResult();
+    }
+
+    /// <summary>Regulariza una NC emitida a otro receptor que el de su factura (ND + NC nueva).</summary>
+    [HttpPost("{id:guid}/credit-note/regularize")]
+    public async Task<IActionResult> RegularizeCreditNote(
+        Guid id,
+        [FromQuery] bool confirm,
+        CancellationToken cancellationToken)
+    {
+        var result = await _sender.Send(new RegularizeSaleCreditNoteCommand(id, confirm), cancellationToken);
         return result.ToActionResult();
     }
 

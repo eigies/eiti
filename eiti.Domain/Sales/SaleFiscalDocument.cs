@@ -26,8 +26,8 @@ public sealed class SaleFiscalDocument : AggregateRoot<SaleFiscalDocumentId>
     /// <summary>Id del comprobante en el servicio fiscal. Es la clave con la que llega el callback.</summary>
     public Guid? FiscalDocumentId { get; private set; }
     /// <summary>
-    /// Solo en una nota de crédito: el comprobante que anula. Una NC anula una FACTURA, no una
-    /// venta — es lo que el fisco asocia (CbtesAsoc). Null en una factura.
+    /// El comprobante asociado (CbtesAsoc). En una NC, la FACTURA que anula — no la venta. En una ND,
+    /// la NC que neutraliza. Null en una factura.
     /// </summary>
     public SaleFiscalDocumentId? ReversedDocumentId { get; private set; }
     /// <summary>Tipo que resolvió el fisco (ej. "invoiceB"). Necesario para asociar la NC.</summary>
@@ -50,7 +50,15 @@ public sealed class SaleFiscalDocument : AggregateRoot<SaleFiscalDocumentId>
     /// la respuesta y se reintenta, el servicio reconoce el mismo pedido y devuelve el comprobante
     /// que ya emitió en vez de emitir otro. Un CAE no se puede des-emitir.
     /// </summary>
-    public string RequestId => $"{SaleId.Value}:{(Kind == SaleFiscalDocumentKind.Invoice ? "inv" : "cn")}:{Sequence}";
+    public string RequestId => $"{SaleId.Value}:{KindCode(Kind)}:{Sequence}";
+
+    private static string KindCode(SaleFiscalDocumentKind kind) => kind switch
+    {
+        SaleFiscalDocumentKind.Invoice => "inv",
+        SaleFiscalDocumentKind.CreditNote => "cn",
+        SaleFiscalDocumentKind.DebitNote => "dn",
+        _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unknown fiscal document kind.")
+    };
 
     /// <summary>
     /// Inversa de <see cref="RequestId"/>. Vive al lado del formato para que no se puedan
@@ -80,6 +88,7 @@ public sealed class SaleFiscalDocument : AggregateRoot<SaleFiscalDocumentId>
         {
             "inv" => SaleFiscalDocumentKind.Invoice,
             "cn" => SaleFiscalDocumentKind.CreditNote,
+            "dn" => SaleFiscalDocumentKind.DebitNote,
             _ => (SaleFiscalDocumentKind)0
         };
 
@@ -145,6 +154,56 @@ public sealed class SaleFiscalDocument : AggregateRoot<SaleFiscalDocumentId>
         }
 
         return new(SaleFiscalDocumentId.New(), companyId, saleId, SaleFiscalDocumentKind.CreditNote, sequence, reversed.Id);
+    }
+
+    /// <summary>
+    /// ND que neutraliza una NC autorizada (la asocia a ESA NC). Se usa para regularizar una NC que
+    /// salió a un receptor que no era el de la factura.
+    /// </summary>
+    public static SaleFiscalDocument CreateDebitNote(
+        CompanyId companyId,
+        SaleId saleId,
+        SaleFiscalDocument creditNote,
+        int sequence)
+    {
+        if (creditNote.Kind != SaleFiscalDocumentKind.CreditNote)
+        {
+            throw new InvalidOperationException("A debit note can only offset a credit note.");
+        }
+
+        if (!creditNote.IsAuthorized)
+        {
+            throw new InvalidOperationException("Only an authorized credit note can be offset.");
+        }
+
+        return new(SaleFiscalDocumentId.New(), companyId, saleId, SaleFiscalDocumentKind.DebitNote, sequence, creditNote.Id);
+    }
+
+    /// <summary>
+    /// NC que vuelve a anular una factura cuya NC anterior quedó neutralizada por una ND. La factura
+    /// sigue Voided (ya se anuló una vez); lo que se exige es que la NC que la anuló esté neutralizada,
+    /// para no dejar dos NC vigentes sobre la misma factura.
+    /// </summary>
+    public static SaleFiscalDocument CreateCreditNoteReplacing(
+        CompanyId companyId,
+        SaleId saleId,
+        SaleFiscalDocument invoice,
+        SaleFiscalDocument neutralizedCreditNote,
+        int sequence)
+    {
+        if (invoice.Kind != SaleFiscalDocumentKind.Invoice || invoice.Status != SaleInvoicingStatus.Voided)
+        {
+            throw new InvalidOperationException("Only an invoice voided by a credit note can be reversed again.");
+        }
+
+        if (neutralizedCreditNote.Kind != SaleFiscalDocumentKind.CreditNote ||
+            neutralizedCreditNote.ReversedDocumentId != invoice.Id ||
+            neutralizedCreditNote.Status != SaleInvoicingStatus.Voided)
+        {
+            throw new InvalidOperationException("The credit note of the invoice must be offset by a debit note first.");
+        }
+
+        return new(SaleFiscalDocumentId.New(), companyId, saleId, SaleFiscalDocumentKind.CreditNote, sequence, invoice.Id);
     }
 
     /// <summary>Idempotente: el callback del servicio fiscal es at-least-once.</summary>
@@ -231,7 +290,8 @@ public sealed class SaleFiscalDocument : AggregateRoot<SaleFiscalDocumentId>
     }
 
     /// <summary>
-    /// Anula la factura porque su nota de crédito quedó autorizada. Idempotente.
+    /// Deja sin efecto el comprobante porque se autorizó el que lo compensa: una factura, por su NC;
+    /// una NC, por la ND que la neutraliza. Idempotente.
     /// </summary>
     public void Void()
     {
@@ -240,14 +300,14 @@ public sealed class SaleFiscalDocument : AggregateRoot<SaleFiscalDocumentId>
             return;
         }
 
-        if (Kind != SaleFiscalDocumentKind.Invoice)
+        if (Kind is not (SaleFiscalDocumentKind.Invoice or SaleFiscalDocumentKind.CreditNote))
         {
-            throw new InvalidOperationException("Only an invoice can be voided.");
+            throw new InvalidOperationException("Only an invoice or a credit note can be voided.");
         }
 
         if (Status != SaleInvoicingStatus.Invoiced)
         {
-            throw new InvalidOperationException("Only an authorized invoice can be voided.");
+            throw new InvalidOperationException("Only an authorized document can be voided.");
         }
 
         Status = SaleInvoicingStatus.Voided;

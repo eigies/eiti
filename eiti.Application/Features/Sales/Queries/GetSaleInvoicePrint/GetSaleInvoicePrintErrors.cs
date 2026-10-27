@@ -16,6 +16,10 @@ public static class GetSaleInvoicePrintErrors
         "Sales.InvoicePrint.NoCreditNote",
         "La venta no tiene una nota de crédito autorizada.");
 
+    public static readonly Error NoDebitNote = Error.Conflict(
+        "Sales.InvoicePrint.NoDebitNote",
+        "La venta no tiene una nota de débito autorizada.");
+
     public static Error Unavailable(string? message) => Error.Conflict(
         "Sales.InvoicePrint.Unavailable",
         string.IsNullOrWhiteSpace(message)
