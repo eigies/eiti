@@ -60,7 +60,8 @@ public sealed class GetSaleFiscalReceiversHandler
                 SaleCreditNoteRegularizationStep.DebitNote => "debitNote",
                 SaleCreditNoteRegularizationStep.CreditNote => "creditNote",
                 _ => "none"
-            }));
+            },
+            receivers.DebitNotePrinted is null ? null : Map(receivers.DebitNotePrinted.Receiver, DocumentLabel(receivers.DebitNotePrinted))));
     }
 
     private static SaleFiscalReceiverResponse Map(FiscalReceiver? receiver, string? document) =>

@@ -252,8 +252,23 @@ public sealed class SaleInvoicingService : ISaleInvoicingService
             creditNotePrinted = printed.Document;
         }
 
+        var debitNote = documents
+            .Where(document => document.Kind == SaleFiscalDocumentKind.DebitNote && document.IsAuthorized)
+            .MaxBy(document => document.Sequence);
+        FiscalPrintableDocument? debitNotePrinted = null;
+        if (debitNote?.FiscalDocumentId is { } debitNoteId)
+        {
+            var printed = await _fiscalizationService.GetPrintableDocumentAsync(sale.CompanyId.Value, debitNoteId, cancellationToken);
+            if (!printed.IsSuccess || printed.Document is null)
+            {
+                return SaleFiscalReceivers.Unavailable(documents, ReceiverUnavailable(printed.ErrorMessage));
+            }
+
+            debitNotePrinted = printed.Document;
+        }
+
         return new SaleFiscalReceivers(true, null, documents, invoice, invoicePrinted.Document, customerReceiver,
-            creditNote, creditNotePrinted);
+            creditNote, creditNotePrinted, debitNote, debitNotePrinted);
     }
 
     public async Task<SaleCreditNoteRegularization> RegularizeCreditNoteAsync(

@@ -20,7 +20,10 @@ public sealed record SaleFiscalReceivers(
     FiscalReceiver? CustomerReceiver,
     /// <summary>Última NC autorizada de la venta, si hay.</summary>
     SaleFiscalDocument? CreditNote,
-    FiscalPrintableDocument? CreditNotePrinted)
+    FiscalPrintableDocument? CreditNotePrinted,
+    /// <summary>Última ND autorizada (regularización), si hay.</summary>
+    SaleFiscalDocument? DebitNote = null,
+    FiscalPrintableDocument? DebitNotePrinted = null)
 {
     public bool InvoiceIsLive => Invoice?.Status == SaleInvoicingStatus.Invoiced;
 

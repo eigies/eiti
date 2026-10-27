@@ -147,14 +147,19 @@ public sealed class SaleCreditNoteReceiverTests
     {
         var invoice = Invoice();
         var wrongCreditNote = CreditNote(invoice);
+        var debitNoteId = Guid.NewGuid();
         var debitNote = SaleFiscalDocument.CreateDebitNote(_companyId, _sale.Id, wrongCreditNote, 1);
-        debitNote.Authorize(Guid.NewGuid(), "debitNoteA", 10, 1, "77001", null, null, DateTime.UtcNow);
+        debitNote.Authorize(debitNoteId, "debitNoteA", 10, 1, "77001", null, null, DateTime.UtcNow);
         wrongCreditNote.Void();
         _documents.Add(debitNote);
+        _fiscal.Setup(x => x.GetPrintableDocumentAsync(_companyId.Value, debitNoteId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Printed("debitNoteA", 1, Registered(CurrentCuit),
+                new FiscalAssociatedDocument("creditNoteA", 10, 4, new DateOnly(2026, 10, 27))));
         var service = Service();
         var receivers = await service.GetFiscalReceiversAsync(_sale, CancellationToken.None);
 
         receivers.RegularizationStep.Should().Be(SaleCreditNoteRegularizationStep.CreditNote);
+        receivers.DebitNotePrinted!.Receiver!.DocNumber.Should().Be(CurrentCuit, "the debit note is shown with its receiver");
         var result = await service.RegularizeCreditNoteAsync(_sale, receivers, CancellationToken.None);
 
         result.Completed.Should().BeTrue();
