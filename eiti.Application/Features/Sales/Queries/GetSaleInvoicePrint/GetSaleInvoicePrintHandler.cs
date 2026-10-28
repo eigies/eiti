@@ -55,17 +55,22 @@ public sealed class GetSaleInvoicePrintHandler
         var document = query.Kind == SaleFiscalDocumentKind.Invoice
             // Vigente o anulada: las dos tuvieron CAE y se tienen que poder reimprimir.
             ? SaleInvoicingView.From(documents).PrintableInvoice
+            // NC/ND: la vigente; si no hay, la última que tuvo CAE (una NC neutralizada por su ND también existió).
             : documents
-                .Where(candidate => candidate.Kind == SaleFiscalDocumentKind.CreditNote
-                    && candidate.Status == SaleInvoicingStatus.Invoiced)
-                .OrderByDescending(candidate => candidate.Sequence)
+                .Where(candidate => candidate.Kind == query.Kind
+                    && candidate.Status is SaleInvoicingStatus.Invoiced or SaleInvoicingStatus.Voided)
+                .OrderByDescending(candidate => candidate.Status == SaleInvoicingStatus.Invoiced)
+                .ThenByDescending(candidate => candidate.Sequence)
                 .FirstOrDefault();
 
         if (document?.FiscalDocumentId is null)
         {
-            return Result.Failure<SaleInvoicePrintResponse>(query.Kind == SaleFiscalDocumentKind.Invoice
-                ? GetSaleInvoicePrintErrors.NotInvoiced
-                : GetSaleInvoicePrintErrors.NoCreditNote);
+            return Result.Failure<SaleInvoicePrintResponse>(query.Kind switch
+            {
+                SaleFiscalDocumentKind.Invoice => GetSaleInvoicePrintErrors.NotInvoiced,
+                SaleFiscalDocumentKind.DebitNote => GetSaleInvoicePrintErrors.NoDebitNote,
+                _ => GetSaleInvoicePrintErrors.NoCreditNote
+            });
         }
 
         var fiscal = await _fiscalizationService.GetPrintableDocumentAsync(
@@ -107,7 +112,12 @@ public sealed class GetSaleInvoicePrintHandler
         var associated = printed.AssociatedDocument;
 
         return Result.Success(new SaleInvoicePrintResponse(
-            Kind: query.Kind == SaleFiscalDocumentKind.Invoice ? "invoice" : "creditNote",
+            Kind: query.Kind switch
+            {
+                SaleFiscalDocumentKind.Invoice => "invoice",
+                SaleFiscalDocumentKind.DebitNote => "debitNote",
+                _ => "creditNote"
+            },
             Letter: type.Value.Letter,
             TypeCode: type.Value.Code,
             Title: type.Value.Title,

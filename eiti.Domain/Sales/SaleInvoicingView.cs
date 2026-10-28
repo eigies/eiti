@@ -17,7 +17,9 @@ public sealed record SaleInvoicingView(
     /// imprimir: una factura anulada sigue siendo un documento legal que existió y hay que poder
     /// reimprimir. Null si nunca se autorizó ninguna.
     /// </summary>
-    SaleFiscalDocument? PrintableInvoice)
+    SaleFiscalDocument? PrintableInvoice,
+    /// <summary>Última ND (regularización de una NC mal emitida), en cualquier estado. Null si no hubo.</summary>
+    SaleFiscalDocument? DebitNote = null)
 {
     public static readonly SaleInvoicingView Empty =
         new(SaleInvoicingStatus.NotInvoiced, null, null, CanInvoice: true, PrintableInvoice: null);
@@ -51,6 +53,11 @@ public sealed record SaleInvoicingView(
             .OrderByDescending(document => document.Sequence)
             .FirstOrDefault();
 
+        var debitNote = all
+            .Where(document => document.Kind == SaleFiscalDocumentKind.DebitNote)
+            .OrderByDescending(document => document.Sequence)
+            .FirstOrDefault();
+
         // Vigente o anulada: las dos tuvieron CAE, las dos tienen PDF.
         var printable = invoices
             .Where(document => document.Status is SaleInvoicingStatus.Invoiced or SaleInvoicingStatus.Voided)
@@ -62,7 +69,8 @@ public sealed record SaleInvoicingView(
             invoice,
             creditNote,
             CanInvoice: live is null && !inProgress,
-            PrintableInvoice: printable);
+            PrintableInvoice: printable,
+            DebitNote: debitNote);
     }
 
     /// <summary>Factura sobre la que se puede operar (descargar el PDF, emitirle una NC).</summary>
