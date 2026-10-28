@@ -138,3 +138,15 @@
 - En este proyecto, una migracion EF no se considera entregable si no incluye los tres artefactos sincronizados: `.cs`, `.Designer.cs` y `ApplicationDbContextModelSnapshot.cs`
 - Cuando se migra de una columna legacy a una tabla nueva, conviene preservar compatibilidad en contratos API por una iteracion (`AssignedUserId` + `AssignedUserIds`) y mover la persistencia por debajo
 - Si el negocio es `una caja muchos usuarios` pero `un usuario una caja`, la restriccion correcta va en base de datos con `UNIQUE(UserId)`, no en validaciones dispersas de UI
+
+## 2026-10-27 — Facturación: receptor de la NC, nota de débito y regularización
+### Correcciones del usuario
+- **Los datos fiscales de un comprobante emitido son del servicio de facturación.** Propuse guardar el receptor también en EITI y no correspondía: antes de proponer dónde guardar un dato, revisar qué sistema ya es dueño de él (el servicio guarda el pedido completo y lo expone en `GET /api/fiscal-documents/{id}`).
+- **Las invariantes fiscales son del servicio, no del cliente.** "Una NC/ND va al receptor de su comprobante asociado" lo controla eiti-fiscalization; EITI decide qué se anula y cuándo, no cómo se emite.
+- **Nunca reemplazar en silencio un dato fiscal.** Si lo que se va a emitir no es lo que el usuario ve en la ficha, se le muestran los dos (CUIT facturado vs. ficha) y confirma. Un comprobante fiscal emitido sin que el usuario lo sepa es peor que un error.
+- **Primero el mapa completo, después el código.** En cambios que cruzan repos (servicio, back, front), leer la arquitectura de cada uno (su CLAUDE.md / README) y relevar los flujos antes de tocar nada.
+
+### Errores propios
+- `psql` en Windows ignora las opciones que van DESPUÉS de la URL: `psql -v ON_ERROR_STOP=1 -f archivo.sql $env:PROD_URL`, nunca `psql $env:PROD_URL -f ...` (abre una sesión interactiva y no corre nada).
+- `AuditLogs.Timestamp` y los `CreatedAt` de la base están en UTC: al armar un timeline para el usuario, convertir a hora argentina (UTC−3).
+- Un `Set-Content -Encoding utf8` en PowerShell 5.1 escribe BOM y `psql` lo toma como parte del primer comando: escribir los .sql con `UTF8Encoding($false)`.

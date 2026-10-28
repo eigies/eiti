@@ -24,6 +24,8 @@ public sealed class AuditSnapshotService : IAuditSnapshotService
         "UpdateSaleCommand",
         "DeleteSaleCommand",
         "CancelSaleCommand",
+        "RetrySaleCreditNoteCommand",
+        "RegularizeSaleCreditNoteCommand",
         "SendSaleWhatsAppCommand",
         "AddCcPaymentCommand",
         "AddCcPaymentGroupCommand",

@@ -13,9 +13,14 @@ public enum CcCancellationRefundMode
     ReversePayments = 2
 }
 
+/// <param name="ConfirmInvoiceReceiver">
+/// El usuario vio que la factura se emitió a otro receptor que el de la ficha actual del cliente y confirmó
+/// que la nota de crédito salga al de la factura. Sin esto, con receptores distintos no se anula nada.
+/// </param>
 public sealed record CancelSaleCommand(
     Guid Id,
-    CcCancellationRefundMode? RefundMode = null
+    CcCancellationRefundMode? RefundMode = null,
+    bool ConfirmInvoiceReceiver = false
 ) : IRequest<Result>, IRequirePermissions
 {
     public IReadOnlyCollection<string> RequiredPermissions => [PermissionCodes.SalesDelete];

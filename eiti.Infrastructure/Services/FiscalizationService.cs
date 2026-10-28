@@ -484,6 +484,8 @@ public sealed class FiscalizationService : IFiscalizationService
             "La empresa tiene más de un perfil fiscal activo en el servicio de facturación: hay que desactivar el que ya no se usa.",
         ["Arca.ReceiverIsIssuer"] =
             "El cliente tiene el mismo CUIT que quien factura: no se puede facturar a uno mismo. Elegí otro cliente.",
+        ["Document.AssociatedReceiverMismatch"] =
+            "El servicio de facturación no emite una nota de crédito o débito a otro receptor que el del comprobante que anula o ajusta. Revisá a quién se emitió la factura.",
         ["Arca.ReceiverIdentificationRequired"] =
             "El monto supera el tope de ARCA para facturar a un consumidor final sin identificar. Asigná un cliente a la venta con su DNI o CUIT cargado y volvé a facturar."
     };

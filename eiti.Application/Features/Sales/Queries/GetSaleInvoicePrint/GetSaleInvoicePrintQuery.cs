@@ -7,7 +7,8 @@ namespace eiti.Application.Features.Sales.Queries.GetSaleInvoicePrint;
 
 /// <summary>
 /// Datos para que el front arme el PDF del comprobante con el diseño de EITI (logo, marca de agua,
-/// ítems). <see cref="Kind"/> elige entre la factura de la venta y la nota de crédito que la anuló.
+/// ítems). <see cref="Kind"/> elige entre la factura de la venta, la nota de crédito que la anuló y la nota de
+/// débito que neutralizó una NC mal emitida.
 /// </summary>
 public sealed record GetSaleInvoicePrintQuery(Guid SaleId, SaleFiscalDocumentKind Kind)
     : IRequest<Result<SaleInvoicePrintResponse>>, IRequirePermissions

@@ -83,6 +83,7 @@ public sealed class GetSaleByIdHandler : IRequestHandler<GetSaleByIdQuery, Resul
         var invoicing = SaleInvoicingView.From(fiscalDocuments);
         var invoice = invoicing.Invoice;
         var creditNote = invoicing.CreditNote;
+        var debitNote = invoicing.DebitNote;
 
         string? customerDocument = null;
         if (customer?.DocumentType is not null && !string.IsNullOrWhiteSpace(customer.DocumentNumber))
@@ -139,6 +140,8 @@ public sealed class GetSaleByIdHandler : IRequestHandler<GetSaleByIdQuery, Resul
                 invoice?.IssuedAt,
                 (int?)creditNote?.Status,
                 creditNote?.Number,
+                (int?)debitNote?.Status,
+                debitNote?.Number,
                 sale.Details.Select(detail => new GetSaleByIdDetailResponse(
                     detail.ProductId.Value,
                     GetProductName(productMap, detail.ProductId.Value),

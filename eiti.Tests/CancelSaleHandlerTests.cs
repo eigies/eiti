@@ -161,6 +161,70 @@ public sealed class CancelSaleHandlerTests
         ctx.Customer.CreditBalance.Should().Be(0m);
     }
 
+    // ── Factura emitida a otro receptor que el de la ficha ──────────────────────
+    // La NC sale al receptor de la factura; si la ficha cambió después de facturar, el usuario tiene que verlo
+    // y confirmarlo antes de anular (MAT-3705: la NC salió a otro CUIT sin que nadie lo viera).
+
+    [Fact]
+    public async Task Handle_InvoiceReceiverChanged_ShouldNotCancelWithoutConfirmation()
+    {
+        var ctx = new CcCancelContext();
+        var sale = ctx.CreateCcSale(200000m);
+        ctx.InvoiceIssuedTo(customerMatches: false);
+
+        var result = await ctx.Handler.Handle(new CancelSaleCommand(sale.Id.Value), CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("Sales.Cancel.InvoiceReceiverChanged");
+        sale.SaleStatus.Should().NotBe(SaleStatus.Cancel, "nothing is touched before the user confirms");
+        ctx.Invoicing.Verify(x => x.IssueCreditNoteAsync(It.IsAny<Sale>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Handle_InvoiceReceiverChanged_Confirmed_ShouldCancelAndIssueTheCreditNote()
+    {
+        var ctx = new CcCancelContext();
+        var sale = ctx.CreateCcSale(200000m);
+        ctx.InvoiceIssuedTo(customerMatches: false);
+
+        var result = await ctx.Handler.Handle(
+            new CancelSaleCommand(sale.Id.Value, ConfirmInvoiceReceiver: true), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        sale.SaleStatus.Should().Be(SaleStatus.Cancel);
+        ctx.Invoicing.Verify(x => x.IssueCreditNoteAsync(sale, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Handle_SameInvoiceReceiver_ShouldCancelWithoutAsking()
+    {
+        var ctx = new CcCancelContext();
+        var sale = ctx.CreateCcSale(200000m);
+        ctx.InvoiceIssuedTo(customerMatches: true);
+
+        var result = await ctx.Handler.Handle(new CancelSaleCommand(sale.Id.Value), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        sale.SaleStatus.Should().Be(SaleStatus.Cancel);
+    }
+
+    // Anular es una decisión del negocio: sin el servicio fiscal se anula igual, y la NC no sale sin poder
+    // verificar el receptor (queda para reintentar desde el detalle).
+    [Fact]
+    public async Task Handle_FiscalServiceUnavailable_ShouldStillCancel()
+    {
+        var ctx = new CcCancelContext();
+        var sale = ctx.CreateCcSale(200000m);
+        ctx.Invoicing.SetupGet(x => x.IsEnabled).Returns(true);
+        ctx.Invoicing.Setup(x => x.GetFiscalReceiversAsync(sale, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(SaleFiscalReceivers.Unavailable([], "No se pudo contactar al servicio de facturación."));
+
+        var result = await ctx.Handler.Handle(new CancelSaleCommand(sale.Id.Value), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        sale.SaleStatus.Should().Be(SaleStatus.Cancel);
+    }
+
     private sealed class CcCancelContext
     {
         public CompanyId CompanyId { get; } = CompanyId.New();
@@ -170,6 +234,7 @@ public sealed class CancelSaleHandlerTests
         public Mock<ISaleRepository> SaleRepository { get; } = new();
         public Mock<ICustomerPaymentRepository> CustomerPaymentRepository { get; } = new();
         public Mock<ICustomerReceiptService> CustomerReceiptService { get; } = new();
+        public Mock<ISaleInvoicingService> Invoicing { get; } = new();
         public CancelSaleHandler Handler { get; }
 
         private readonly Mock<IBranchProductStockRepository> _stockRepository = new();
@@ -208,7 +273,7 @@ public sealed class CancelSaleHandlerTests
                 customerRepository.Object,
                 CustomerPaymentRepository.Object,
                 CustomerReceiptService.Object,
-                new Mock<ISaleInvoicingService>().Object,
+                Invoicing.Object,
                 new Mock<IUnitOfWork>().Object);
         }
 
@@ -229,7 +294,34 @@ public sealed class CancelSaleHandlerTests
                 .Setup(x => x.GetByIdAsync(sale.Id, It.IsAny<CancellationToken>()))
                 .ReturnsAsync(sale);
 
+            _sale = sale;
             return sale;
+        }
+
+        private Sale? _sale;
+
+        /// <summary>
+        /// La venta tiene factura A vigente a CUIT 30-68225650-4. Si <paramref name="customerMatches"/> es false,
+        /// la ficha del cliente hoy dice otro CUIT (el caso de MAT-3705).
+        /// </summary>
+        public void InvoiceIssuedTo(bool customerMatches)
+        {
+            var invoice = SaleFiscalDocument.CreateInvoice(CompanyId, _sale!.Id, 1);
+            invoice.Authorize(Guid.NewGuid(), "invoiceA", 10, 39, "86428718520200", null, null, DateTime.UtcNow);
+            var invoiceReceiver = new FiscalReceiver(FiscalReceiverVatCondition.Registered, "CUIT", "30682256504", "TRANSPORTE OLIVOS S.A -");
+            var customerReceiver = customerMatches ? invoiceReceiver : invoiceReceiver with { DocNumber = "30517431431" };
+            var printed = new FiscalPrintableDocument("invoiceA", 10, 39, new DateOnly(2026, 10, 21), "86428718520200",
+                new DateOnly(2026, 10, 31), "https://qr",
+                new FiscalIssuer("SOLER EMILIANO JULIAN", "20397583857", FiscalReceiverVatCondition.Registered, null, new DateOnly(2024, 10, 1)),
+                new FiscalAmounts(165289.26m, [new FiscalVatAmount(21m, 165289.26m, 34710.74m)], 0m, 200000m),
+                invoiceReceiver,
+                null);
+
+            Invoicing.SetupGet(x => x.IsEnabled).Returns(true);
+            Invoicing.Setup(x => x.GetFiscalReceiversAsync(_sale, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new SaleFiscalReceivers(true, null, [invoice], invoice, printed, customerReceiver, null, null));
+            Invoicing.Setup(x => x.IssueCreditNoteAsync(_sale, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new SaleInvoicingOutcome(true, SaleInvoicingStatus.Invoiced));
         }
     }
 }

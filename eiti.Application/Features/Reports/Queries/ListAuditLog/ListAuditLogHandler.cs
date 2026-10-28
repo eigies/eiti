@@ -291,6 +291,8 @@ public sealed class ListAuditLogHandler : IRequestHandler<ListAuditLogQuery, Res
         actionType is "UpdateSaleCommand"
             or "DeleteSaleCommand"
             or "CancelSaleCommand"
+            or "RetrySaleCreditNoteCommand"
+            or "RegularizeSaleCreditNoteCommand"
             or "SendSaleWhatsAppCommand";
 
     private static bool TryGetString(JsonNode? node, out string value)

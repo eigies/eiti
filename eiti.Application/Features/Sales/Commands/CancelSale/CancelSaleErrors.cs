@@ -28,6 +28,12 @@ public static class CancelSaleErrors
         "Sales.Cancel.RefundModeRequired",
         "La venta tiene cobros: indicá si vuelven como saldo a favor o si se anulan los pagos.");
 
+    // El front reacciona a este código: consulta los receptores (GET sales/{id}/fiscal-receivers), muestra los
+    // dos y reenvía la anulación con confirmInvoiceReceiver=true si el usuario confirma.
+    public static readonly Error InvoiceReceiverChanged = Error.Validation(
+        "Sales.Cancel.InvoiceReceiverChanged",
+        "La factura se emitió a otro receptor que el de la ficha actual del cliente. La nota de crédito tiene que salir al receptor de la factura: confirmalo para anular.");
+
     public static readonly Error CustomerNotFound = Error.NotFound(
         "Sales.Cancel.CustomerNotFound",
         "No se encontró el cliente de la venta para acreditar el saldo a favor.");

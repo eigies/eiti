@@ -22,8 +22,26 @@ public interface ISaleInvoicingService
     /// <summary>Emite (o reintenta) la factura de la venta. No lanza: informa por el resultado.</summary>
     Task<SaleInvoicingOutcome> InvoiceAsync(Sale sale, CancellationToken cancellationToken);
 
-    /// <summary>Emite la nota de crédito que anula la factura de la venta.</summary>
+    /// <summary>
+    /// Emite la nota de crédito que anula la factura vigente de la venta, al receptor de ESA factura
+    /// (no al de la ficha actual del cliente).
+    /// </summary>
     Task<SaleInvoicingOutcome> IssueCreditNoteAsync(Sale sale, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// A quién se emitieron la factura y su NC (según el servicio fiscal) contra la ficha actual del cliente.
+    /// Es lo que se le muestra al usuario antes de emitir algo a un receptor que no es el de la ficha.
+    /// </summary>
+    Task<SaleFiscalReceivers> GetFiscalReceiversAsync(Sale sale, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Regulariza una NC emitida a otro receptor que el de su factura: ND a ese receptor (neutraliza la NC) y
+    /// después NC al receptor de la factura. Retoma desde donde quedó si se cortó a mitad de camino.
+    /// </summary>
+    Task<SaleCreditNoteRegularization> RegularizeCreditNoteAsync(
+        Sale sale,
+        SaleFiscalReceivers receivers,
+        CancellationToken cancellationToken);
 }
 
 public sealed record SaleInvoicingOutcome(
@@ -31,6 +49,16 @@ public sealed record SaleInvoicingOutcome(
     SaleInvoicingStatus Status,
     SaleFiscalDocument? Document = null,
     string? Message = null);
+
+/// <param name="DebitNote">Null si no hizo falta emitirla en esta pasada (ya estaba autorizada).</param>
+/// <param name="CreditNote">Null si todavía no se pudo emitir (la ND no quedó autorizada).</param>
+public sealed record SaleCreditNoteRegularization(
+    SaleInvoicingOutcome? DebitNote,
+    SaleInvoicingOutcome? CreditNote,
+    string? Message = null)
+{
+    public bool Completed => CreditNote is { IsSuccess: true, Status: SaleInvoicingStatus.Invoiced };
+}
 
 public sealed class SaleInvoicingService : ISaleInvoicingService
 {
@@ -140,13 +168,15 @@ public sealed class SaleInvoicingService : ISaleInvoicingService
         var documents = await _fiscalDocuments.ListBySaleAsync(sale.Id, sale.CompanyId, cancellationToken);
         var invoice = SaleInvoicingView.From(documents).LiveInvoice;
 
-        if (invoice is null || invoice.Number is null || invoice.PointOfSale is null || invoice.DocumentType is null)
+        if (invoice is null || invoice.FiscalDocumentId is null || invoice.Number is null ||
+            invoice.PointOfSale is null || invoice.DocumentType is null)
         {
             return new SaleInvoicingOutcome(false, SaleInvoicingStatus.NotInvoiced,
                 Message: "La venta no tiene una factura vigente a la que asociar la nota de crédito.");
         }
 
         var creditNote = SaleFiscalDocumentRules.InFlight(documents, SaleFiscalDocumentKind.CreditNote);
+        var opensNewAttempt = creditNote is null;
 
         if (creditNote is null)
         {
@@ -159,22 +189,23 @@ public sealed class SaleInvoicingService : ISaleInvoicingService
             await _fiscalDocuments.AddAsync(creditNote, cancellationToken);
         }
 
-        var request = new FiscalDocumentRequest(
-            RequestId: creditNote.RequestId,
-            TenantId: sale.CompanyId.Value,
-            RequestedType: FiscalRequestedDocumentType.CreditNote,
-            Receiver: BuildReceiver(await LoadCustomerAsync(sale, cancellationToken)),
-            Amounts: BuildAmounts(sale),
-            Date: DateOnly.FromDateTime(DateTime.UtcNow),
-            PointOfSale: invoice.PointOfSale,
-            AssociatedDocument: new FiscalAssociatedDocument(
-                invoice.DocumentType,
-                invoice.PointOfSale.Value,
-                invoice.Number.Value,
-                DateOnly.FromDateTime(invoice.IssuedAt ?? sale.CreatedAt)));
+        // Receptor e importes de la factura EMITIDA, según el servicio fiscal: la NC anula ese comprobante.
+        // La ficha del cliente puede haber cambiado después de facturar; si difiere, quien llama ya se lo
+        // mostró al usuario (CancelSale / RetrySaleCreditNote piden confirmación).
+        var printed = await _fiscalizationService.GetPrintableDocumentAsync(
+            sale.CompanyId.Value, invoice.FiscalDocumentId.Value, cancellationToken);
+        if (!printed.IsSuccess || printed.Document is null)
+        {
+            return NotSent(creditNote, opensNewAttempt, ReceiverUnavailable(printed.ErrorMessage));
+        }
 
-        var result = await _fiscalizationService.RequestDocumentAsync(request, cancellationToken);
-        var outcome = Apply(creditNote, result);
+        var outcome = await RequestAsync(
+            creditNote,
+            sale,
+            FiscalRequestedDocumentType.CreditNote,
+            printed.Document,
+            invoice,
+            cancellationToken);
 
         // Si la NC quedó autorizada acá mismo, la factura se anula ya. Si quedó encolada, lo hace
         // el callback — por el mismo camino.
@@ -182,6 +213,202 @@ public sealed class SaleInvoicingService : ISaleInvoicingService
 
         return outcome;
     }
+
+    public async Task<SaleFiscalReceivers> GetFiscalReceiversAsync(Sale sale, CancellationToken cancellationToken)
+    {
+        var documents = await _fiscalDocuments.ListBySaleAsync(sale.Id, sale.CompanyId, cancellationToken);
+        var customerReceiver = BuildReceiver(await LoadCustomerAsync(sale, cancellationToken));
+        var invoice = SaleInvoicingView.From(documents).PrintableInvoice;
+
+        if (invoice?.FiscalDocumentId is null)
+        {
+            return new SaleFiscalReceivers(true, null, documents, null, null, customerReceiver, null, null);
+        }
+
+        if (!_fiscalizationService.IsEnabled)
+        {
+            return SaleFiscalReceivers.Unavailable(documents, "El servicio de facturación no está configurado.");
+        }
+
+        var invoicePrinted = await _fiscalizationService.GetPrintableDocumentAsync(
+            sale.CompanyId.Value, invoice.FiscalDocumentId.Value, cancellationToken);
+        if (!invoicePrinted.IsSuccess || invoicePrinted.Document is null)
+        {
+            return SaleFiscalReceivers.Unavailable(documents, ReceiverUnavailable(invoicePrinted.ErrorMessage));
+        }
+
+        var creditNote = documents
+            .Where(document => document.Kind == SaleFiscalDocumentKind.CreditNote && document.IsAuthorized)
+            .MaxBy(document => document.Sequence);
+        FiscalPrintableDocument? creditNotePrinted = null;
+        if (creditNote?.FiscalDocumentId is { } creditNoteId)
+        {
+            var printed = await _fiscalizationService.GetPrintableDocumentAsync(sale.CompanyId.Value, creditNoteId, cancellationToken);
+            if (!printed.IsSuccess || printed.Document is null)
+            {
+                return SaleFiscalReceivers.Unavailable(documents, ReceiverUnavailable(printed.ErrorMessage));
+            }
+
+            creditNotePrinted = printed.Document;
+        }
+
+        var debitNote = documents
+            .Where(document => document.Kind == SaleFiscalDocumentKind.DebitNote && document.IsAuthorized)
+            .MaxBy(document => document.Sequence);
+        FiscalPrintableDocument? debitNotePrinted = null;
+        if (debitNote?.FiscalDocumentId is { } debitNoteId)
+        {
+            var printed = await _fiscalizationService.GetPrintableDocumentAsync(sale.CompanyId.Value, debitNoteId, cancellationToken);
+            if (!printed.IsSuccess || printed.Document is null)
+            {
+                return SaleFiscalReceivers.Unavailable(documents, ReceiverUnavailable(printed.ErrorMessage));
+            }
+
+            debitNotePrinted = printed.Document;
+        }
+
+        return new SaleFiscalReceivers(true, null, documents, invoice, invoicePrinted.Document, customerReceiver,
+            creditNote, creditNotePrinted, debitNote, debitNotePrinted);
+    }
+
+    public async Task<SaleCreditNoteRegularization> RegularizeCreditNoteAsync(
+        Sale sale,
+        SaleFiscalReceivers receivers,
+        CancellationToken cancellationToken)
+    {
+        if (!receivers.IsAvailable)
+        {
+            return new SaleCreditNoteRegularization(null, null, receivers.UnavailableReason);
+        }
+
+        var step = receivers.RegularizationStep;
+        if (step == SaleCreditNoteRegularizationStep.None)
+        {
+            return new SaleCreditNoteRegularization(null, null, "No hay una nota de crédito para regularizar.");
+        }
+
+        SaleInvoicingOutcome? debitNoteOutcome = null;
+        var neutralized = receivers.Documents
+            .Where(document => document.Kind == SaleFiscalDocumentKind.CreditNote && document.Status == SaleInvoicingStatus.Voided)
+            .MaxBy(document => document.Sequence);
+
+        if (step == SaleCreditNoteRegularizationStep.DebitNote)
+        {
+            // 1) ND al receptor de la NC mal emitida, por sus mismos importes, asociada a ESA NC.
+            var creditNote = receivers.CreditNote!;
+            // Una ND en trámite se re-envía con su mismo RequestId: pudo haberse emitido.
+            var debitNote = receivers.Documents.FirstOrDefault(document =>
+                document.Kind == SaleFiscalDocumentKind.DebitNote &&
+                document.Status == SaleInvoicingStatus.InProgress &&
+                document.ReversedDocumentId == creditNote.Id);
+            if (debitNote is null)
+            {
+                debitNote = SaleFiscalDocument.CreateDebitNote(
+                    sale.CompanyId,
+                    sale.Id,
+                    creditNote,
+                    SaleFiscalDocumentRules.NextSequence(receivers.Documents, SaleFiscalDocumentKind.DebitNote));
+                await _fiscalDocuments.AddAsync(debitNote, cancellationToken);
+            }
+
+            debitNoteOutcome = await RequestAsync(
+                debitNote,
+                sale,
+                FiscalRequestedDocumentType.DebitNote,
+                receivers.CreditNotePrinted!,
+                creditNote,
+                cancellationToken);
+            await SaleFiscalDocumentEffects.ApplyAsync(debitNote, _fiscalDocuments, cancellationToken);
+
+            // Sin la ND autorizada la NC sigue vigente: emitir otra dejaría dos NC sobre la misma factura.
+            if (creditNote.Status != SaleInvoicingStatus.Voided)
+            {
+                return new SaleCreditNoteRegularization(debitNoteOutcome, null, debitNoteOutcome.Message);
+            }
+
+            neutralized = creditNote;
+        }
+
+        // 2) NC al receptor de la factura, por sus mismos importes, asociada a la factura.
+        var invoice = receivers.Invoice!;
+        var replacement = receivers.Documents.FirstOrDefault(document =>
+                document.Kind == SaleFiscalDocumentKind.CreditNote &&
+                document.Status == SaleInvoicingStatus.InProgress &&
+                document.ReversedDocumentId == invoice.Id &&
+                document.Sequence > neutralized!.Sequence);
+        if (replacement is null)
+        {
+            replacement = SaleFiscalDocument.CreateCreditNoteReplacing(
+                sale.CompanyId,
+                sale.Id,
+                invoice,
+                neutralized!,
+                SaleFiscalDocumentRules.NextSequence(receivers.Documents, SaleFiscalDocumentKind.CreditNote));
+            await _fiscalDocuments.AddAsync(replacement, cancellationToken);
+        }
+
+        var creditNoteOutcome = await RequestAsync(
+            replacement,
+            sale,
+            FiscalRequestedDocumentType.CreditNote,
+            receivers.InvoicePrinted!,
+            invoice,
+            cancellationToken);
+        await SaleFiscalDocumentEffects.ApplyAsync(replacement, _fiscalDocuments, cancellationToken);
+
+        return new SaleCreditNoteRegularization(debitNoteOutcome, creditNoteOutcome, creditNoteOutcome.Message);
+    }
+
+    /// <summary>
+    /// Pide al servicio una NC/ND que copia receptor e importes del comprobante que anula o ajusta, tal como
+    /// se emitió, y lo asocia (CbtesAsoc).
+    /// </summary>
+    private async Task<SaleInvoicingOutcome> RequestAsync(
+        SaleFiscalDocument document,
+        Sale sale,
+        FiscalRequestedDocumentType type,
+        FiscalPrintableDocument associatedPrinted,
+        SaleFiscalDocument associated,
+        CancellationToken cancellationToken)
+    {
+        var request = new FiscalDocumentRequest(
+            RequestId: document.RequestId,
+            TenantId: sale.CompanyId.Value,
+            RequestedType: type,
+            Receiver: associatedPrinted.Receiver,
+            Amounts: associatedPrinted.Amounts,
+            Date: DateOnly.FromDateTime(DateTime.UtcNow),
+            PointOfSale: associatedPrinted.PointOfSale,
+            AssociatedDocument: new FiscalAssociatedDocument(
+                associatedPrinted.Type,
+                associatedPrinted.PointOfSale,
+                associatedPrinted.Number,
+                associatedPrinted.Date));
+
+        var result = await _fiscalizationService.RequestDocumentAsync(request, cancellationToken);
+        return Apply(document, result);
+    }
+
+    /// <summary>
+    /// No se le pidió nada al servicio. Un intento NUEVO queda Rechazado con el motivo (no salió nada, el
+    /// reintento abre otro); uno en trámite sigue en trámite: pudo haberse emitido antes y se re-envía igual.
+    /// </summary>
+    private static SaleInvoicingOutcome NotSent(SaleFiscalDocument document, bool opensNewAttempt, string message)
+    {
+        if (opensNewAttempt)
+        {
+            document.Reject(null, message);
+            return new SaleInvoicingOutcome(false, SaleInvoicingStatus.Rejected, document, message);
+        }
+
+        document.MarkUnconfirmed(message);
+        return new SaleInvoicingOutcome(false, SaleInvoicingStatus.InProgress, document, message);
+    }
+
+    private static string ReceiverUnavailable(string? reason) =>
+        string.IsNullOrWhiteSpace(reason)
+            ? "No se pudo consultar al servicio de facturación a quién se emitió el comprobante."
+            : $"No se pudo consultar al servicio de facturación a quién se emitió el comprobante: {reason}";
 
     private static SaleInvoicingOutcome Apply(SaleFiscalDocument document, FiscalDocumentResult result)
     {
