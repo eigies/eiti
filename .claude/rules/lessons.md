@@ -1,5 +1,25 @@
 # Lessons Learned
 
+## Una NC sobrevivió a la venta que acreditaba: la 24KD se descontó dos veces - 2026-10-29
+
+**Síntoma:** el usuario reportó "la NCC-003 anula la NCC-002 pero le dio saldo a favor porque la registró como pago", culpando a un operador. LACTEOS BARRAZA (Baterías Soler) figuraba con **179.407,17 a favor** cuando en realidad **debía 15.592,83**: la diferencia eran 195.000 justos, el importe de NCC-003.
+
+**Qué pasó, según `AuditLogs` (no según la premisa del reporte):** NCC-003 no anulaba a NCC-002: esa se anuló con el botón y NCC-003 fue su reemisión idéntica, sobre MAT-3844 (24KD + 150BD), por la 24KD. Hasta ahí estaba bien. Después **otro usuario** anuló MAT-3844 entera en modo "Saldo a favor" (para regularizar lo fiscal: la NCC es interna, no sale a ARCA) y se refacturó sin la 24KD (MAT-3852). La 24KD quedó descontada dos veces: por la NC y por la refacturación.
+
+**Causa raíz:** `CancelSaleHandler` no miraba las NC vinculadas (`CustomerCreditNote.SaleId`). La imputación de la NC en la venta se trató como un cobro más: volvió como saldo a favor y el applicator la reimputó FIFO a otra venta, **ya sin `CreditNoteId`**. Desde ahí la NC tampoco se podía anular desde la app: `CancelCustomerCreditNote` solo desimputa las filas con su back-link y rechazaba con `CreditAlreadyConsumed`. Lo inconsistente: `CreateCustomerCreditNote` ya prohibía emitir una NC sobre una venta anulada (`SaleCancelled`), pero anular la venta dejaba justo ese estado. Mismo hueco en `CancelPurchase` con `SupplierCreditNote.PurchaseId`.
+
+**Fix de código:** `CancelSale`, `UpdateSale` cuando pasa a Cancel y `CancelPurchase` rechazan si hay una NC vigente emitida sobre el documento (`*.HasActiveCreditNote`, nombra la NC), antes de pedir `RefundMode`. Solo cuenta la NC emitida sobre ese documento, no las ventas que pagó por FIFO.
+
+**Fix de datos (manual en prod, decidido por el usuario):** un bloque `DO` atómico con chequeos del estado exacto diagnosticado antes y después: anular NCC-003 y su imputación activa; partir la reimputación de la anulación (204.448,49 = 14.407,17 de saldo previo legítimo + 190.041,32 de la NC); imputar el saldo a favor que quedaba FIFO **con back-link a cada recibo** (así anular un recibo después sigue funcionando); MAT-3846 de Paid a OnHold y su 30LD de vendida a reservada, igual que `CancelCustomerCreditNoteHandler`. Sin movimiento de caja: la sesión ya estaba cerrada y es neutro.
+
+**Cómo se probó sin tocar prod:** la copia local `eiti_e2e` no llegaba al día del caso y no se puede refrescar entera (prod está en PG 18, el `pg_dump` local es 16). Se clonó (`CREATE DATABASE ... TEMPLATE eiti_e2e`), se trajeron de prod solo las filas del cliente (ventas, imputaciones, cobros, recibos, NC, stock, caja) con `row_to_json` → `json_populate_record`, y se pasaron extracto y cuenta por los **mismos handlers de la API** antes y después: el clon reproducía prod al centavo, y después del fix cerraba en 15.592,83 con la tarjeta cuadrando. Después de aplicarlo en prod, se volvió a traer y se repitió la verificación. Las credenciales nunca pasan por la conversación: `railway run --service Postgres -- <herramienta>` inyecta `DATABASE_PUBLIC_URL` y la sesión se abre con `default_transaction_read_only=on` salvo flag explícito.
+
+**Patrón a recordar:**
+- Una NC es hija del documento igual que un cobro: cualquier "cancelar el padre" tiene que resolverla. Cuando una regla tiene espejo ("no se crea X sobre un padre anulado" / "no se anula un padre con X vigente"), escribir las dos.
+- Un back-link que se pierde en una reimputación deja una operación sin vuelta atrás desde la app. Si una plata cambia de imputación, tiene que llevarse el vínculo a su origen.
+- Antes de aceptar la premisa de un reporte ("fue tal operador", "la NC anula a la otra"), reconstruir la línea de tiempo con `AuditLogs`: acá la anulación que rompió todo la hizo otro usuario, y la reemisión de la NC era correcta.
+- Pendiente aparte: `UpdateSale` pasado a Cancel no resuelve los cobros CC imputados, a diferencia de `CancelSale`.
+
 ## Saqué la rama de la rama equivocada y arreglé dos veces lo que ya estaba en main - 2026-10-23
 
 **Síntoma:** el usuario preguntó "¿revisaste la facturación?" y después "¿de qué rama partiste?". La rama de cuenta corriente del backend había salido de `feature/facturacion-electronica` (28/09), que era donde estaba parado el contenedor al arrancar, no de `develop`. `develop`/`main` le llevaban 28 commits: toda la facturación electrónica en producción y `772b49b`, que ya guardaba el banco de las transferencias de clientes. Yo lo "arreglé" otra vez con una migración propia para la misma columna: mergeada así, la API habría fallado al arrancar con "la columna ya existe".
