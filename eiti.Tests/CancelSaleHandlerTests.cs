@@ -86,6 +86,7 @@ public sealed class CancelSaleHandlerTests
             customerPaymentRepository.Object,
             new Mock<ICustomerReceiptService>().Object,
             new Mock<ISaleInvoicingService>().Object,
+            NoCreditNotes(),
             unitOfWork.Object);
 
         var result = await handler.Handle(new CancelSaleCommand(sale.Id.Value), CancellationToken.None);
@@ -159,6 +160,54 @@ public sealed class CancelSaleHandlerTests
         ctx.CustomerReceiptService.Verify(x => x.ReversePaymentAsync(
             payment, ctx.Customer, It.IsAny<CashSession?>(), ctx.CompanyId, ctx.UserId, It.IsAny<CancellationToken>()), Times.Once);
         ctx.Customer.CreditBalance.Should().Be(0m);
+    }
+
+    // ── Nota de crédito vigente vinculada a la venta ─────────────────────────────
+    // Caso real (LACTEOS BARRAZA, 29/10): MAT-3844 tenía vigente la NCC-003 por la 24KD que el cliente cambió.
+    // Se anuló la venta y se rehízo sin la 24KD: lo que la NC había imputado volvió como saldo a favor y la 24KD
+    // quedó descontada dos veces. Con la NC vigente la venta no se anula; primero se anula la NC.
+
+    [Fact]
+    public async Task Handle_ActiveCreditNoteLinkedToTheSale_ShouldNotCancel()
+    {
+        var ctx = new CcCancelContext();
+        var sale = ctx.CreateCcSale(586000m);
+        var note = ctx.LinkCreditNote(sale, "NCC-003", 195000m);
+        sale.ApplyCustomerCredit(195000m, DateTime.UtcNow, Guid.Empty, "Saldo a favor aplicado automáticamente", note.Id);
+
+        // Sin RefundMode a propósito: el chequeo va antes de pedir qué hacer con lo cobrado.
+        var result = await ctx.Handler.Handle(new CancelSaleCommand(sale.Id.Value), CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("Sales.Cancel.HasActiveCreditNote");
+        result.Error.Description.Should().Contain("NCC-003");
+        sale.SaleStatus.Should().NotBe(SaleStatus.Cancel);
+        sale.CcPayments.Should().OnlyContain(p => p.Status == SaleCcPaymentStatus.Active);
+        ctx.Customer.CreditBalance.Should().Be(0m);
+        ctx.UnitOfWork.Verify(x => x.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Handle_CancelledCreditNoteLinkedToTheSale_ShouldCancel()
+    {
+        var ctx = new CcCancelContext();
+        var sale = ctx.CreateCcSale(586000m);
+        var note = ctx.LinkCreditNote(sale, "NCC-002", 195000m);
+        note.Cancel(ctx.UserId.Value);
+
+        var result = await ctx.Handler.Handle(new CancelSaleCommand(sale.Id.Value), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue(result.IsFailure ? result.Error.Description : string.Empty);
+        sale.SaleStatus.Should().Be(SaleStatus.Cancel);
+    }
+
+    private static ICustomerCreditNoteRepository NoCreditNotes()
+    {
+        var repository = new Mock<ICustomerCreditNoteRepository>();
+        repository
+            .Setup(x => x.ListBySaleAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+        return repository.Object;
     }
 
     // ── Factura emitida a otro receptor que el de la ficha ──────────────────────
@@ -235,9 +284,11 @@ public sealed class CancelSaleHandlerTests
         public Mock<ICustomerPaymentRepository> CustomerPaymentRepository { get; } = new();
         public Mock<ICustomerReceiptService> CustomerReceiptService { get; } = new();
         public Mock<ISaleInvoicingService> Invoicing { get; } = new();
+        public Mock<IUnitOfWork> UnitOfWork { get; } = new();
         public CancelSaleHandler Handler { get; }
 
         private readonly Mock<IBranchProductStockRepository> _stockRepository = new();
+        private readonly List<CustomerCreditNote> _creditNotes = [];
 
         public CcCancelContext()
         {
@@ -262,6 +313,11 @@ public sealed class CancelSaleHandlerTests
                     It.IsAny<IReadOnlyCollection<CustomerPayment>>(), CompanyId, It.IsAny<CancellationToken>()))
                 .ReturnsAsync(Result.Success());
 
+            var creditNoteRepository = new Mock<ICustomerCreditNoteRepository>();
+            creditNoteRepository
+                .Setup(x => x.ListBySaleAsync(CompanyId.Value, It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync((Guid _, Guid saleId, CancellationToken _) => _creditNotes.Where(n => n.SaleId == saleId).ToList());
+
             Handler = new CancelSaleHandler(
                 currentUserService.Object,
                 SaleRepository.Object,
@@ -274,7 +330,18 @@ public sealed class CancelSaleHandlerTests
                 CustomerPaymentRepository.Object,
                 CustomerReceiptService.Object,
                 Invoicing.Object,
-                new Mock<IUnitOfWork>().Object);
+                creditNoteRepository.Object,
+                UnitOfWork.Object);
+        }
+
+        // Nota de crédito emitida sobre la venta (SaleId), como la deja CreateCustomerCreditNote.
+        public CustomerCreditNote LinkCreditNote(Sale sale, string code, decimal amount)
+        {
+            var note = CustomerCreditNote.Create(
+                CompanyId.Value, Customer.Id.Value, BranchId.Value, code, amount,
+                "cambio de modelo 24kd por 30ld", DateTime.UtcNow, sale.Id.Value, UserId.Value);
+            _creditNotes.Add(note);
+            return note;
         }
 
         // Venta CC pendiente (OnHold) de una unidad, con su stock reservado como lo deja CreateCcSale.

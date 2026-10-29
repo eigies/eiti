@@ -8,6 +8,9 @@ public interface ISupplierCreditNoteRepository
 
     Task<List<SupplierCreditNote>> ListBySupplierAsync(Guid companyId, Guid supplierId, CancellationToken ct = default);
 
+    // Las emitidas sobre la compra (PurchaseId), vigentes y anuladas: anular la compra exige que no quede ninguna vigente.
+    Task<List<SupplierCreditNote>> ListByPurchaseAsync(Guid companyId, Guid purchaseId, CancellationToken ct = default);
+
     // Para numerar NCP-### por sucursal. Cuenta todas, incluidas las anuladas: el número
     // emitido no se reutiliza.
     Task<int> CountByBranchAsync(Guid companyId, Guid branchId, CancellationToken ct = default);
