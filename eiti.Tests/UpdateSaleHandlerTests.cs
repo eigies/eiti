@@ -55,6 +55,7 @@ public sealed class UpdateSaleHandlerTests
             new Mock<IAddressRepository>().Object,
             new Mock<IBankRepository>().Object,
             NoFiscalDocuments(),
+            new Mock<ICustomerCreditNoteRepository>().Object,
             new Mock<IUnitOfWork>().Object);
 
         var result = await handler.Handle(
@@ -180,6 +181,51 @@ public sealed class UpdateSaleHandlerTests
         result.IsSuccess.Should().BeTrue();
     }
 
+    // Misma regla que CancelSale (NCC-003 de LACTEOS BARRAZA): anular por acá tampoco deja una NC vigente
+    // apuntando a una venta anulada.
+    [Fact]
+    public async Task Handle_ShouldRejectCancel_WhenSaleHasActiveCreditNote()
+    {
+        var companyId = CompanyId.New();
+        var scenario = CreateScenario(companyId);
+        var unitOfWork = new Mock<IUnitOfWork>();
+        var handler = CreateHandler(companyId, scenario, new Mock<IBankRepository>().Object,
+            unitOfWork: unitOfWork, creditNotes: [LinkedCreditNote(companyId, scenario, "NCC-003")]);
+
+        var result = await handler.Handle(
+            UpdateCommand(scenario, quantity: 1) with { IdSaleStatus = (int)SaleStatus.Cancel },
+            CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error!.Code.Should().Be("Sales.Update.HasActiveCreditNote");
+        result.Error.Description.Should().Contain("NCC-003");
+        scenario.Sale.SaleStatus.Should().Be(SaleStatus.OnHold);
+        scenario.Stock.ReservedQuantity.Should().Be(1);
+        unitOfWork.Verify(x => x.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Handle_ShouldAllowCancel_WhenLinkedCreditNoteIsCancelled()
+    {
+        var companyId = CompanyId.New();
+        var scenario = CreateScenario(companyId);
+        var note = LinkedCreditNote(companyId, scenario, "NCC-002");
+        note.Cancel(Guid.NewGuid());
+        var handler = CreateHandler(companyId, scenario, new Mock<IBankRepository>().Object, creditNotes: [note]);
+
+        var result = await handler.Handle(
+            UpdateCommand(scenario, quantity: 1) with { IdSaleStatus = (int)SaleStatus.Cancel },
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue(result.IsFailure ? result.Error!.Description : string.Empty);
+        scenario.Sale.SaleStatus.Should().Be(SaleStatus.Cancel);
+    }
+
+    private static CustomerCreditNote LinkedCreditNote(CompanyId companyId, UpdateSaleScenario scenario, string code) =>
+        CustomerCreditNote.Create(
+            companyId.Value, Guid.NewGuid(), scenario.Branch.Id.Value, code, 50m,
+            "cambio de modelo", DateTime.UtcNow, scenario.Sale.Id.Value, Guid.NewGuid());
+
     private static ISaleFiscalDocumentRepository NoFiscalDocuments()
     {
         var repository = new Mock<ISaleFiscalDocumentRepository>();
@@ -230,7 +276,8 @@ public sealed class UpdateSaleHandlerTests
         UpdateSaleScenario scenario,
         IBankRepository bankRepository,
         IReadOnlyList<SaleFiscalDocument>? fiscalDocuments = null,
-        Mock<IUnitOfWork>? unitOfWork = null)
+        Mock<IUnitOfWork>? unitOfWork = null,
+        List<CustomerCreditNote>? creditNotes = null)
     {
         var currentUserService = new Mock<ICurrentUserService>();
         var saleRepository = new Mock<ISaleRepository>();
@@ -245,6 +292,11 @@ public sealed class UpdateSaleHandlerTests
         fiscalDocumentRepository
             .Setup(repository => repository.ListBySaleAsync(scenario.Sale.Id, companyId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(fiscalDocuments ?? []);
+
+        var creditNoteRepository = new Mock<ICustomerCreditNoteRepository>();
+        creditNoteRepository
+            .Setup(repository => repository.ListBySaleAsync(companyId.Value, scenario.Sale.Id.Value, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(creditNotes ?? []);
 
         currentUserService.SetupGet(service => service.IsAuthenticated).Returns(true);
         currentUserService.SetupGet(service => service.CompanyId).Returns(companyId);
@@ -274,6 +326,7 @@ public sealed class UpdateSaleHandlerTests
             new Mock<IAddressRepository>().Object,
             bankRepository,
             fiscalDocumentRepository.Object,
+            creditNoteRepository.Object,
             unitOfWork.Object);
     }
 
