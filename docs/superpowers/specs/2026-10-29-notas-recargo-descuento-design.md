@@ -83,11 +83,12 @@ Respuestas del cliente a las preguntas abiertas:
 - Todos los caminos que crean pagos con tarjeta de una venta minorista siguen la misma regla: alta, edición y "Cobrar" desde Gestión de Ventas (todos pasan por `CreateSale`/`UpdateSale`; el front tiene que mandar la base en todos).
   **Falla conocida a arreglar:** el "Cobrar" rápido de Gestión de Ventas reenvía los montos de tarjeta ya guardados (que incluyen el recargo); con el contrato nuevo el recargo se sumaría dos veces. Tiene que mandar la base (`Amount − CardSurchargeAmt`).
 
-**Pendiente de decisión — venta facturada antes de cobrarse y pagada después en cuotas**
-Hoy se puede facturar una venta en espera (en Mataderos, 22 de 144 facturas minoristas desde el 01/10 salieron antes del cobro; 3 se cobraron después con tarjeta en cuotas). Con la guarda nueva ese cobro quedaría rechazado, y una venta no puede anular su factura sin anularse entera (la NC solo sale de `CancelSale`). Opciones:
-- (a) Cobrar el recargo **sin facturarlo** en ese caso: la factura queda como salió, la venta avisa "recargo no facturado". Chico; esos casos no cumplen el objetivo.
-- (b) Emitir **automáticamente una nota de débito** por el recargo asociada a la factura (la ND ya existe para la regularización de NC). Completo; flujo fiscal nuevo, más grande.
-- (c) Bloquear el cobro en cuotas con recargo de una venta facturada: hay que anular la venta y rehacerla. Mucha fricción en caja.
+**Decidido (Agustín, 2026-10-29) — venta facturada antes de cobrarse y pagada después en cuotas: opción (a)**
+Hoy se puede facturar una venta en espera (en Mataderos, 22 de 144 facturas minoristas desde el 01/10 salieron antes del cobro; 3 se cobraron después con tarjeta en cuotas), y una venta no puede anular su factura sin anularse entera (la NC solo sale de `CancelSale`).
+- El cobro con recargo **se acepta**; el recargo se cobra pero **no se factura**: la factura queda como salió.
+- La guarda de factura emitida compara contra lo facturado **lo que se facturó** (el total sin el recargo cobrado después). No bloquea ese cobro; sigue bloqueando cambios del monto de la venta.
+- La venta muestra un aviso "Recargo no facturado" con el monto (detalle de la venta y listado), para que se vea y se pueda resolver a mano si hace falta.
+- Descartadas: (b) nota de débito automática por el recargo (flujo fiscal nuevo, más grande; queda para después si los casos crecen) y (c) bloquear el cobro (obliga a anular y rehacer la venta en caja).
 
 **Condición de entrega:** el tratamiento fiscal del recargo está pendiente del contador (`SaleInvoicingService.BuildAmounts`, `docs/facturacion-electronica.md`). El punto 2 se construye último y **no se mergea a `main` sin su OK**. No se agrega un interruptor por empresa.
 
