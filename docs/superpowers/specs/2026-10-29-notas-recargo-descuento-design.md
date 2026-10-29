@@ -2,8 +2,8 @@
 
 Fecha: 2026-10-29 · Cliente: Baterías Soler · Repos: `eiti` (back) y `eiti-front` (front), ramas `feature/notas-recargo-descuento` salidas de `develop`.
 
-Son tres cambios independientes. Se pueden construir y entregar por separado, en este orden: **1 → 3 → 2**
-(el 2 es el más delicado porque cambia el monto que se declara a ARCA).
+Son cuatro cambios independientes. Se pueden construir y entregar por separado, en este orden: **4 → 1 → 3 → 2**
+(el 4 es solo front y chico; el 2 es el más delicado porque cambia el monto que se declara a ARCA).
 
 ## Por qué
 
@@ -120,6 +120,26 @@ Hoy se puede facturar una venta en espera (en Mataderos, 22 de 144 facturas mino
 - Tope para ventas CC (siguen sin límite, como hoy).
 - Arreglar que el reporte de rentabilidad ignore `ManualOverridePrice` (8 ventas CC): es el mismo tipo de bug, pero va aparte.
 - Cerrar el agujero de autorización de `UpdateCurrentCompany`: es real, pero va como cambio propio (misma lógica que la lección 2026-09-24: no mezclar un fix con un cambio de autorización).
+
+---
+
+## 4. Descargar factura, nota de crédito y nota de débito desde la cuenta corriente
+
+**Intención (pedido de Agustín, 2026-10-29):** que desde la cuenta corriente del cliente se pueda bajar el mismo PDF fiscal que hoy se baja desde Gestión de Ventas; hoy desde la CC solo salen comprobante con precios, remito sin precios y recibos.
+
+**Lo que hay hoy**
+- Gestión de Ventas (`sales-page.component`) baja Factura / Nota de crédito / Nota de débito con `saleService.getInvoicePrint` / `getCreditNotePrint` / `getDebitNotePrint` → `InvoicePdfService.generate`. Visibilidad: `canInvoice` (permiso `sales.invoice`) y `canDownloadInvoice` (estado de facturación 3 o 5), `canDownloadCreditNote` (estado 5), y la ND cuando está autorizada.
+- La CC (`customer-account.component`) abre la venta desde el extracto en un modal de detalle (`detalleModalSale`, de `getSaleById`), que ya trae `InvoicingStatus` y los datos de la ND.
+
+**Objetivos**
+- En el modal de detalle de venta de la CC, al lado de "Remito sin precios", los botones **Factura**, **Nota de crédito** y **Nota de débito**, con **las mismas reglas de visibilidad y el mismo permiso** que Gestión de Ventas, y el mismo PDF (mismo endpoint, mismo `InvoicePdfService`).
+- Las reglas de visibilidad y las llamadas no se copian: se extraen a un lugar compartido que usan las dos pantallas, para que no se desincronicen.
+- Cuando entre el punto 1, la nota de la venta sale también en este PDF, sin trabajo extra.
+
+**No-objetivos**
+- Proveedores: eiti-fiscalization no emite comprobantes de compras (de la factura del proveedor EITI solo guarda el número), así que no hay PDF fiscal para bajar ahí.
+- PDF de las notas de crédito internas `NCC-###` de la CC (no son comprobantes de ARCA).
+- Cambios de back: no hacen falta.
 
 ---
 
