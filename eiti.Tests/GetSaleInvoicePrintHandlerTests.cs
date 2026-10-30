@@ -190,6 +190,6 @@ public sealed class GetSaleInvoicePrintHandlerTests
         branches.Setup(x => x.GetByIdAsync(_branch.Id, _companyId, It.IsAny<CancellationToken>())).ReturnsAsync(_branch);
 
         return new GetSaleInvoicePrintHandler(currentUser.Object, sales.Object, _fiscalDocuments.Object,
-            products.Object, branches.Object, _fiscalization.Object);
+            products.Object, branches.Object, _fiscalization.Object, new Mock<IBankRepository>().Object);
     }
 }

@@ -1938,6 +1938,9 @@ namespace eiti.Infrastructure.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
 
+                    b.Property<decimal?>("RequestedTotal")
+                        .HasColumnType("decimal(18,2)");
+
                     b.Property<Guid?>("ReversedDocumentId")
                         .HasColumnType("uuid");
 

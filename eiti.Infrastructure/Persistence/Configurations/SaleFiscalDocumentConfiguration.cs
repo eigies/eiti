@@ -43,6 +43,7 @@ public sealed class SaleFiscalDocumentConfiguration : IEntityTypeConfiguration<S
         builder.Property(document => document.AuthorizationExpiry).IsRequired(false);
         builder.Property(document => document.QrUrl).HasMaxLength(1000).IsRequired(false);
         builder.Property(document => document.RejectionReason).HasMaxLength(500).IsRequired(false);
+        builder.Property(document => document.RequestedTotal).HasColumnType("decimal(18,2)").IsRequired(false);
         builder.Property(document => document.IssuedAt).IsRequired(false);
         builder.Property(document => document.CreatedAt).IsRequired();
         builder.Property(document => document.UpdatedAt).IsRequired(false);

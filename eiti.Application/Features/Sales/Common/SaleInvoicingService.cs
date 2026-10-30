@@ -142,12 +142,18 @@ public sealed class SaleInvoicingService : ISaleInvoicingService
             }
         }
 
+        // Se factura lo que el cliente paga: la mercadería más el recargo de la tarjeta. Un intento en trámite
+        // se re-envía por el total que pidió la primera vez (mismo RequestId, mismo pedido): si la venta se cobró
+        // en cuotas mientras tanto, ese recargo queda como no facturado.
+        var requestedTotal = document.RequestedTotal ?? sale.TotalAmount + sale.CardSurchargeTotal;
+        document.RecordRequestedTotal(requestedTotal);
+
         var request = new FiscalDocumentRequest(
             RequestId: document.RequestId,
             TenantId: sale.CompanyId.Value,
             RequestedType: FiscalRequestedDocumentType.Auto,
             Receiver: BuildReceiver(customer),
-            Amounts: BuildAmounts(sale),
+            Amounts: BuildAmounts(sale, requestedTotal),
             Date: DateOnly.FromDateTime(sale.CreatedAt),
             // Se factura en el punto de venta de la sucursal que vende. Si es un re-envío de un intento
             // en vuelo y la sucursal ya no tiene uno, el servicio igual lo encuentra por su RequestId.
@@ -451,13 +457,15 @@ public sealed class SaleInvoicingService : ISaleInvoicingService
     }
 
     /// <summary>
-    /// El total de la venta ya incluye el IVA. El neto se obtiene restando el IVA contenido.
-    /// El recargo por tarjeta queda FUERA a propósito: no está en TotalAmount y su tratamiento
-    /// fiscal todavía no está definido por el contador.
+    /// El total facturado ya incluye el IVA. El neto se obtiene restando el IVA contenido.
+    /// Con recargo de tarjeta el total es mercadería + recargo y el IVA se calcula sobre ese total a la
+    /// alícuota de la venta: el interés de financiación que cobra el vendedor integra el precio gravado.
+    /// Sale.VatAmount es solo el de la mercadería, así que únicamente se reusa cuando se factura la mercadería.
+    /// ⚠️ Tratamiento fiscal pendiente del OK del contador (ver docs/facturacion-electronica.md).
     /// </summary>
-    private static FiscalAmounts BuildAmounts(Sale sale)
+    private static FiscalAmounts BuildAmounts(Sale sale, decimal requestedTotal)
     {
-        var total = decimal.Round(sale.TotalAmount, 2, MidpointRounding.AwayFromZero);
+        var total = decimal.Round(requestedTotal, 2, MidpointRounding.AwayFromZero);
         var rate = sale.VatRate ?? DefaultVatRate;
 
         if (rate <= 0m)
@@ -465,7 +473,8 @@ public sealed class SaleInvoicingService : ISaleInvoicingService
             return new FiscalAmounts(total, [new FiscalVatAmount(0m, total, 0m)], 0m, total);
         }
 
-        var vatAmount = sale.VatAmount is not null
+        var onlyMerchandise = total == decimal.Round(sale.TotalAmount, 2, MidpointRounding.AwayFromZero);
+        var vatAmount = onlyMerchandise && sale.VatAmount is not null
             ? decimal.Round(sale.VatAmount.Value, 2, MidpointRounding.AwayFromZero)
             : decimal.Round(total - total / (1m + rate / 100m), 2, MidpointRounding.AwayFromZero);
         var net = decimal.Round(total - vatAmount, 2, MidpointRounding.AwayFromZero);

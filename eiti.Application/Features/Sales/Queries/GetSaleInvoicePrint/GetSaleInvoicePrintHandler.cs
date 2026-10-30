@@ -1,6 +1,7 @@
 using eiti.Application.Abstractions.Repositories;
 using eiti.Application.Abstractions.Services;
 using eiti.Application.Common;
+using eiti.Domain.Companies;
 using eiti.Domain.Sales;
 using MediatR;
 
@@ -15,6 +16,7 @@ public sealed class GetSaleInvoicePrintHandler
     private readonly IProductRepository _productRepository;
     private readonly IBranchRepository _branchRepository;
     private readonly IFiscalizationService _fiscalizationService;
+    private readonly IBankRepository _bankRepository;
 
     public GetSaleInvoicePrintHandler(
         ICurrentUserService currentUserService,
@@ -22,7 +24,8 @@ public sealed class GetSaleInvoicePrintHandler
         ISaleFiscalDocumentRepository fiscalDocuments,
         IProductRepository productRepository,
         IBranchRepository branchRepository,
-        IFiscalizationService fiscalizationService)
+        IFiscalizationService fiscalizationService,
+        IBankRepository bankRepository)
     {
         _currentUserService = currentUserService;
         _saleRepository = saleRepository;
@@ -30,6 +33,7 @@ public sealed class GetSaleInvoicePrintHandler
         _productRepository = productRepository;
         _branchRepository = branchRepository;
         _fiscalizationService = fiscalizationService;
+        _bankRepository = bankRepository;
     }
 
     public async Task<Result<SaleInvoicePrintResponse>> Handle(
@@ -110,6 +114,7 @@ public sealed class GetSaleInvoicePrintHandler
 
         var receiver = printed.Receiver;
         var associated = printed.AssociatedDocument;
+        var (cardSurcharge, cardSurchargeLabel) = await CardSurchargeAsync(sale, printed.Amounts.Total, companyId, cancellationToken);
 
         return Result.Success(new SaleInvoicePrintResponse(
             Kind: query.Kind switch
@@ -155,12 +160,39 @@ public sealed class GetSaleInvoicePrintHandler
                 items.Sum(item => item.Total),
                 sale.NoDeliverySurchargeTotal,
                 sale.GeneralDiscountPercent,
-                sale.ManualOverridePrice),
+                sale.ManualOverridePrice,
+                cardSurcharge,
+                cardSurchargeLabel),
             Amounts: new SaleInvoicePrintAmounts(
                 printed.Amounts.Net,
                 vat,
                 printed.Amounts.Exempt,
                 printed.Amounts.Total),
             Notes: sale.Notes));
+    }
+
+    /// <summary>
+    /// Renglón del recargo de la tarjeta, solo si el comprobante autorizado lo incluye (total impreso − mercadería
+    /// = recargo de la venta). Una venta facturada antes de cobrarse en cuotas imprime su factura como salió.
+    /// </summary>
+    private async Task<(decimal Amount, string? Label)> CardSurchargeAsync(
+        Sale sale,
+        decimal printedTotal,
+        CompanyId companyId,
+        CancellationToken cancellationToken)
+    {
+        var surcharge = sale.CardSurchargeTotal;
+        var included = decimal.Round(printedTotal - sale.TotalAmount, 2, MidpointRounding.AwayFromZero);
+        if (surcharge <= 0m || included != surcharge)
+        {
+            return (0m, null);
+        }
+
+        var card = sale.Payments.FirstOrDefault(payment => payment.Method == SalePaymentMethod.Card);
+        var bank = card?.CardBankId is int bankId
+            ? await _bankRepository.GetByIdAsync(bankId, companyId, cancellationToken)
+            : null;
+
+        return (surcharge, FiscalPrintLabels.CardSurcharge(bank?.Name, card?.CardCuotas, card?.CardSurchargePct));
     }
 }

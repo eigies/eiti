@@ -174,9 +174,13 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
         // importe: la factura quedaría por un monto y la venta por otro (pasó con MAT-3358). Se compara
         // contra el total al final, así cobrar o cambiar datos que no mueven el total sigue permitido.
         var fiscalDocuments = await _fiscalDocuments.ListBySaleAsync(sale.Id, companyId, cancellationToken);
-        var hasInvoice = SaleInvoicingView.From(fiscalDocuments).LiveInvoice is not null
-            || SaleFiscalDocumentRules.InFlight(fiscalDocuments, SaleFiscalDocumentKind.Invoice) is not null;
+        var invoiceDocument = SaleInvoicingView.From(fiscalDocuments).LiveInvoice
+            ?? SaleFiscalDocumentRules.InFlight(fiscalDocuments, SaleFiscalDocumentKind.Invoice);
+        var hasInvoice = invoiceDocument is not null;
         var invoicedTotal = sale.TotalAmount;
+        // Lo que pidió la factura: la mercadería más el recargo de tarjeta que ya estaba cobrado. Las facturas
+        // anteriores a este dato facturaron la mercadería.
+        var invoicedCharge = invoiceDocument?.RequestedTotal ?? sale.TotalAmount;
 
         var existingTransportAssignmentId = sale.TransportAssignmentId;
 
@@ -604,7 +608,10 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
         }
 
         // Se corta antes de guardar: nada de lo que se armó arriba (detalle, stock, caja) se persiste.
-        if (hasInvoice && sale.TotalAmount != invoicedTotal)
+        // La mercadería no puede cambiar. El recargo de tarjeta puede crecer (cobrar en cuotas una venta ya
+        // facturada se acepta y queda como recargo no facturado), pero no bajar de lo que la factura incluyó:
+        // la factura diría más de lo que paga el cliente.
+        if (hasInvoice && (sale.TotalAmount != invoicedTotal || sale.EffectiveTotal < invoicedCharge))
         {
             return Result<UpdateSaleResponse>.Failure(UpdateSaleErrors.InvoicedAmountChange);
         }
