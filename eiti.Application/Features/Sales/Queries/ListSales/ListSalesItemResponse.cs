@@ -46,7 +46,8 @@ public sealed record ListSalesItemResponse(
     string? FiscalDocumentType,
     IReadOnlyList<ListSalesDetailItemResponse> Details,
     IReadOnlyList<ListSalesPaymentItemResponse> Payments,
-    IReadOnlyList<ListSalesTradeInItemResponse> TradeIns);
+    IReadOnlyList<ListSalesTradeInItemResponse> TradeIns,
+    string? Notes = null);
 
 public sealed record ListSalesDetailItemResponse(
     Guid ProductId,

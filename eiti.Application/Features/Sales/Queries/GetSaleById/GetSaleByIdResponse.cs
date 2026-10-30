@@ -53,7 +53,8 @@ public sealed record GetSaleByIdResponse(
     IReadOnlyList<GetSaleByIdDetailResponse> Details,
     IReadOnlyList<GetSaleByIdPaymentResponse> Payments,
     IReadOnlyList<GetSaleByIdCcPaymentResponse> CcPayments,
-    IReadOnlyList<GetSaleByIdTradeInResponse> TradeIns);
+    IReadOnlyList<GetSaleByIdTradeInResponse> TradeIns,
+    string? Notes = null);
 
 public sealed record GetSaleByIdTradeInResponse(
     Guid ProductId,

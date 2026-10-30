@@ -216,7 +216,8 @@ public sealed class ListSalesHandler : IRequestHandler<ListSalesQuery, Result<IR
                                 product?.Brand ?? "Unknown",
                                 tradeIn.Quantity,
                                 tradeIn.Amount);
-                        }).ToList());
+                        }).ToList(),
+                        sale.Notes);
                 })
                 .ToList());
     }

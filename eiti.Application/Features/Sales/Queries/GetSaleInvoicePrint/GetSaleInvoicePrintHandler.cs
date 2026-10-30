@@ -160,6 +160,7 @@ public sealed class GetSaleInvoicePrintHandler
                 printed.Amounts.Net,
                 vat,
                 printed.Amounts.Exempt,
-                printed.Amounts.Total)));
+                printed.Amounts.Total),
+            Notes: sale.Notes));
     }
 }

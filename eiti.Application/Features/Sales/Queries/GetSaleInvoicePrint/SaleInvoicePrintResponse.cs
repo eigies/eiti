@@ -27,7 +27,9 @@ public sealed record SaleInvoicePrintResponse(
     decimal VatRate,
     IReadOnlyList<SaleInvoicePrintItem> Items,
     SaleInvoicePrintAdjustments Adjustments,
-    SaleInvoicePrintAmounts Amounts);
+    SaleInvoicePrintAmounts Amounts,
+    // Observaciones de la venta (no fiscales): se leen al imprimir, así una corrección sale en la reimpresión.
+    string? Notes = null);
 
 public sealed record SaleInvoicePrintIssuer(
     string LegalName,
