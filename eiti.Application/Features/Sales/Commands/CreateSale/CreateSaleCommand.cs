@@ -23,7 +23,8 @@ public sealed record CreateSaleCommand(
     // Opt-in por venta. Se ignora si la empresa/sucursal ya factura automáticamente.
     bool RequestInvoicing = false,
     // Letra que eligió el vendedor. Con factura pedida, la venta se frena si no coincide con el cliente.
-    InvoiceLetter? InvoiceLetter = null
+    InvoiceLetter? InvoiceLetter = null,
+    string? Notes = null
 ) : IRequest<Result<CreateSaleResponse>>, IRequirePermissions
 {
     public IReadOnlyCollection<string> RequiredPermissions => [PermissionCodes.SalesCreate];

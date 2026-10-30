@@ -338,6 +338,7 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
                 generalDiscountPercent: request.GeneralDiscountPercent,
                 cardSurchargeTotal: cardSurchargeTotal,
                 contactPhone: request.ContactPhone);
+            sale.SetNotes(request.Notes);
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
         {

@@ -10,6 +10,8 @@ namespace eiti.Domain.Sales;
 
 public sealed class Sale : AggregateRoot<SaleId>
 {
+    public const int NotesMaxLength = 500;
+
     public CompanyId CompanyId { get; private set; } = null!;
     public BranchId BranchId { get; private set; } = null!;
     public CustomerId? CustomerId { get; private set; }
@@ -40,6 +42,9 @@ public sealed class Sale : AggregateRoot<SaleId>
     public string? Code { get; private set; }
     public string? DeliveryAddress { get; private set; }
     public string? ContactPhone { get; private set; }
+    // Observación libre que pide el cliente (presupuesto, patente). Sale impresa en la factura,
+    // no viaja al fisco: por eso se puede corregir aunque la venta ya esté facturada.
+    public string? Notes { get; private set; }
     private readonly List<SaleDetail> _details = [];
     private readonly List<SalePayment> _payments = [];
     private readonly List<SaleTradeIn> _tradeIns = [];
@@ -717,6 +722,17 @@ public sealed class Sale : AggregateRoot<SaleId>
     public void SetDeliveryAddress(string? address) => DeliveryAddress = address;
 
     public void SetContactPhone(string? phone) => ContactPhone = phone;
+
+    public void SetNotes(string? notes)
+    {
+        var normalized = string.IsNullOrWhiteSpace(notes) ? null : notes.Trim();
+        if (normalized?.Length > NotesMaxLength)
+        {
+            throw new ArgumentException($"Notes cannot exceed {NotesMaxLength} characters.", nameof(notes));
+        }
+
+        Notes = normalized;
+    }
 
     private void RecalculateTotal()
     {

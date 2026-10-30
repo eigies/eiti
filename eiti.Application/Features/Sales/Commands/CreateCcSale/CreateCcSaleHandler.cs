@@ -222,6 +222,7 @@ public sealed class CreateCcSaleHandler : IRequestHandler<CreateCcSaleCommand, R
                 tradeIns: saleTradeIns,
                 code: saleCode,
                 generalDiscountPercent: request.GeneralDiscountPercent);
+            sale.SetNotes(request.Notes);
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
         {
