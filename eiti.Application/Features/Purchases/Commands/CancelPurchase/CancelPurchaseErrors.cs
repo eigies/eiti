@@ -16,6 +16,12 @@ public static class CancelPurchaseErrors
         "Purchases.Cancel.SupplierNotFound",
         "The supplier for this purchase was not found.");
 
+    public static Error HasActiveCreditNote(IReadOnlyCollection<string> codes) => Error.Conflict(
+        "Purchases.Cancel.HasActiveCreditNote",
+        codes.Count == 1
+            ? $"La compra tiene vigente la nota de crédito {codes.First()}. Anulala primero desde la cuenta del proveedor: si no, su crédito queda a favor aunque la compra ya no exista."
+            : $"La compra tiene vigentes las notas de crédito {string.Join(", ", codes)}. Anulalas primero desde la cuenta del proveedor: si no, su crédito queda a favor aunque la compra ya no exista.");
+
     public static readonly Error RefundModeRequired = Error.Validation(
         "Purchases.Cancel.RefundModeRequired",
         "La compra tiene pagos imputados. Elegí qué hacer con lo pagado: saldo a favor o revertir el pago.");

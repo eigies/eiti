@@ -28,6 +28,13 @@ public sealed class CustomerCreditNoteRepository : ICustomerCreditNoteRepository
             .ToListAsync(ct);
     }
 
+    public async Task<List<CustomerCreditNote>> ListBySaleAsync(Guid companyId, Guid saleId, CancellationToken ct = default)
+    {
+        return await _db.CustomerCreditNotes
+            .Where(n => n.CompanyId == companyId && n.SaleId == saleId)
+            .ToListAsync(ct);
+    }
+
     public async Task<int> CountByBranchAsync(Guid companyId, Guid branchId, CancellationToken ct = default)
     {
         return await _db.CustomerCreditNotes

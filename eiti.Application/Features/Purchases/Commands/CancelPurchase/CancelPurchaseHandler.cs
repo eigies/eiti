@@ -6,6 +6,7 @@ using eiti.Application.Features.Purchases.Common;
 using eiti.Application.Features.Suppliers.Common;
 using eiti.Domain.Branches;
 using eiti.Domain.Cash;
+using eiti.Domain.Common;
 using eiti.Domain.Products;
 using eiti.Domain.Purchases;
 using eiti.Domain.Stock;
@@ -25,6 +26,7 @@ public sealed class CancelPurchaseHandler : IRequestHandler<CancelPurchaseComman
     private readonly ICashDrawerRepository _cashDrawerRepository;
     private readonly ICashSessionRepository _cashSessionRepository;
     private readonly ISupplierPaymentOrderService _supplierPaymentOrderService;
+    private readonly ISupplierCreditNoteRepository _creditNoteRepository;
     private readonly IUnitOfWork _unitOfWork;
 
     public CancelPurchaseHandler(
@@ -37,6 +39,7 @@ public sealed class CancelPurchaseHandler : IRequestHandler<CancelPurchaseComman
         ICashDrawerRepository cashDrawerRepository,
         ICashSessionRepository cashSessionRepository,
         ISupplierPaymentOrderService supplierPaymentOrderService,
+        ISupplierCreditNoteRepository creditNoteRepository,
         IUnitOfWork unitOfWork)
     {
         _currentUserService = currentUserService;
@@ -48,6 +51,7 @@ public sealed class CancelPurchaseHandler : IRequestHandler<CancelPurchaseComman
         _cashDrawerRepository = cashDrawerRepository;
         _cashSessionRepository = cashSessionRepository;
         _supplierPaymentOrderService = supplierPaymentOrderService;
+        _creditNoteRepository = creditNoteRepository;
         _unitOfWork = unitOfWork;
     }
 
@@ -66,6 +70,15 @@ public sealed class CancelPurchaseHandler : IRequestHandler<CancelPurchaseComman
 
         if (purchase.Status == PurchaseStatus.Cancelled)
             return Result.Failure(CancelPurchaseErrors.AlreadyCancelled);
+
+        // Una NC vigente sobre la compra se anula primero; si no, su crédito sobrevive a la compra que lo
+        // justificaba. Espejo de CancelSale y de CreateSupplierCreditNote (no emite NC sobre una compra anulada).
+        var activeCreditNotes = (await _creditNoteRepository.ListByPurchaseAsync(companyId.Value, purchase.Id, cancellationToken))
+            .Where(note => note.Status == CreditNoteStatus.Active)
+            .Select(note => note.Code)
+            .ToList();
+        if (activeCreditNotes.Count > 0)
+            return Result.Failure(CancelPurchaseErrors.HasActiveCreditNote(activeCreditNotes));
 
         // Pagos imputados a esta compra (antes de tocar nada). Con pagos hay que decidir qué hacer con la plata.
         var activeAllocations = purchase.Payments

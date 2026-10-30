@@ -6,6 +6,7 @@ using eiti.Application.Common.Authorization;
 using eiti.Application.Features.Banks.Common;
 using eiti.Domain.Banks;
 using eiti.Domain.Cash;
+using eiti.Domain.Common;
 using eiti.Domain.Companies;
 using eiti.Domain.Customers;
 using eiti.Domain.Products;
@@ -30,6 +31,7 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
     private readonly IAddressRepository _addressRepository;
     private readonly IBankRepository _bankRepository;
     private readonly ISaleFiscalDocumentRepository _fiscalDocuments;
+    private readonly ICustomerCreditNoteRepository _creditNoteRepository;
     private readonly IUnitOfWork _unitOfWork;
 
     public UpdateSaleHandler(
@@ -45,6 +47,7 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
         IAddressRepository addressRepository,
         IBankRepository bankRepository,
         ISaleFiscalDocumentRepository fiscalDocuments,
+        ICustomerCreditNoteRepository creditNoteRepository,
         IUnitOfWork unitOfWork)
     {
         _currentUserService = currentUserService;
@@ -59,6 +62,7 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
         _addressRepository = addressRepository;
         _bankRepository = bankRepository;
         _fiscalDocuments = fiscalDocuments;
+        _creditNoteRepository = creditNoteRepository;
         _unitOfWork = unitOfWork;
     }
 
@@ -215,6 +219,19 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
         if (requestedStatus == SaleStatus.Paid && sale.IsCuentaCorriente)
         {
             return Result<UpdateSaleResponse>.Failure(UpdateSaleErrors.CannotChargeCuentaCorriente);
+        }
+
+        // Anular por acá tampoco puede dejar una NC vigente sobre una venta anulada: misma regla que CancelSale.
+        if (requestedStatus == SaleStatus.Cancel)
+        {
+            var activeCreditNotes = (await _creditNoteRepository.ListBySaleAsync(companyId.Value, sale.Id.Value, cancellationToken))
+                .Where(note => note.Status == CreditNoteStatus.Active)
+                .Select(note => note.Code)
+                .ToList();
+            if (activeCreditNotes.Count > 0)
+            {
+                return Result<UpdateSaleResponse>.Failure(UpdateSaleErrors.HasActiveCreditNote(activeCreditNotes));
+            }
         }
 
         var productMap = new Dictionary<Guid, Product>();
