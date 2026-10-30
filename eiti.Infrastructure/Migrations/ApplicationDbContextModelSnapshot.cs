@@ -565,6 +565,11 @@ namespace eiti.Infrastructure.Migrations
                     b.Property<bool>("IsWhatsAppEnabled")
                         .HasColumnType("boolean");
 
+                    b.Property<decimal>("MaxRetailDiscountPercent")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("decimal(5,2)")
+                        .HasDefaultValue(0m);
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -1701,10 +1706,20 @@ namespace eiti.Infrastructure.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
 
+                    b.Property<DateTime?>("GeneralDiscountAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<Guid?>("GeneralDiscountByUserId")
+                        .HasColumnType("uuid");
+
                     b.Property<decimal>("GeneralDiscountPercent")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("decimal(5,2)")
                         .HasDefaultValue(0m);
+
+                    b.Property<string>("GeneralDiscountReason")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
 
                     b.Property<bool>("HasDelivery")
                         .HasColumnType("boolean");

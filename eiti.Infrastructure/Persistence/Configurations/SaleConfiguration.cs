@@ -72,6 +72,9 @@ public sealed class SaleConfiguration : IEntityTypeConfiguration<Sale>
         builder.Property(sale => sale.NoDeliverySurchargeTotal).HasColumnType("decimal(18,2)").IsRequired();
         builder.Property(sale => sale.CardSurchargeTotal).HasColumnType("decimal(18,2)").IsRequired();
         builder.Property(sale => sale.GeneralDiscountPercent).HasColumnType("decimal(5,2)").HasDefaultValue(0m).IsRequired();
+        builder.Property(sale => sale.GeneralDiscountByUserId).IsRequired(false);
+        builder.Property(sale => sale.GeneralDiscountAt).IsRequired(false);
+        builder.Property(sale => sale.GeneralDiscountReason).HasMaxLength(Sale.GeneralDiscountReasonMaxLength).IsRequired(false);
         builder.Property(sale => sale.OriginalTotal).HasColumnType("decimal(18,2)").IsRequired();
         builder.Property(sale => sale.TotalAmount).HasColumnType("decimal(18,2)").IsRequired();
         builder.Property(sale => sale.VatRate).HasColumnType("decimal(5,2)").IsRequired(false);

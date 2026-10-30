@@ -11,6 +11,7 @@ namespace eiti.Domain.Sales;
 public sealed class Sale : AggregateRoot<SaleId>
 {
     public const int NotesMaxLength = 500;
+    public const int GeneralDiscountReasonMaxLength = 200;
 
     public CompanyId CompanyId { get; private set; } = null!;
     public BranchId BranchId { get; private set; } = null!;
@@ -23,6 +24,11 @@ public sealed class Sale : AggregateRoot<SaleId>
     public decimal NoDeliverySurchargeTotal { get; private set; }
     public decimal CardSurchargeTotal { get; private set; }
     public decimal GeneralDiscountPercent { get; private set; }
+    // Quién, cuándo y por qué se fijó el descuento general (mismo patrón que OverriddenByUserId/OverriddenAt).
+    // Cambian solo cuando cambia el porcentaje; con el descuento en 0 quedan en null.
+    public Guid? GeneralDiscountByUserId { get; private set; }
+    public DateTime? GeneralDiscountAt { get; private set; }
+    public string? GeneralDiscountReason { get; private set; }
     public decimal OriginalTotal { get; private set; }
     public decimal TotalAmount { get; private set; }
     // Desglose de IVA para ventas provenientes de un presupuesto convertido "con IVA".
@@ -732,6 +738,36 @@ public sealed class Sale : AggregateRoot<SaleId>
         }
 
         Notes = normalized;
+    }
+
+    // Se llama después de Create/Update con el porcentaje que tenía la venta antes (0 en el alta).
+    // Si el porcentaje no cambió se conserva la traza original: cobrar o editar otra cosa no cambia
+    // quién hizo el descuento. Si volvió a 0, la traza se borra.
+    public void TrackGeneralDiscount(decimal previousPercent, Guid? userId, string? reason)
+    {
+        if (GeneralDiscountPercent == 0m)
+        {
+            GeneralDiscountByUserId = null;
+            GeneralDiscountAt = null;
+            GeneralDiscountReason = null;
+            return;
+        }
+
+        if (GeneralDiscountPercent == NormalizeAmount(previousPercent))
+        {
+            return;
+        }
+
+        var normalizedReason = string.IsNullOrWhiteSpace(reason) ? null : reason.Trim();
+        if (normalizedReason?.Length > GeneralDiscountReasonMaxLength)
+        {
+            throw new ArgumentException(
+                $"General discount reason cannot exceed {GeneralDiscountReasonMaxLength} characters.", nameof(reason));
+        }
+
+        GeneralDiscountByUserId = userId;
+        GeneralDiscountAt = DateTime.UtcNow;
+        GeneralDiscountReason = normalizedReason;
     }
 
     private void RecalculateTotal()
