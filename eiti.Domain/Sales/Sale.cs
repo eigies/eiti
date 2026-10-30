@@ -741,8 +741,8 @@ public sealed class Sale : AggregateRoot<SaleId>
     }
 
     // Se llama después de Create/Update con el porcentaje que tenía la venta antes (0 en el alta).
-    // Si el porcentaje no cambió se conserva la traza original: cobrar o editar otra cosa no cambia
-    // quién hizo el descuento. Si volvió a 0, la traza se borra.
+    // Si el porcentaje no cambió se conservan quién y cuándo (cobrar o editar otra cosa no cambia quién
+    // hizo el descuento), pero un motivo corregido se guarda. Si volvió a 0, la traza se borra.
     public void TrackGeneralDiscount(decimal previousPercent, Guid? userId, string? reason)
     {
         if (GeneralDiscountPercent == 0m)
@@ -753,16 +753,17 @@ public sealed class Sale : AggregateRoot<SaleId>
             return;
         }
 
-        if (GeneralDiscountPercent == NormalizeAmount(previousPercent))
-        {
-            return;
-        }
-
         var normalizedReason = string.IsNullOrWhiteSpace(reason) ? null : reason.Trim();
         if (normalizedReason?.Length > GeneralDiscountReasonMaxLength)
         {
             throw new ArgumentException(
                 $"General discount reason cannot exceed {GeneralDiscountReasonMaxLength} characters.", nameof(reason));
+        }
+
+        if (GeneralDiscountPercent == NormalizeAmount(previousPercent))
+        {
+            GeneralDiscountReason = normalizedReason;
+            return;
         }
 
         GeneralDiscountByUserId = userId;

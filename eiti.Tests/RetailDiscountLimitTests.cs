@@ -49,18 +49,35 @@ public sealed class RetailDiscountLimitTests
     }
 
     [Fact]
-    public void TrackGeneralDiscount_KeepsTheOriginalTrace_WhenThePercentDidNotChange()
+    public void TrackGeneralDiscount_KeepsWhoAndWhen_WhenThePercentDidNotChange()
     {
         var sale = BuildSale(generalDiscountPercent: 10m);
         var seller = Guid.NewGuid();
         sale.TrackGeneralDiscount(0m, seller, "Cliente de años");
         var firstAt = sale.GeneralDiscountAt;
 
-        sale.TrackGeneralDiscount(previousPercent: 10m, Guid.NewGuid(), "Otro motivo");
+        sale.TrackGeneralDiscount(previousPercent: 10m, Guid.NewGuid(), "Cliente de años");
 
         sale.GeneralDiscountByUserId.Should().Be(seller);
         sale.GeneralDiscountAt.Should().Be(firstAt);
         sale.GeneralDiscountReason.Should().Be("Cliente de años");
+    }
+
+    // La pantalla de edición deja corregir solo el motivo: ignorarlo sería perder el cambio sin aviso.
+    // Quién y cuándo siguen siendo los de quien aplicó el porcentaje.
+    [Fact]
+    public void TrackGeneralDiscount_SavesACorrectedReason_WhenThePercentDidNotChange()
+    {
+        var sale = BuildSale(generalDiscountPercent: 10m);
+        var seller = Guid.NewGuid();
+        sale.TrackGeneralDiscount(0m, seller, "Cliente de años");
+        var firstAt = sale.GeneralDiscountAt;
+
+        sale.TrackGeneralDiscount(previousPercent: 10m, Guid.NewGuid(), "  Cliente de años, pago en efectivo  ");
+
+        sale.GeneralDiscountReason.Should().Be("Cliente de años, pago en efectivo");
+        sale.GeneralDiscountByUserId.Should().Be(seller);
+        sale.GeneralDiscountAt.Should().Be(firstAt);
     }
 
     [Fact]
