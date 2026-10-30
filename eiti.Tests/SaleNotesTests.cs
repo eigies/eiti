@@ -5,6 +5,7 @@ using eiti.Application.Common;
 using eiti.Application.Features.Quotes.Commands.ConvertQuoteToSale;
 using eiti.Application.Features.Sales.Commands.CreateCcSale;
 using eiti.Application.Features.Sales.Commands.CreateSale;
+using eiti.Application.Features.Sales.Commands.UpdateSaleNotes;
 using eiti.Domain.Branches;
 using eiti.Domain.Companies;
 using eiti.Domain.Customers;
@@ -115,5 +116,62 @@ public sealed class SaleNotesTests
             CancellationToken.None);
 
         sent!.Notes.Should().Be("Presupuesto PRE-0012");
+    }
+
+    private static (UpdateSaleNotesHandler Handler, Mock<IUnitOfWork> UnitOfWork) BuildUpdateHandler(Sale? sale)
+    {
+        var currentUser = new Mock<ICurrentUserService>();
+        currentUser.SetupGet(s => s.IsAuthenticated).Returns(true);
+        currentUser.SetupGet(s => s.CompanyId).Returns(sale?.CompanyId ?? CompanyId.New());
+        var sales = new Mock<ISaleRepository>();
+        sales.Setup(r => r.GetByIdAsync(It.IsAny<SaleId>(), It.IsAny<CancellationToken>())).ReturnsAsync(sale);
+        var unitOfWork = new Mock<IUnitOfWork>();
+        return (new UpdateSaleNotesHandler(currentUser.Object, sales.Object, unitOfWork.Object), unitOfWork);
+    }
+
+    [Fact]
+    public async Task UpdateSaleNotes_FailsWhenTheSaleDoesNotExist()
+    {
+        var (handler, _) = BuildUpdateHandler(null);
+
+        var result = await handler.Handle(new UpdateSaleNotesCommand(Guid.NewGuid(), "Patente AB123CD"), CancellationToken.None);
+
+        result.Error.Should().Be(UpdateSaleNotesErrors.NotFound);
+    }
+
+    [Fact]
+    public async Task UpdateSaleNotes_FailsOnACancelledSale()
+    {
+        var sale = BuildSale();
+        sale.Cancel();
+        var (handler, unitOfWork) = BuildUpdateHandler(sale);
+
+        var result = await handler.Handle(new UpdateSaleNotesCommand(sale.Id.Value, "Patente AB123CD"), CancellationToken.None);
+
+        result.Error.Should().Be(UpdateSaleNotesErrors.Cancelled);
+        unitOfWork.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    // La nota no es dato fiscal: corregirla en una venta cobrada (y facturada) no toca el comprobante.
+    [Fact]
+    public async Task UpdateSaleNotes_UpdatesAPaidSale()
+    {
+        var sale = BuildSale();
+        sale.SetNotes("Presup. 1234");
+        var (handler, unitOfWork) = BuildUpdateHandler(sale);
+
+        var result = await handler.Handle(new UpdateSaleNotesCommand(sale.Id.Value, " Presup. 1234 - Patente AB123CD "), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        sale.Notes.Should().Be("Presup. 1234 - Patente AB123CD");
+        unitOfWork.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public void UpdateSaleNotesValidator_RejectsNotesOverTheMaximum()
+    {
+        var result = new UpdateSaleNotesValidator().Validate(new UpdateSaleNotesCommand(Guid.NewGuid(), TooLong));
+
+        result.Errors.Should().Contain(error => error.PropertyName == nameof(UpdateSaleNotesCommand.Notes));
     }
 }
