@@ -182,6 +182,12 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
             return Result<CreateSaleResponse>.Failure(discountCheck.Error);
         }
 
+        var singleCard = SaleCardPayment.EnsureSingleCard(request.Payments.Select(payment => payment.IdPaymentMethod));
+        if (singleCard.IsFailure)
+        {
+            return Result<CreateSaleResponse>.Failure(singleCard.Error);
+        }
+
         // Pre-fetch de todos los productos (detalles + trade-ins) en una sola query (evita N+1).
         var allProductIds = groupedDetails.Select(d => d.ProductId)
             .Concat(request.TradeIns.Select(t => t.ProductId))
@@ -243,17 +249,6 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
             }
         }
 
-        List<SalePayment> salePayments;
-        try
-        {
-            salePayments = BuildPayments(request.Payments);
-        }
-        catch (ArgumentException ex)
-        {
-            return Result<CreateSaleResponse>.Failure(
-                Error.Validation("Sales.Create.InvalidPayments", ex.Message));
-        }
-
         var tradeInsResult = BuildTradeIns(request.TradeIns, productMap);
         if (!tradeInsResult.IsSuccess)
         {
@@ -267,12 +262,6 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
             ? branch.Code.ToUpper()
             : branch.Name.ToUpper()[..Math.Min(3, branch.Name.Length)];
         var saleCode = $"{codePrefix}-{(branchSaleCount + 1).ToString().PadLeft(3, '0')}";
-
-        // Card surcharge is applied to the sale subtotal (not back-computed from payment amount).
-        // Surcharge = saleSubtotal * plan.SurchargePct / 100, computed once for the sale.
-        var itemsSubtotal = saleDetails.Sum(d => d.TotalAmount) + (request.NoDeliverySurchargeTotal ?? 0m);
-        if (request.GeneralDiscountPercent > 0)
-            itemsSubtotal = itemsSubtotal * (1m - request.GeneralDiscountPercent / 100m);
 
         // Pre-fetch de los bancos de tarjeta usados en los pagos (1 query, evita N+1 y el doble fetch
         // entre el cálculo de recargo y el set de datos de tarjeta).
@@ -316,21 +305,26 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
             return Result<CreateSaleResponse>.Failure(CreateSaleErrors.ChequeBankInvalid);
         }
 
-        var cardSurchargeTotal = 0m;
-        foreach (var reqPayment in request.Payments)
+        // El monto de la línea de tarjeta es la base (la parte de la venta que paga esa tarjeta, ya con el
+        // descuento general aplicado por el front): el recargo sale del plan sobre esa base y nada más.
+        var cardLine = request.Payments.FirstOrDefault(
+            payment => (SalePaymentMethod)payment.IdPaymentMethod == SalePaymentMethod.Card);
+        var cardCharge = cardLine is null
+            ? null
+            : SaleCardPayment.Charge(
+                cardLine.CardBankId is int cardBankId ? bankMap.GetValueOrDefault(cardBankId) : null,
+                cardLine.CardCuotas,
+                cardLine.Amount);
+
+        List<SalePayment> salePayments;
+        try
         {
-            if ((SalePaymentMethod)reqPayment.IdPaymentMethod == SalePaymentMethod.Card
-                && reqPayment.CardBankId.HasValue
-                && reqPayment.CardCuotas.HasValue)
-            {
-                bankMap.TryGetValue(reqPayment.CardBankId.Value, out var bank);
-                var plan = CardSurchargeCalculator.FindPlan(bank, reqPayment.CardCuotas.Value);
-                if (plan is not null && plan.SurchargePct > 0)
-                {
-                    cardSurchargeTotal += CardSurchargeCalculator.Compute(itemsSubtotal, plan.SurchargePct);
-                    break; // One surcharge applies to the sale, even with multiple card payments
-                }
-            }
+            salePayments = BuildPayments(request.Payments, cardCharge);
+        }
+        catch (ArgumentException ex)
+        {
+            return Result<CreateSaleResponse>.Failure(
+                Error.Validation("Sales.Create.InvalidPayments", ex.Message));
         }
 
         Sale sale;
@@ -351,7 +345,7 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
                 code: saleCode,
                 deliveryAddress: request.DeliveryAddress,
                 generalDiscountPercent: request.GeneralDiscountPercent,
-                cardSurchargeTotal: cardSurchargeTotal,
+                cardSurchargeTotal: cardCharge?.Surcharge ?? 0m,
                 contactPhone: request.ContactPhone);
             sale.SetNotes(request.Notes);
             sale.TrackGeneralDiscount(previousPercent: 0m, _currentUserService.UserId?.Value, request.GeneralDiscountReason);
@@ -489,7 +483,7 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
 
         sale.SetSourceChannel(request.SourceChannel);
 
-        // Process card and cheque data for payments
+        // Banco de la transferencia y cheque (los datos de la tarjeta ya los cargó BuildPayments).
         // BuildPayments groups by method, so use first matching request per method
         var paymentRequestByMethod = request.Payments
             .GroupBy(p => p.IdPaymentMethod)
@@ -500,18 +494,6 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
             var methodKey = (int)payment.Method;
             if (!paymentRequestByMethod.TryGetValue(methodKey, out var reqLine))
                 continue;
-
-            if (payment.Method == SalePaymentMethod.Card
-                && reqLine.CardBankId.HasValue
-                && reqLine.CardCuotas.HasValue
-                && bankMap.TryGetValue(reqLine.CardBankId.Value, out var bank))
-            {
-                var plan = CardSurchargeCalculator.FindPlan(bank, reqLine.CardCuotas.Value);
-                if (plan is not null)
-                {
-                    payment.SetCardData(bank.Id, plan.Cuotas, plan.SurchargePct, cardSurchargeTotal);
-                }
-            }
 
             if (payment.Method == SalePaymentMethod.Transfer && reqLine.TransferBankId.HasValue)
             {
@@ -653,7 +635,9 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
             : "Unknown";
     }
 
-    private static List<SalePayment> BuildPayments(IReadOnlyList<CreateSalePaymentItemRequest> paymentRequests)
+    private static List<SalePayment> BuildPayments(
+        IReadOnlyList<CreateSalePaymentItemRequest> paymentRequests,
+        SaleCardCharge? cardCharge)
     {
         return paymentRequests
             .GroupBy(payment => payment.IdPaymentMethod)
@@ -665,8 +649,15 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
                 }
 
                 var method = (SalePaymentMethod)group.Key;
-                var amount = group.Sum(item => item.Amount);
                 var reference = group.Select(item => item.Reference).FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));
+
+                // Una sola línea de tarjeta (SaleCardPayment.EnsureSingleCard): se cobra su base + el recargo.
+                if (method == SalePaymentMethod.Card && cardCharge is not null)
+                {
+                    return cardCharge.CreatePayment(reference);
+                }
+
+                var amount = group.Sum(item => item.Amount);
                 return SalePayment.Create(method, amount, reference);
             })
             .ToList();

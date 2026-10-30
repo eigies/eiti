@@ -253,6 +253,12 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
             {
                 return Result<UpdateSaleResponse>.Failure(discountCheck.Error);
             }
+
+            var singleCard = SaleCardPayment.EnsureSingleCard(request.Payments.Select(payment => payment.IdPaymentMethod));
+            if (singleCard.IsFailure)
+            {
+                return Result<UpdateSaleResponse>.Failure(singleCard.Error);
+            }
         }
 
         var productMap = new Dictionary<Guid, Product>();
@@ -338,22 +344,13 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
 
         if (requestedStatus != SaleStatus.Cancel)
         {
-            try
-            {
-                salePayments = BuildPayments(request.Payments);
-            }
-            catch (ArgumentException ex)
-            {
-                return Result<UpdateSaleResponse>.Failure(
-                    Error.Validation("Sales.Update.InvalidPayments", ex.Message));
-            }
-
+            Bank? cardBank = null;
             foreach (var reqPayment in request.Payments)
             {
                 if ((SalePaymentMethod)reqPayment.IdPaymentMethod == SalePaymentMethod.Card && reqPayment.CardBankId.HasValue)
                 {
-                    var bank = await _bankRepository.GetByIdAsync(reqPayment.CardBankId.Value, companyId, cancellationToken);
-                    if (!BankUsageRules.Supports(bank, BankUsage.Card))
+                    cardBank = await _bankRepository.GetByIdAsync(reqPayment.CardBankId.Value, companyId, cancellationToken);
+                    if (!BankUsageRules.Supports(cardBank, BankUsage.Card))
                     {
                         return Result<UpdateSaleResponse>.Failure(UpdateSaleErrors.CardBankInvalid);
                     }
@@ -369,6 +366,25 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
                 }
             }
 
+            // El monto de la línea de tarjeta es la base (lo que paga esa tarjeta de la venta): el recargo sale
+            // del plan sobre esa base. El "Cobrar" de Gestión de Ventas tiene que mandar la base, no lo cobrado.
+            var cardLine = request.Payments.FirstOrDefault(
+                payment => (SalePaymentMethod)payment.IdPaymentMethod == SalePaymentMethod.Card);
+            var cardCharge = cardLine is null
+                ? null
+                : SaleCardPayment.Charge(cardBank, cardLine.CardCuotas, cardLine.Amount);
+            cardSurchargeTotal = cardCharge?.Surcharge ?? 0m;
+
+            try
+            {
+                salePayments = BuildPayments(request.Payments, cardCharge);
+            }
+            catch (ArgumentException ex)
+            {
+                return Result<UpdateSaleResponse>.Failure(
+                    Error.Validation("Sales.Update.InvalidPayments", ex.Message));
+            }
+
             var tradeInsResult = await BuildTradeInsAsync(request.TradeIns, productMap, companyId, cancellationToken);
             if (!tradeInsResult.IsSuccess)
             {
@@ -376,30 +392,6 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
             }
 
             saleTradeIns = tradeInsResult.Value;
-
-            // Card surcharge is applied to the sale subtotal, not back-computed from payment amount.
-            var itemsSubtotal = saleDetails.Sum(d => d.TotalAmount) + (request.NoDeliverySurchargeTotal ?? 0m);
-            if (request.GeneralDiscountPercent > 0)
-                itemsSubtotal = itemsSubtotal * (1m - request.GeneralDiscountPercent / 100m);
-
-            foreach (var reqPayment in request.Payments)
-            {
-                if ((SalePaymentMethod)reqPayment.IdPaymentMethod == SalePaymentMethod.Card
-                    && reqPayment.CardBankId.HasValue
-                    && reqPayment.CardCuotas.HasValue)
-                {
-                    var bank = await _bankRepository.GetByIdAsync(reqPayment.CardBankId.Value, companyId, cancellationToken);
-                    var plan = bank?.InstallmentPlans.FirstOrDefault(p => p.Cuotas == reqPayment.CardCuotas.Value && p.Active);
-                    if (plan is not null && plan.SurchargePct > 0)
-                    {
-                        cardSurchargeTotal += decimal.Round(
-                            itemsSubtotal * plan.SurchargePct / 100m,
-                            2,
-                            MidpointRounding.AwayFromZero);
-                        break;
-                    }
-                }
-            }
         }
 
         try
@@ -534,6 +526,8 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
                     sale.Payments.ToList(),
                     sale.TradeIns.ToList(),
                     deliveryAddress: request.DeliveryAddress,
+                    // Los pagos se conservan tal cual: también el recargo de la tarjeta que ya traen.
+                    cardSurchargeTotal: sale.CardSurchargeTotal,
                     contactPhone: request.ContactPhone);
             }
             else
@@ -589,7 +583,7 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
 
         sale.SetSourceChannel(request.SourceChannel);
 
-        // Process card data for payments
+        // Banco de la transferencia (los datos de la tarjeta ya los cargó BuildPayments).
         if (requestedStatus != SaleStatus.Cancel)
         {
             var paymentRequestByMethod = request.Payments
@@ -601,21 +595,6 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
                 var methodKey = (int)payment.Method;
                 if (!paymentRequestByMethod.TryGetValue(methodKey, out var reqLine))
                     continue;
-
-                if (payment.Method == SalePaymentMethod.Card
-                    && reqLine.CardBankId.HasValue
-                    && reqLine.CardCuotas.HasValue)
-                {
-                    var bank = await _bankRepository.GetByIdAsync(reqLine.CardBankId.Value, companyId, cancellationToken);
-                    if (bank is not null)
-                    {
-                        var plan = bank.InstallmentPlans.FirstOrDefault(p => p.Cuotas == reqLine.CardCuotas.Value && p.Active);
-                        if (plan is not null)
-                        {
-                            payment.SetCardData(bank.Id, plan.Cuotas, plan.SurchargePct, cardSurchargeTotal);
-                        }
-                    }
-                }
 
                 if (payment.Method == SalePaymentMethod.Transfer && reqLine.TransferBankId.HasValue)
                 {
@@ -740,7 +719,9 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
             : "Unknown";
     }
 
-    private static List<SalePayment> BuildPayments(IReadOnlyList<UpdateSalePaymentItemRequest> paymentRequests)
+    private static List<SalePayment> BuildPayments(
+        IReadOnlyList<UpdateSalePaymentItemRequest> paymentRequests,
+        SaleCardCharge? cardCharge)
     {
         return paymentRequests
             .GroupBy(payment => payment.IdPaymentMethod)
@@ -752,8 +733,15 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
                 }
 
                 var method = (SalePaymentMethod)group.Key;
-                var amount = group.Sum(item => item.Amount);
                 var reference = group.Select(item => item.Reference).FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));
+
+                // Una sola línea de tarjeta (SaleCardPayment.EnsureSingleCard): se cobra su base + el recargo.
+                if (method == SalePaymentMethod.Card && cardCharge is not null)
+                {
+                    return cardCharge.CreatePayment(reference);
+                }
+
+                var amount = group.Sum(item => item.Amount);
                 return SalePayment.Create(method, amount, reference);
             })
             .ToList();
