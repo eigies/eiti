@@ -3,6 +3,7 @@ using eiti.Application.Features.Reports.Queries.CashMovementsReport;
 using eiti.Application.Features.Reports.Queries.CashSessionsReport;
 using eiti.Application.Features.Reports.Queries.CustomerDebtors;
 using eiti.Application.Features.Reports.Queries.DailySalesControl;
+using eiti.Application.Features.Reports.Queries.DiscountsReport;
 using eiti.Application.Features.Reports.Queries.IncomingTransfersReport;
 using eiti.Application.Features.Reports.Queries.ListAuditLog;
 using eiti.Application.Features.Reports.Queries.PaymentMethodsReport;
@@ -90,6 +91,20 @@ public sealed class ReportsController : ControllerBase
     {
         var result = await _sender.Send(
             new TradeInsByBranchQuery(dateFrom, dateTo, branchId, customerId),
+            cancellationToken);
+        return result.ToActionResult();
+    }
+
+    [HttpGet("sales/discounts")]
+    public async Task<IActionResult> DiscountsReport(
+        [FromQuery] DateTime dateFrom,
+        [FromQuery] DateTime dateTo,
+        [FromQuery] Guid? branchId,
+        [FromQuery] Guid? userId,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await _sender.Send(
+            new DiscountsReportQuery(dateFrom, dateTo, branchId, userId),
             cancellationToken);
         return result.ToActionResult();
     }

@@ -770,6 +770,15 @@ public sealed class Sale : AggregateRoot<SaleId>
         GeneralDiscountReason = normalizedReason;
     }
 
+    // Importe del renglón con el descuento general prorrateado (misma cuenta que RecalculateTotal, sin el
+    // precio manual). Es lo que la venta cobró por ese renglón, para los reportes de rentabilidad.
+    public decimal ProratedLineAmount(SaleDetail detail)
+    {
+        return GeneralDiscountPercent > 0
+            ? NormalizeAmount(detail.TotalAmount * (1m - GeneralDiscountPercent / 100m))
+            : detail.TotalAmount;
+    }
+
     private void RecalculateTotal()
     {
         var subtotal = _details.Sum(detail => detail.TotalAmount) + NoDeliverySurchargeTotal;
