@@ -4,6 +4,7 @@ using eiti.Application.Abstractions.Services;
 using eiti.Application.Common;
 using eiti.Application.Common.Authorization;
 using eiti.Application.Features.Banks.Common;
+using eiti.Application.Features.Sales.Common;
 using eiti.Domain.Banks;
 using eiti.Domain.Cash;
 using eiti.Domain.Common;
@@ -32,6 +33,7 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
     private readonly IBankRepository _bankRepository;
     private readonly ISaleFiscalDocumentRepository _fiscalDocuments;
     private readonly ICustomerCreditNoteRepository _creditNoteRepository;
+    private readonly IRetailDiscountPolicy _retailDiscountPolicy;
     private readonly IUnitOfWork _unitOfWork;
 
     public UpdateSaleHandler(
@@ -48,6 +50,7 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
         IBankRepository bankRepository,
         ISaleFiscalDocumentRepository fiscalDocuments,
         ICustomerCreditNoteRepository creditNoteRepository,
+        IRetailDiscountPolicy retailDiscountPolicy,
         IUnitOfWork unitOfWork)
     {
         _currentUserService = currentUserService;
@@ -63,6 +66,7 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
         _bankRepository = bankRepository;
         _fiscalDocuments = fiscalDocuments;
         _creditNoteRepository = creditNoteRepository;
+        _retailDiscountPolicy = retailDiscountPolicy;
         _unitOfWork = unitOfWork;
     }
 
@@ -231,6 +235,23 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
             if (activeCreditNotes.Count > 0)
             {
                 return Result<UpdateSaleResponse>.Failure(UpdateSaleErrors.HasActiveCreditNote(activeCreditNotes));
+            }
+        }
+
+        // Tope de descuento: se compara contra la venta guardada, antes de pisarla, para validar solo lo que
+        // cambia. Anular no aplica los descuentos del request, así que no se valida.
+        var previousGeneralDiscountPercent = sale.GeneralDiscountPercent;
+        if (requestedStatus != SaleStatus.Cancel)
+        {
+            var discountCheck = await _retailDiscountPolicy.EnsureWithinLimitAsync(
+                companyId,
+                request.GeneralDiscountPercent,
+                groupedDetails.Select(detail => new RetailDiscountLine(detail.ProductId, detail.DiscountPercent)).ToList(),
+                sale,
+                cancellationToken);
+            if (discountCheck.IsFailure)
+            {
+                return Result<UpdateSaleResponse>.Failure(discountCheck.Error);
             }
         }
 
@@ -539,6 +560,8 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
                 sale.Update(customer?.Id, requestedStatus, request.HasDelivery, saleDetails, salePayments, saleTradeIns, noDeliverySurchargeTotal: request.NoDeliverySurchargeTotal ?? 0, deliveryAddress: request.DeliveryAddress, generalDiscountPercent: request.GeneralDiscountPercent, cardSurchargeTotal: cardSurchargeTotal, contactPhone: request.ContactPhone);
                 sale.SetCashDrawer(resolvedCashDrawerId.HasValue ? new CashDrawerId(resolvedCashDrawerId.Value) : null);
             }
+
+            sale.TrackGeneralDiscount(previousGeneralDiscountPercent, _currentUserService.UserId?.Value, request.GeneralDiscountReason);
 
             if (requestedStatus == SaleStatus.Cancel && existingTransportAssignmentId is not null)
             {

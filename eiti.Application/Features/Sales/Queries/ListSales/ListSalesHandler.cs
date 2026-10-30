@@ -217,7 +217,8 @@ public sealed class ListSalesHandler : IRequestHandler<ListSalesQuery, Result<IR
                                 tradeIn.Quantity,
                                 tradeIn.Amount);
                         }).ToList(),
-                        sale.Notes);
+                        sale.Notes,
+                        sale.GeneralDiscountReason);
                 })
                 .ToList());
     }

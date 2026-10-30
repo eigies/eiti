@@ -33,6 +33,7 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
     private readonly IBankRepository _bankRepository;
     private readonly IChequeRepository _chequeRepository;
     private readonly ISaleInvoicingService _saleInvoicingService;
+    private readonly IRetailDiscountPolicy _retailDiscountPolicy;
     private readonly IUnitOfWork _unitOfWork;
 
     public CreateSaleHandler(
@@ -49,6 +50,7 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
         IBankRepository bankRepository,
         IChequeRepository chequeRepository,
         ISaleInvoicingService saleInvoicingService,
+        IRetailDiscountPolicy retailDiscountPolicy,
         IUnitOfWork unitOfWork)
     {
         _currentUserService = currentUserService;
@@ -64,6 +66,7 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
         _bankRepository = bankRepository;
         _chequeRepository = chequeRepository;
         _saleInvoicingService = saleInvoicingService;
+        _retailDiscountPolicy = retailDiscountPolicy;
         _unitOfWork = unitOfWork;
     }
 
@@ -166,6 +169,18 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
                 DiscountPercent = group.First().DiscountPercent
             })
             .ToList();
+
+        // Tope de descuento que fijó el dueño: se corta antes de reservar stock o armar nada.
+        var discountCheck = await _retailDiscountPolicy.EnsureWithinLimitAsync(
+            companyId,
+            request.GeneralDiscountPercent,
+            groupedDetails.Select(detail => new RetailDiscountLine(detail.ProductId, detail.DiscountPercent)).ToList(),
+            current: null,
+            cancellationToken);
+        if (discountCheck.IsFailure)
+        {
+            return Result<CreateSaleResponse>.Failure(discountCheck.Error);
+        }
 
         // Pre-fetch de todos los productos (detalles + trade-ins) en una sola query (evita N+1).
         var allProductIds = groupedDetails.Select(d => d.ProductId)
@@ -339,6 +354,7 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
                 cardSurchargeTotal: cardSurchargeTotal,
                 contactPhone: request.ContactPhone);
             sale.SetNotes(request.Notes);
+            sale.TrackGeneralDiscount(previousPercent: 0m, _currentUserService.UserId?.Value, request.GeneralDiscountReason);
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
         {

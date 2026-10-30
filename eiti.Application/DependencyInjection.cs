@@ -25,6 +25,7 @@ public static class DependencyInjection
         services.AddValidatorsFromAssembly(assembly);
         services.AddSingleton(TimeProvider.System);
         services.AddScoped<ISaleInvoicingService, SaleInvoicingService>();
+        services.AddScoped<IRetailDiscountPolicy, RetailDiscountPolicy>();
         services.AddScoped<ISupplierPaymentOrderService, SupplierPaymentOrderService>();
         services.AddScoped<ICustomerReceiptService, CustomerReceiptService>();
 

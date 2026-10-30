@@ -47,7 +47,8 @@ public sealed record ListSalesItemResponse(
     IReadOnlyList<ListSalesDetailItemResponse> Details,
     IReadOnlyList<ListSalesPaymentItemResponse> Payments,
     IReadOnlyList<ListSalesTradeInItemResponse> TradeIns,
-    string? Notes = null);
+    string? Notes = null,
+    string? GeneralDiscountReason = null);
 
 public sealed record ListSalesDetailItemResponse(
     Guid ProductId,

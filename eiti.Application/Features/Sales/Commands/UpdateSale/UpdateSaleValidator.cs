@@ -1,3 +1,4 @@
+using eiti.Domain.Sales;
 using FluentValidation;
 
 namespace eiti.Application.Features.Sales.Commands.UpdateSale;
@@ -14,6 +15,10 @@ public sealed class UpdateSaleValidator : AbstractValidator<UpdateSaleCommand>
 
         RuleFor(x => x.ContactPhone)
             .MaximumLength(30).WithMessage("El teléfono de contacto no puede superar los 30 caracteres.");
+
+        RuleFor(x => x.GeneralDiscountReason)
+            .MaximumLength(Sale.GeneralDiscountReasonMaxLength)
+            .WithMessage($"El motivo del descuento no puede superar los {Sale.GeneralDiscountReasonMaxLength} caracteres.");
 
         RuleFor(x => x.Details)
             .NotEmpty().WithMessage("At least one sale detail is required.");
