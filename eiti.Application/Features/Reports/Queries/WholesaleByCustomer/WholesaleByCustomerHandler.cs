@@ -90,7 +90,8 @@ public sealed class WholesaleByCustomerHandler
                 products.TryGetValue(line.ProductId.Value, out var catalogCost);
                 var unitCost = line.UnitCost ?? catalogCost;
                 acc.Units += line.Quantity;
-                acc.Revenue += line.TotalAmount;
+                // Con el descuento general prorrateado, igual que el reporte de rentabilidad.
+                acc.Revenue += sale.ProratedLineAmount(line);
                 acc.Cost += decimal.Round(line.Quantity * unitCost, 2, MidpointRounding.AwayFromZero);
             }
         }

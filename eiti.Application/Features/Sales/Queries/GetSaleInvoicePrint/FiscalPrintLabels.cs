@@ -1,3 +1,4 @@
+using System.Globalization;
 using eiti.Application.Abstractions.Services;
 
 namespace eiti.Application.Features.Sales.Queries.GetSaleInvoicePrint;
@@ -34,4 +35,30 @@ internal static class FiscalPrintLabels
 
     public static string FormatCuit(string cuit) =>
         cuit.Length == 11 ? $"{cuit[..2]}-{cuit[2..10]}-{cuit[10]}" : cuit;
+
+    private static readonly CultureInfo Argentina = CultureInfo.GetCultureInfo("es-AR");
+
+    /// <summary>"Recargo financiero tarjeta (Santander, 3 cuotas, 11,06%)". Omite lo que no se sepa.</summary>
+    public static string CardSurcharge(string? bankName, int? cuotas, decimal? surchargePct)
+    {
+        var parts = new List<string>();
+        if (!string.IsNullOrWhiteSpace(bankName))
+        {
+            parts.Add(bankName.Trim());
+        }
+
+        if (cuotas is int count)
+        {
+            parts.Add(count == 1 ? "1 cuota" : $"{count} cuotas");
+        }
+
+        if (surchargePct is decimal pct)
+        {
+            parts.Add($"{pct.ToString("0.##", Argentina)}%");
+        }
+
+        return parts.Count == 0
+            ? "Recargo financiero tarjeta"
+            : $"Recargo financiero tarjeta ({string.Join(", ", parts)})";
+    }
 }

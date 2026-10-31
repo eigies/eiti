@@ -28,6 +28,13 @@ public sealed class CreateSaleValidator : AbstractValidator<CreateSaleCommand>
         RuleFor(x => x.ContactPhone)
             .MaximumLength(30).WithMessage("El teléfono de contacto no puede superar los 30 caracteres.");
 
+        RuleFor(x => x.Notes)
+            .MaximumLength(Sale.NotesMaxLength).WithMessage($"Las observaciones no pueden superar los {Sale.NotesMaxLength} caracteres.");
+
+        RuleFor(x => x.GeneralDiscountReason)
+            .MaximumLength(Sale.GeneralDiscountReasonMaxLength)
+            .WithMessage($"El motivo del descuento no puede superar los {Sale.GeneralDiscountReasonMaxLength} caracteres.");
+
         RuleFor(x => x.Details)
             .NotEmpty().WithMessage("At least one sale detail is required.");
 

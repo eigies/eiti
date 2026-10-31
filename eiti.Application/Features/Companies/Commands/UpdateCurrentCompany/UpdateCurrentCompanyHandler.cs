@@ -106,6 +106,7 @@ public sealed class UpdateCurrentCompanyHandler
                 company.PdfLogoUrl,
                 company.PdfWatermarkUrl,
                 company.AutomaticInvoicing,
+                company.MaxRetailDiscountPercent,
                 company.CreatedAt));
     }
 }

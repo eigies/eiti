@@ -297,9 +297,13 @@ un botón**: sin migración, sin refactor de dominio.
 
 ## 11. Puntos abiertos
 
-- **Recargo por tarjeta**: `CardSurchargeTotal` **no** está en `TotalAmount` (existe
-  `EffectiveTotal`). Hoy se factura sobre `TotalAmount`. **Definir con el contador**, no es
-  decisión del desarrollo.
+- **Recargo por tarjeta** (rama `feature/notas-recargo-descuento`, **pendiente del OK del contador**
+  antes de `main`): la factura se pide por `TotalAmount + CardSurchargeTotal`, con el IVA contenido
+  a la alícuota de la venta sobre ese total (`SaleInvoicingService.BuildAmounts`). El total pedido
+  queda en `SaleFiscalDocument.RequestedTotal` (null en facturas anteriores = se facturó
+  `TotalAmount`); un intento en trámite se re-envía por el mismo total. Una venta facturada en espera
+  y cobrada después en cuotas acepta el cobro y muestra `UninvoicedCardSurcharge` ("recargo no
+  facturado"); la factura queda como salió.
 - **Ventas sin `VatRate`** se facturan asumiendo **21%** contenido en el total (emisor
   Responsable Inscripto). Revisar antes de facturar histórico con otra alícuota real.
 - **Alícuota única por venta**: no hay IVA mixto en un comprobante. Válido para ARCA hoy.

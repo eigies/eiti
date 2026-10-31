@@ -53,6 +53,22 @@ public sealed class GetSaleInvoicePrintHandlerTests
         print.Amounts.Total.Should().Be(121000m);
         print.Amounts.Vat.Should().ContainSingle(x => x.Rate == 21m && x.Amount == 21000m);
         print.IsVoided.Should().BeFalse();
+        print.Notes.Should().BeNull();
+    }
+
+    // La nota es de la venta, no del comprobante: se lee al imprimir, así una corrección sale en la reimpresión.
+    [Fact]
+    public async Task Invoice_prints_the_current_sale_notes()
+    {
+        _sale.SetNotes("Presupuesto PRE-0012 - Patente AB123CD");
+        var invoice = AuthorizedInvoice();
+        _fiscalDocuments.Setup(x => x.ListBySaleAsync(_sale.Id, _companyId, It.IsAny<CancellationToken>())).ReturnsAsync([invoice]);
+        _fiscalization.Setup(x => x.GetPrintableDocumentAsync(_companyId.Value, invoice.FiscalDocumentId!.Value, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Printable("invoiceB", receiver: null));
+
+        var result = await Handler().Handle(new GetSaleInvoicePrintQuery(_sale.Id.Value, SaleFiscalDocumentKind.Invoice), CancellationToken.None);
+
+        result.Value.Notes.Should().Be("Presupuesto PRE-0012 - Patente AB123CD");
     }
 
     // El receptor impreso es el que se informó a ARCA (lo devuelve el servicio), no el cliente tal
@@ -174,6 +190,6 @@ public sealed class GetSaleInvoicePrintHandlerTests
         branches.Setup(x => x.GetByIdAsync(_branch.Id, _companyId, It.IsAny<CancellationToken>())).ReturnsAsync(_branch);
 
         return new GetSaleInvoicePrintHandler(currentUser.Object, sales.Object, _fiscalDocuments.Object,
-            products.Object, branches.Object, _fiscalization.Object);
+            products.Object, branches.Object, _fiscalization.Object, new Mock<IBankRepository>().Object);
     }
 }

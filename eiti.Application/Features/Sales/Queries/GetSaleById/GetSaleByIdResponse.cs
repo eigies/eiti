@@ -53,7 +53,12 @@ public sealed record GetSaleByIdResponse(
     IReadOnlyList<GetSaleByIdDetailResponse> Details,
     IReadOnlyList<GetSaleByIdPaymentResponse> Payments,
     IReadOnlyList<GetSaleByIdCcPaymentResponse> CcPayments,
-    IReadOnlyList<GetSaleByIdTradeInResponse> TradeIns);
+    IReadOnlyList<GetSaleByIdTradeInResponse> TradeIns,
+    string? Notes = null,
+    string? GeneralDiscountReason = null,
+    // Recargo de tarjeta cobrado que no entró en la factura vigente (venta facturada en espera y cobrada
+    // después en cuotas). 0 si no hay factura vigente o si la factura ya lo incluye.
+    decimal UninvoicedCardSurcharge = 0m);
 
 public sealed record GetSaleByIdTradeInResponse(
     Guid ProductId,

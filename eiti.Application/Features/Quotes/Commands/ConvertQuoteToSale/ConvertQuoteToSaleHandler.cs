@@ -73,7 +73,8 @@ public sealed class ConvertQuoteToSaleHandler : IRequestHandler<ConvertQuoteToSa
                 request.TradeIns,
                 request.GeneralDiscountPercent,
                 request.ManualOverridePrice,
-                applyVat ? quote.VatRate : null),
+                applyVat ? quote.VatRate : null,
+                Notes: request.Notes),
             cancellationToken);
 
         if (createSaleResult.IsFailure)

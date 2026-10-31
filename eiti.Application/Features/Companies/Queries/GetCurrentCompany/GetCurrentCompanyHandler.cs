@@ -50,6 +50,7 @@ public sealed class GetCurrentCompanyHandler
                 company.PdfLogoUrl,
                 company.PdfWatermarkUrl,
                 company.AutomaticInvoicing,
+                company.MaxRetailDiscountPercent,
                 company.CreatedAt));
     }
 }

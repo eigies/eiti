@@ -243,6 +243,46 @@ public sealed class SaleRepository : ISaleRepository
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyList<Sale>> ListForDiscountReportAsync(
+        CompanyId companyId,
+        DateTime from,
+        DateTime to,
+        Guid? branchId,
+        Guid? userId,
+        IReadOnlyCollection<Guid>? allowedBranchIds,
+        CancellationToken cancellationToken = default)
+    {
+        var query = _context.Sales
+            .AsNoTracking()
+            .Where(sale => sale.CompanyId == companyId
+                && sale.CreatedAt >= from
+                && sale.CreatedAt <= to
+                && sale.SaleStatus != SaleStatus.Cancel
+                && sale.GeneralDiscountPercent > 0);
+
+        if (branchId.HasValue)
+        {
+            var bId = new BranchId(branchId.Value);
+            query = query.Where(sale => sale.BranchId == bId);
+        }
+
+        if (userId.HasValue)
+        {
+            var appliedBy = userId.Value;
+            query = query.Where(sale => sale.GeneralDiscountByUserId == appliedBy);
+        }
+
+        if (allowedBranchIds is not null && allowedBranchIds.Count > 0)
+        {
+            var allowed = allowedBranchIds.Select(id => new BranchId(id)).ToList();
+            query = query.Where(sale => allowed.Contains(sale.BranchId));
+        }
+
+        return await query
+            .OrderByDescending(sale => sale.CreatedAt)
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task<IReadOnlyList<Sale>> ListWithPaymentsForReportAsync(
         CompanyId companyId,
         DateTime from,

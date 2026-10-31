@@ -10,6 +10,9 @@ namespace eiti.Domain.Sales;
 
 public sealed class Sale : AggregateRoot<SaleId>
 {
+    public const int NotesMaxLength = 500;
+    public const int GeneralDiscountReasonMaxLength = 200;
+
     public CompanyId CompanyId { get; private set; } = null!;
     public BranchId BranchId { get; private set; } = null!;
     public CustomerId? CustomerId { get; private set; }
@@ -21,6 +24,11 @@ public sealed class Sale : AggregateRoot<SaleId>
     public decimal NoDeliverySurchargeTotal { get; private set; }
     public decimal CardSurchargeTotal { get; private set; }
     public decimal GeneralDiscountPercent { get; private set; }
+    // Quién, cuándo y por qué se fijó el descuento general (mismo patrón que OverriddenByUserId/OverriddenAt).
+    // Cambian solo cuando cambia el porcentaje; con el descuento en 0 quedan en null.
+    public Guid? GeneralDiscountByUserId { get; private set; }
+    public DateTime? GeneralDiscountAt { get; private set; }
+    public string? GeneralDiscountReason { get; private set; }
     public decimal OriginalTotal { get; private set; }
     public decimal TotalAmount { get; private set; }
     // Desglose de IVA para ventas provenientes de un presupuesto convertido "con IVA".
@@ -40,6 +48,9 @@ public sealed class Sale : AggregateRoot<SaleId>
     public string? Code { get; private set; }
     public string? DeliveryAddress { get; private set; }
     public string? ContactPhone { get; private set; }
+    // Observación libre que pide el cliente (presupuesto, patente). Sale impresa en la factura,
+    // no viaja al fisco: por eso se puede corregir aunque la venta ya esté facturada.
+    public string? Notes { get; private set; }
     private readonly List<SaleDetail> _details = [];
     private readonly List<SalePayment> _payments = [];
     private readonly List<SaleTradeIn> _tradeIns = [];
@@ -717,6 +728,57 @@ public sealed class Sale : AggregateRoot<SaleId>
     public void SetDeliveryAddress(string? address) => DeliveryAddress = address;
 
     public void SetContactPhone(string? phone) => ContactPhone = phone;
+
+    public void SetNotes(string? notes)
+    {
+        var normalized = string.IsNullOrWhiteSpace(notes) ? null : notes.Trim();
+        if (normalized?.Length > NotesMaxLength)
+        {
+            throw new ArgumentException($"Notes cannot exceed {NotesMaxLength} characters.", nameof(notes));
+        }
+
+        Notes = normalized;
+    }
+
+    // Se llama después de Create/Update con el porcentaje que tenía la venta antes (0 en el alta).
+    // Si el porcentaje no cambió se conservan quién y cuándo (cobrar o editar otra cosa no cambia quién
+    // hizo el descuento), pero un motivo corregido se guarda. Si volvió a 0, la traza se borra.
+    public void TrackGeneralDiscount(decimal previousPercent, Guid? userId, string? reason)
+    {
+        if (GeneralDiscountPercent == 0m)
+        {
+            GeneralDiscountByUserId = null;
+            GeneralDiscountAt = null;
+            GeneralDiscountReason = null;
+            return;
+        }
+
+        var normalizedReason = string.IsNullOrWhiteSpace(reason) ? null : reason.Trim();
+        if (normalizedReason?.Length > GeneralDiscountReasonMaxLength)
+        {
+            throw new ArgumentException(
+                $"General discount reason cannot exceed {GeneralDiscountReasonMaxLength} characters.", nameof(reason));
+        }
+
+        if (GeneralDiscountPercent == NormalizeAmount(previousPercent))
+        {
+            GeneralDiscountReason = normalizedReason;
+            return;
+        }
+
+        GeneralDiscountByUserId = userId;
+        GeneralDiscountAt = DateTime.UtcNow;
+        GeneralDiscountReason = normalizedReason;
+    }
+
+    // Importe del renglón con el descuento general prorrateado (misma cuenta que RecalculateTotal, sin el
+    // precio manual). Es lo que la venta cobró por ese renglón, para los reportes de rentabilidad.
+    public decimal ProratedLineAmount(SaleDetail detail)
+    {
+        return GeneralDiscountPercent > 0
+            ? NormalizeAmount(detail.TotalAmount * (1m - GeneralDiscountPercent / 100m))
+            : detail.TotalAmount;
+    }
 
     private void RecalculateTotal()
     {

@@ -24,6 +24,12 @@ public static class CancelSaleErrors
         "Sales.Cancel.NoOpenSessionForHistoricalCancel",
         "No hay una sesión de caja abierta para registrar la cancelación histórica.");
 
+    public static Error HasActiveCreditNote(IReadOnlyCollection<string> codes) => Error.Conflict(
+        "Sales.Cancel.HasActiveCreditNote",
+        codes.Count == 1
+            ? $"La venta tiene vigente la nota de crédito {codes.First()}. Anulala primero desde la cuenta corriente del cliente: si no, su crédito le queda a favor aunque la venta ya no exista."
+            : $"La venta tiene vigentes las notas de crédito {string.Join(", ", codes)}. Anulalas primero desde la cuenta corriente del cliente: si no, su crédito le queda a favor aunque la venta ya no exista.");
+
     public static readonly Error RefundModeRequired = Error.Validation(
         "Sales.Cancel.RefundModeRequired",
         "La venta tiene cobros: indicá si vuelven como saldo a favor o si se anulan los pagos.");

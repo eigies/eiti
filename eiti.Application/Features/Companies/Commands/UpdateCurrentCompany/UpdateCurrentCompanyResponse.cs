@@ -10,4 +10,5 @@ public sealed record UpdateCurrentCompanyResponse(
     string? PdfLogoUrl,
     string? PdfWatermarkUrl,
     bool AutomaticInvoicing,
+    decimal MaxRetailDiscountPercent,
     DateTime CreatedAt);

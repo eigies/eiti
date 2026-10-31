@@ -9,6 +9,7 @@ using eiti.Application.Features.Sales.Commands.RegularizeSaleCreditNote;
 using eiti.Application.Features.Sales.Commands.RetrySaleCreditNote;
 using eiti.Application.Features.Sales.Commands.SendSaleWhatsApp;
 using eiti.Application.Features.Sales.Commands.UpdateSale;
+using eiti.Application.Features.Sales.Commands.UpdateSaleNotes;
 using eiti.Application.Features.Sales.Queries.GetSaleById;
 using eiti.Application.Features.Sales.Queries.GetSaleFiscalReceivers;
 using eiti.Application.Features.Sales.Queries.GetSaleInvoicePdf;
@@ -69,6 +70,16 @@ public sealed class SalesController : ControllerBase
         CancellationToken cancellationToken)
     {
         var result = await _sender.Send(command with { Id = id }, cancellationToken);
+        return result.ToActionResult();
+    }
+
+    [HttpPut("{id:guid}/notes")]
+    public async Task<IActionResult> UpdateSaleNotes(
+        Guid id,
+        [FromBody] UpdateSaleNotesRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _sender.Send(new UpdateSaleNotesCommand(id, request.Notes), cancellationToken);
         return result.ToActionResult();
     }
 
@@ -260,3 +271,5 @@ public sealed record UpdateSaleTransportStatusRequest(int Status);
 
 /// <summary>Cuerpo opcional de POST /sales/{id}/invoice.</summary>
 public sealed record InvoiceSaleRequest(InvoiceLetter? InvoiceLetter);
+
+public sealed record UpdateSaleNotesRequest(string? Notes);

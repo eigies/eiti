@@ -54,6 +54,11 @@ public sealed class CompanyConfiguration : IEntityTypeConfiguration<Company>
         builder.Property(company => company.AutomaticInvoicing)
             .HasDefaultValue(false)
             .IsRequired();
+
+        builder.Property(company => company.MaxRetailDiscountPercent)
+            .HasColumnType("decimal(5,2)")
+            .HasDefaultValue(0m)
+            .IsRequired();
         builder.Property(company => company.CreatedAt).IsRequired();
 
         builder.HasIndex(company => company.PrimaryDomain).IsUnique();

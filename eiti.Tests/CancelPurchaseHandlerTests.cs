@@ -103,6 +103,7 @@ public sealed class CancelPurchaseHandlerTests
                 new Mock<ISupplierPaymentOrderRepository>().Object,
                 purchaseRepository.Object,
                 new Mock<IChequeRepository>().Object),
+            NoCreditNotes(),
             new Mock<IUnitOfWork>().Object);
 
         // Revertir el pago (ReversePayments): la porción $350 se deshace vía el pago real; la porción $150
@@ -151,11 +152,123 @@ public sealed class CancelPurchaseHandlerTests
             new Mock<ICashDrawerRepository>().Object,
             new Mock<ICashSessionRepository>().Object,
             new Mock<ISupplierPaymentOrderService>().Object,
+            NoCreditNotes(),
             new Mock<IUnitOfWork>().Object);
 
         var result = await handler.Handle(new CancelPurchaseCommand(purchase.Id), CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
         result.Error.Code.Should().Be("Purchases.Cancel.RefundModeRequired");
+    }
+
+    // Espejo de CancelSale (NCC-003 de LACTEOS BARRAZA): con una NC vigente sobre la compra, anularla deja
+    // crédito a favor por mercadería que ya no figura comprada. Primero se anula la NC.
+    [Fact]
+    public async Task Handle_ShouldReject_WhenPurchaseHasActiveCreditNote()
+    {
+        var ctx = new PurchaseCancelContext();
+        ctx.LinkCreditNote("NCP-004");
+
+        var result = await ctx.Handler.Handle(new CancelPurchaseCommand(ctx.Purchase.Id), CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("Purchases.Cancel.HasActiveCreditNote");
+        result.Error.Description.Should().Contain("NCP-004");
+        ctx.Purchase.Status.Should().NotBe(PurchaseStatus.Cancelled);
+        ctx.Stock.OnHandQuantity.Should().Be(5);
+        ctx.UnitOfWork.Verify(x => x.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Handle_ShouldCancel_WhenLinkedCreditNoteIsCancelled()
+    {
+        var ctx = new PurchaseCancelContext();
+        ctx.LinkCreditNote("NCP-003").Cancel(ctx.UserId.Value);
+
+        var result = await ctx.Handler.Handle(new CancelPurchaseCommand(ctx.Purchase.Id), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue(result.IsFailure ? result.Error.Description : string.Empty);
+        ctx.Purchase.Status.Should().Be(PurchaseStatus.Cancelled);
+        ctx.Stock.OnHandQuantity.Should().Be(0);
+    }
+
+    private static ISupplierCreditNoteRepository NoCreditNotes()
+    {
+        var repository = new Mock<ISupplierCreditNoteRepository>();
+        repository
+            .Setup(x => x.ListByPurchaseAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+        return repository.Object;
+    }
+
+    // Compra sin pagos de 5 unidades, con su stock ya ingresado.
+    private sealed class PurchaseCancelContext
+    {
+        public CompanyId CompanyId { get; } = CompanyId.New();
+        public BranchId BranchId { get; } = BranchId.New();
+        public UserId UserId { get; } = UserId.New();
+        public Supplier Supplier { get; }
+        public Purchase Purchase { get; }
+        public BranchProductStock Stock { get; }
+        public Mock<IUnitOfWork> UnitOfWork { get; } = new();
+        public CancelPurchaseHandler Handler { get; }
+
+        private readonly List<SupplierCreditNote> _creditNotes = [];
+
+        public PurchaseCancelContext()
+        {
+            Supplier = Supplier.Create(CompanyId.Value, "Proveedor", null, null, null, null);
+            var productId = Guid.NewGuid();
+            Purchase = Purchase.Create(
+                CompanyId.Value, BranchId.Value, Supplier.Id,
+                [PurchaseDetail.Create(productId, "Producto", 5, 100m)],
+                null, null, UserId.Value, "COMP-0003");
+
+            Stock = BranchProductStock.Create(CompanyId, BranchId, new eiti.Domain.Products.ProductId(productId));
+            Stock.ApplyManualEntry(5);
+
+            var currentUserService = new Mock<ICurrentUserService>();
+            currentUserService.SetupGet(x => x.IsAuthenticated).Returns(true);
+            currentUserService.SetupGet(x => x.CompanyId).Returns(CompanyId);
+            currentUserService.SetupGet(x => x.UserId).Returns(UserId);
+
+            var purchaseRepository = new Mock<IPurchaseRepository>();
+            purchaseRepository
+                .Setup(x => x.GetByIdAsync(Purchase.Id, CompanyId.Value, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(Purchase);
+
+            var stockRepository = new Mock<IBranchProductStockRepository>();
+            stockRepository
+                .Setup(x => x.GetOrCreateAsync(BranchId, It.IsAny<eiti.Domain.Products.ProductId>(), CompanyId, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(Stock);
+
+            var creditNoteRepository = new Mock<ISupplierCreditNoteRepository>();
+            creditNoteRepository
+                .Setup(x => x.ListByPurchaseAsync(CompanyId.Value, Purchase.Id, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(() => _creditNotes.ToList());
+
+            Handler = new CancelPurchaseHandler(
+                currentUserService.Object,
+                purchaseRepository.Object,
+                stockRepository.Object,
+                new Mock<IStockMovementRepository>().Object,
+                new Mock<ISupplierRepository>().Object,
+                new Mock<ISupplierPaymentRepository>().Object,
+                new Mock<ICashDrawerRepository>().Object,
+                new Mock<ICashSessionRepository>().Object,
+                new Mock<ISupplierPaymentOrderService>().Object,
+                creditNoteRepository.Object,
+                UnitOfWork.Object);
+        }
+
+        // Nota de crédito emitida sobre la compra (PurchaseId), como la deja CreateSupplierCreditNote.
+        public SupplierCreditNote LinkCreditNote(string code)
+        {
+            var note = SupplierCreditNote.Create(
+                CompanyId.Value, Supplier.Id, BranchId.Value, code, 100m,
+                "devolución de una unidad", DateTime.UtcNow, Purchase.Id, UserId.Value);
+            _creditNotes.Add(note);
+            return note;
+        }
     }
 }

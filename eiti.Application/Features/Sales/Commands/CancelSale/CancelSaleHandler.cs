@@ -6,6 +6,7 @@ using eiti.Application.Common.Authorization;
 using eiti.Application.Features.Customers.Common;
 using eiti.Application.Features.Sales.Common;
 using eiti.Domain.Cash;
+using eiti.Domain.Common;
 using eiti.Domain.Companies;
 using eiti.Domain.Customers;
 using eiti.Domain.Products;
@@ -30,6 +31,7 @@ public sealed class CancelSaleHandler : IRequestHandler<CancelSaleCommand, Resul
     private readonly ICustomerPaymentRepository _customerPaymentRepository;
     private readonly ICustomerReceiptService _customerReceiptService;
     private readonly ISaleInvoicingService _saleInvoicingService;
+    private readonly ICustomerCreditNoteRepository _creditNoteRepository;
     private readonly IUnitOfWork _unitOfWork;
 
     public CancelSaleHandler(
@@ -44,6 +46,7 @@ public sealed class CancelSaleHandler : IRequestHandler<CancelSaleCommand, Resul
         ICustomerPaymentRepository customerPaymentRepository,
         ICustomerReceiptService customerReceiptService,
         ISaleInvoicingService saleInvoicingService,
+        ICustomerCreditNoteRepository creditNoteRepository,
         IUnitOfWork unitOfWork)
     {
         _currentUserService = currentUserService;
@@ -57,6 +60,7 @@ public sealed class CancelSaleHandler : IRequestHandler<CancelSaleCommand, Resul
         _customerPaymentRepository = customerPaymentRepository;
         _customerReceiptService = customerReceiptService;
         _saleInvoicingService = saleInvoicingService;
+        _creditNoteRepository = creditNoteRepository;
         _unitOfWork = unitOfWork;
     }
 
@@ -78,6 +82,19 @@ public sealed class CancelSaleHandler : IRequestHandler<CancelSaleCommand, Resul
         if (sale.SaleStatus == SaleStatus.Cancel)
         {
             return Result.Failure(CancelSaleErrors.AlreadyCancelled);
+        }
+
+        // Una NC vigente sobre la venta tiene que anularse primero: si no, lo que imputó vuelve como saldo a favor
+        // y el crédito sobrevive a la venta que lo justificaba (NCC-003 de LACTEOS BARRAZA, MAT-3844). Mismo
+        // invariante que CreateCustomerCreditNote, que no emite NC sobre una venta anulada. Va antes de pedir
+        // RefundMode: no tiene sentido elegir qué hacer con lo cobrado de una anulación que se va a rechazar.
+        var activeCreditNotes = (await _creditNoteRepository.ListBySaleAsync(companyId.Value, sale.Id.Value, cancellationToken))
+            .Where(note => note.Status == CreditNoteStatus.Active)
+            .Select(note => note.Code)
+            .ToList();
+        if (activeCreditNotes.Count > 0)
+        {
+            return Result.Failure(CancelSaleErrors.HasActiveCreditNote(activeCreditNotes));
         }
 
         var existingTransportAssignmentId = sale.TransportAssignmentId;

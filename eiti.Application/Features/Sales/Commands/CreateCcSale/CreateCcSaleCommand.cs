@@ -17,7 +17,8 @@ public sealed record CreateCcSaleCommand(
     // Igual que en mostrador: opt-in por venta, y se factura igual si la sucursal factura sola.
     bool RequestInvoicing = false,
     // Letra que eligió el vendedor. Con factura pedida, la venta se frena si no coincide con el cliente.
-    InvoiceLetter? InvoiceLetter = null
+    InvoiceLetter? InvoiceLetter = null,
+    string? Notes = null
 ) : IRequest<Result<CreateCcSaleResponse>>, IRequirePermissions
 {
     public IReadOnlyCollection<string> RequiredPermissions => [PermissionCodes.SalesCreate];

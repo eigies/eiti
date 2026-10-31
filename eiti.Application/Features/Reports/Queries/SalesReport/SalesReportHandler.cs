@@ -125,7 +125,9 @@ public sealed class SalesReportHandler : IRequestHandler<SalesReportQuery, Resul
                 if (request.CategoryId.HasValue && prod.CategoryId != request.CategoryId.Value)
                     continue;
 
-                var revenue = line.TotalAmount;
+                // El descuento general de la venta se prorratea en cada renglón; sin esto una venta con descuento
+                // figuraba con ingreso y ganancia inflados. (El precio manual de las CC sigue sin contarse: va aparte.)
+                var revenue = sale.ProratedLineAmount(line);
                 var unitCost = line.UnitCost ?? prod.CostPrice;
                 var cost = decimal.Round(line.Quantity * unitCost, 2, MidpointRounding.AwayFromZero);
 
