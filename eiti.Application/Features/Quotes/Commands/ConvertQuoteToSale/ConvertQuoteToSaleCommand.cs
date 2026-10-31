@@ -14,7 +14,8 @@ public sealed record ConvertQuoteToSaleCommand(
     IReadOnlyList<CreateSaleTradeInItemRequest>? TradeIns = null,
     decimal GeneralDiscountPercent = 0,
     decimal? ManualOverridePrice = null,
-    bool WithVat = false
+    bool WithVat = false,
+    string? Notes = null
 ) : IRequest<Result<CreateCcSaleResponse>>, IRequirePermissions
 {
     public IReadOnlyCollection<string> RequiredPermissions => [PermissionCodes.QuotesConvert];

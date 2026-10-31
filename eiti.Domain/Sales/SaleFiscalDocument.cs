@@ -38,6 +38,13 @@ public sealed class SaleFiscalDocument : AggregateRoot<SaleFiscalDocumentId>
     public DateTime? AuthorizationExpiry { get; private set; }
     public string? QrUrl { get; private set; }
     public string? RejectionReason { get; private set; }
+    /// <summary>
+    /// Total que se pidió autorizar en una factura (mercadería + recargo de tarjeta cobrado hasta ese momento).
+    /// Null en NC/ND y en las facturas pedidas antes de que existiera: esas facturaron la mercadería
+    /// (TotalAmount), porque el recargo nunca se facturaba. Con esto se ve el recargo que se cobró después de
+    /// facturar y quedó afuera de la factura (<see cref="SaleInvoicingView.UninvoicedCardSurcharge"/>).
+    /// </summary>
+    public decimal? RequestedTotal { get; private set; }
     public DateTime? IssuedAt { get; private set; }
     public DateTime CreatedAt { get; private set; }
     public DateTime? UpdatedAt { get; private set; }
@@ -204,6 +211,37 @@ public sealed class SaleFiscalDocument : AggregateRoot<SaleFiscalDocumentId>
         }
 
         return new(SaleFiscalDocumentId.New(), companyId, saleId, SaleFiscalDocumentKind.CreditNote, sequence, invoice.Id);
+    }
+
+    /// <summary>
+    /// Fija el total que se pide autorizar. Un intento se re-envía siempre con su mismo RequestId, así que su
+    /// total no cambia: volver a fijarlo con el mismo valor no hace nada, con otro es un error de programación.
+    /// </summary>
+    public void RecordRequestedTotal(decimal total)
+    {
+        if (Kind != SaleFiscalDocumentKind.Invoice)
+        {
+            throw new InvalidOperationException("Only an invoice records the total it requested.");
+        }
+
+        if (total < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(total), total, "The requested total cannot be negative.");
+        }
+
+        var normalized = decimal.Round(total, 2, MidpointRounding.AwayFromZero);
+        if (RequestedTotal == normalized)
+        {
+            return;
+        }
+
+        if (RequestedTotal is not null)
+        {
+            throw new InvalidOperationException("An invoice attempt is always resent with the total it first requested.");
+        }
+
+        RequestedTotal = normalized;
+        UpdatedAt = DateTime.UtcNow;
     }
 
     /// <summary>Idempotente: el callback del servicio fiscal es at-least-once.</summary>

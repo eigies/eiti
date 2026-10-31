@@ -35,6 +35,8 @@ public static class PermissionCodes
     public const string CustomersDelete = "customers.delete";
 
     public const string SalesPriceOverride = "sales.override_price";
+    // Fijar el descuento máximo que cualquier vendedor puede aplicar en una venta minorista.
+    public const string SalesDiscountConfigure = "sales.discount.configure";
 
     // Permite descargar el remito de la venta CON importes (el remito de traslado sin importes es libre).
     // No se asigna por defecto a ningún rol: se otorga manualmente vía perfiles de acceso.
@@ -65,6 +67,7 @@ public static class PermissionCodes
     public const string ReportsSalesDailyControl = "reports.sales.daily_control";
     public const string ReportsWholesaleByCustomer = "reports.sales.wholesale_by_customer";
     public const string ReportsSalesTradeIns = "reports.sales.trade_ins";
+    public const string ReportsSalesDiscounts = "reports.sales.discounts";
     public const string ReportsDebtors = "reports.debtors";
     public const string ReportsCash = "reports.cash";
     public const string ReportsStock = "reports.stock";

@@ -1,4 +1,5 @@
 using eiti.Application.Features.Sales.Common;
+using eiti.Domain.Sales;
 using FluentValidation;
 
 namespace eiti.Application.Features.Sales.Commands.CreateCcSale;
@@ -9,6 +10,9 @@ public sealed class CreateCcSaleValidator : AbstractValidator<CreateCcSaleComman
     {
         RuleFor(x => x.BranchId)
             .NotEmpty().WithMessage("Branch id is required.");
+
+        RuleFor(x => x.Notes)
+            .MaximumLength(Sale.NotesMaxLength).WithMessage($"Las observaciones no pueden superar los {Sale.NotesMaxLength} caracteres.");
 
         RuleFor(x => x.CustomerId)
             .NotEmpty().WithMessage("Customer id is required for Cuenta Corriente sales.");

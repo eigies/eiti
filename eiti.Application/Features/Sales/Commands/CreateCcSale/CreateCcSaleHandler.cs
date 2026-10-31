@@ -222,6 +222,9 @@ public sealed class CreateCcSaleHandler : IRequestHandler<CreateCcSaleCommand, R
                 tradeIns: saleTradeIns,
                 code: saleCode,
                 generalDiscountPercent: request.GeneralDiscountPercent);
+            sale.SetNotes(request.Notes);
+            // La CC no tiene tope, pero el descuento queda trazado igual para el reporte de descuentos.
+            sale.TrackGeneralDiscount(previousPercent: 0m, _currentUserService.UserId?.Value, reason: null);
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
         {

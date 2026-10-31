@@ -13,6 +13,8 @@ public sealed class Company : AggregateRoot<CompanyId>
     public string? PdfWatermarkUrl { get; private set; }
     /// <summary>Facturar electrónicamente cada venta al confirmarla, sin que el usuario tenga que tildarlo. Default OFF.</summary>
     public bool AutomaticInvoicing { get; private set; }
+    /// <summary>Descuento máximo (%) que puede aplicar un vendedor en una venta minorista. 0 = descuento deshabilitado.</summary>
+    public decimal MaxRetailDiscountPercent { get; private set; }
     public DateTime CreatedAt { get; private set; }
 
     private Company()
@@ -99,6 +101,17 @@ public sealed class Company : AggregateRoot<CompanyId>
     public void SetAutomaticInvoicing(bool enabled)
     {
         AutomaticInvoicing = enabled;
+    }
+
+    /// <summary>Lo fija solo el dueño. Rige para ventas minoristas; las de cuenta corriente no tienen tope.</summary>
+    public void SetMaxRetailDiscountPercent(decimal maxPercent)
+    {
+        if (maxPercent < 0m || maxPercent > 100m)
+        {
+            throw new ArgumentException("Max retail discount percent must be between 0 and 100.", nameof(maxPercent));
+        }
+
+        MaxRetailDiscountPercent = decimal.Round(maxPercent, 2, MidpointRounding.AwayFromZero);
     }
 
     private static string? NormalizeSenderPhone(string? value)

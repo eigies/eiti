@@ -3,6 +3,7 @@ using eiti.Application.Abstractions.Repositories;
 using eiti.Application.Abstractions.Services;
 using eiti.Application.Common.Authorization;
 using eiti.Application.Features.Sales.Commands.UpdateSale;
+using eiti.Application.Features.Sales.Common;
 using eiti.Domain.Banks;
 using eiti.Domain.Branches;
 using eiti.Domain.Companies;
@@ -56,6 +57,7 @@ public sealed class UpdateSaleHandlerTests
             new Mock<IBankRepository>().Object,
             NoFiscalDocuments(),
             new Mock<ICustomerCreditNoteRepository>().Object,
+            new RetailDiscountPolicy(new Mock<ICompanyRepository>().Object),
             new Mock<IUnitOfWork>().Object);
 
         var result = await handler.Handle(
@@ -327,6 +329,7 @@ public sealed class UpdateSaleHandlerTests
             bankRepository,
             fiscalDocumentRepository.Object,
             creditNoteRepository.Object,
+            new RetailDiscountPolicy(new Mock<ICompanyRepository>().Object),
             unitOfWork.Object);
     }
 

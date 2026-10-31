@@ -76,4 +76,20 @@ public sealed record SaleInvoicingView(
     /// <summary>Factura sobre la que se puede operar (descargar el PDF, emitirle una NC).</summary>
     public SaleFiscalDocument? LiveInvoice =>
         Invoice?.Status == SaleInvoicingStatus.Invoiced ? Invoice : null;
+
+    /// <summary>
+    /// Recargo de tarjeta cobrado que no entró en la factura vigente: pasa cuando la venta se facturó en espera y
+    /// después se cobró en cuotas (se acepta el cobro y la factura queda como salió). Sin factura vigente, 0.
+    /// Una factura sin total guardado (anterior a este dato) facturó la mercadería.
+    /// </summary>
+    public decimal UninvoicedCardSurcharge(Sale sale)
+    {
+        if (LiveInvoice is null)
+        {
+            return 0m;
+        }
+
+        var invoiced = LiveInvoice.RequestedTotal ?? sale.TotalAmount;
+        return Math.Max(0m, decimal.Round(sale.TotalAmount + sale.CardSurchargeTotal - invoiced, 2, MidpointRounding.AwayFromZero));
+    }
 }

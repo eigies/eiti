@@ -76,6 +76,17 @@ public interface ISaleRepository
         IReadOnlyCollection<Guid>? allowedBranchIds,
         CancellationToken cancellationToken = default);
 
+    // Reporte de descuentos: ventas no canceladas con descuento general (> 0) del período. userId filtra por
+    // quién fijó el descuento (GeneralDiscountByUserId). Sin colecciones: el reporte usa solo los totales. AsNoTracking.
+    Task<IReadOnlyList<Sale>> ListForDiscountReportAsync(
+        CompanyId companyId,
+        DateTime from,
+        DateTime to,
+        Guid? branchId,
+        Guid? userId,
+        IReadOnlyCollection<Guid>? allowedBranchIds,
+        CancellationToken cancellationToken = default);
+
     // Ventas no canceladas (con sus pagos) para el reporte de medios de pago. AsNoTracking + Include(Payments).
     Task<IReadOnlyList<Sale>> ListWithPaymentsForReportAsync(
         CompanyId companyId,

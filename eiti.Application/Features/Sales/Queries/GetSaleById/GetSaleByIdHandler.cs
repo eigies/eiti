@@ -173,7 +173,10 @@ public sealed class GetSaleByIdHandler : IRequestHandler<GetSaleByIdQuery, Resul
                     GetProductName(productMap, tradeIn.ProductId.Value),
                     GetProductBrand(productMap, tradeIn.ProductId.Value),
                     tradeIn.Quantity,
-                    tradeIn.Amount)).ToList()));
+                    tradeIn.Amount)).ToList(),
+                sale.Notes,
+                sale.GeneralDiscountReason,
+                invoicing.UninvoicedCardSurcharge(sale)));
     }
 
     private static string GetProductName(IDictionary<Guid, Product> productMap, Guid productId)

@@ -565,6 +565,11 @@ namespace eiti.Infrastructure.Migrations
                     b.Property<bool>("IsWhatsAppEnabled")
                         .HasColumnType("boolean");
 
+                    b.Property<decimal>("MaxRetailDiscountPercent")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("decimal(5,2)")
+                        .HasDefaultValue(0m);
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -1701,10 +1706,20 @@ namespace eiti.Infrastructure.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
 
+                    b.Property<DateTime?>("GeneralDiscountAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<Guid?>("GeneralDiscountByUserId")
+                        .HasColumnType("uuid");
+
                     b.Property<decimal>("GeneralDiscountPercent")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("decimal(5,2)")
                         .HasDefaultValue(0m);
+
+                    b.Property<string>("GeneralDiscountReason")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
 
                     b.Property<bool>("HasDelivery")
                         .HasColumnType("boolean");
@@ -1722,6 +1737,10 @@ namespace eiti.Infrastructure.Migrations
 
                     b.Property<decimal>("NoDeliverySurchargeTotal")
                         .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
 
                     b.Property<decimal>("OriginalTotal")
                         .HasColumnType("decimal(18,2)");
@@ -1918,6 +1937,9 @@ namespace eiti.Infrastructure.Migrations
                     b.Property<string>("RejectionReason")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
+
+                    b.Property<decimal?>("RequestedTotal")
+                        .HasColumnType("decimal(18,2)");
 
                     b.Property<Guid?>("ReversedDocumentId")
                         .HasColumnType("uuid");

@@ -90,11 +90,12 @@ public sealed class ListSalesHandler : IRequestHandler<ListSalesQuery, Result<IR
 
         // Una venta puede tener varios comprobantes (intentos, anulados, vigente): se agrupan y se
         // muestra el que corresponde, no el primero que aparezca.
-        var invoiceMap = (await _fiscalDocuments.ListBySaleIdsAsync(saleIds, _currentUserService.CompanyId!, cancellationToken))
+        var invoicingMap = (await _fiscalDocuments.ListBySaleIdsAsync(saleIds, _currentUserService.CompanyId!, cancellationToken))
             .GroupBy(document => document.SaleId.Value)
-            .Select(group => new { SaleId = group.Key, Invoice = SaleInvoicingView.From(group.ToList()).Invoice })
-            .Where(item => item.Invoice is not null)
-            .ToDictionary(item => item.SaleId, item => item.Invoice!);
+            .ToDictionary(group => group.Key, group => SaleInvoicingView.From(group.ToList()));
+        var invoiceMap = invoicingMap
+            .Where(item => item.Value.Invoice is not null)
+            .ToDictionary(item => item.Key, item => item.Value.Invoice!);
 
         // Productos en un solo query (antes era N+1: un SELECT por producto).
         var products = productIds.Count == 0
@@ -216,7 +217,12 @@ public sealed class ListSalesHandler : IRequestHandler<ListSalesQuery, Result<IR
                                 product?.Brand ?? "Unknown",
                                 tradeIn.Quantity,
                                 tradeIn.Amount);
-                        }).ToList());
+                        }).ToList(),
+                        sale.Notes,
+                        sale.GeneralDiscountReason,
+                        invoicingMap.TryGetValue(sale.Id.Value, out var invoicing)
+                            ? invoicing.UninvoicedCardSurcharge(sale)
+                            : 0m);
                 })
                 .ToList());
     }

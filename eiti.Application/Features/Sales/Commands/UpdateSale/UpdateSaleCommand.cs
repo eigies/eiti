@@ -18,7 +18,9 @@ public sealed record UpdateSaleCommand(
     SaleSourceChannel? SourceChannel = null,
     string? DeliveryAddress = null,
     decimal GeneralDiscountPercent = 0,
-    string? ContactPhone = null
+    string? ContactPhone = null,
+    // Motivo opcional del descuento general; se guarda solo cuando el porcentaje cambia.
+    string? GeneralDiscountReason = null
 ) : IRequest<Result<UpdateSaleResponse>>, IRequirePermissions
 {
     public IReadOnlyCollection<string> RequiredPermissions => [PermissionCodes.SalesUpdate];

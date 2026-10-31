@@ -27,7 +27,9 @@ public sealed record SaleInvoicePrintResponse(
     decimal VatRate,
     IReadOnlyList<SaleInvoicePrintItem> Items,
     SaleInvoicePrintAdjustments Adjustments,
-    SaleInvoicePrintAmounts Amounts);
+    SaleInvoicePrintAmounts Amounts,
+    // Observaciones de la venta (no fiscales): se leen al imprimir, así una corrección sale en la reimpresión.
+    string? Notes = null);
 
 public sealed record SaleInvoicePrintIssuer(
     string LegalName,
@@ -57,11 +59,15 @@ public sealed record SaleInvoicePrintItem(
     decimal Total);
 
 /// <summary>Lo que lleva de la suma de ítems al total facturado.</summary>
+/// <param name="CardSurcharge">Recargo de la tarjeta en cuotas que incluye el comprobante autorizado (0 si no lo incluye).</param>
+/// <param name="CardSurchargeLabel">Texto del renglón, p. ej. "Recargo financiero tarjeta (Santander, 3 cuotas, 11,06%)"; null sin recargo.</param>
 public sealed record SaleInvoicePrintAdjustments(
     decimal ItemsSubtotal,
     decimal NoDeliverySurcharge,
     decimal GeneralDiscountPercent,
-    decimal? AgreedPrice);
+    decimal? AgreedPrice,
+    decimal CardSurcharge = 0m,
+    string? CardSurchargeLabel = null);
 
 public sealed record SaleInvoicePrintAmounts(
     decimal Net,

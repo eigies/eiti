@@ -230,7 +230,7 @@ public sealed class SaleInvoicingReceiverTests
             currentUser.Object, branches.Object, new Mock<ICustomerRepository>().Object, new Mock<IProductRepository>().Object,
             new Mock<IBranchProductStockRepository>().Object, new Mock<IStockMovementRepository>().Object, sales.Object,
             new Mock<ICashDrawerRepository>().Object, new Mock<ICashSessionRepository>().Object, new Mock<IAddressRepository>().Object,
-            new Mock<IBankRepository>().Object, new Mock<IChequeRepository>().Object, invoicing.Object, new Mock<IUnitOfWork>().Object);
+            new Mock<IBankRepository>().Object, new Mock<IChequeRepository>().Object, invoicing.Object, new RetailDiscountPolicy(new Mock<ICompanyRepository>().Object), new Mock<IUnitOfWork>().Object);
 
         var result = await handler.Handle(
             new CreateSaleCommand(branch.Id.Value, null, 1, false, null,
@@ -263,7 +263,7 @@ public sealed class SaleInvoicingReceiverTests
             currentUser.Object, branches.Object, customers.Object, new Mock<IProductRepository>().Object,
             new Mock<IBranchProductStockRepository>().Object, new Mock<IStockMovementRepository>().Object, sales.Object,
             new Mock<ICashDrawerRepository>().Object, new Mock<ICashSessionRepository>().Object, new Mock<IAddressRepository>().Object,
-            new Mock<IBankRepository>().Object, new Mock<IChequeRepository>().Object, invoicing.Object, new Mock<IUnitOfWork>().Object);
+            new Mock<IBankRepository>().Object, new Mock<IChequeRepository>().Object, invoicing.Object, new RetailDiscountPolicy(new Mock<ICompanyRepository>().Object), new Mock<IUnitOfWork>().Object);
 
         var result = await handler.Handle(
             new CreateSaleCommand(branch.Id.Value, customer.Id.Value, 1, false, null,
@@ -294,7 +294,7 @@ public sealed class SaleInvoicingReceiverTests
             currentUser.Object, branches.Object, new Mock<ICustomerRepository>().Object, new Mock<IProductRepository>().Object,
             new Mock<IBranchProductStockRepository>().Object, new Mock<IStockMovementRepository>().Object, sales.Object,
             new Mock<ICashDrawerRepository>().Object, new Mock<ICashSessionRepository>().Object, new Mock<IAddressRepository>().Object,
-            new Mock<IBankRepository>().Object, new Mock<IChequeRepository>().Object, invoicing.Object, new Mock<IUnitOfWork>().Object);
+            new Mock<IBankRepository>().Object, new Mock<IChequeRepository>().Object, invoicing.Object, new RetailDiscountPolicy(new Mock<ICompanyRepository>().Object), new Mock<IUnitOfWork>().Object);
 
         var result = await handler.Handle(
             new CreateSaleCommand(branch.Id.Value, null, 1, false, null,
