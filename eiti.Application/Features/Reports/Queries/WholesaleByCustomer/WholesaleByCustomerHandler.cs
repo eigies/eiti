@@ -73,11 +73,12 @@ public sealed class WholesaleByCustomerHandler
                 g => g.Key,
                 g => decimal.Round(g.Sum(s => s.CcPendingAmount), 2, MidpointRounding.AwayFromZero));
 
-        // Agregación por cliente (null = consumidor final).
-        var groups = new Dictionary<Guid?, Accumulator>();
+        // Agregación por cliente. Consumidor final va con Guid.Empty: un Dictionary no admite la clave null
+        // y tiraba ArgumentNullException en cuanto aparecía una venta sin cliente (minoristas / todas).
+        var groups = new Dictionary<Guid, Accumulator>();
         foreach (var sale in sales)
         {
-            var customerKey = sale.CustomerId?.Value;
+            var customerKey = sale.CustomerId?.Value ?? WalkInKey;
             if (!groups.TryGetValue(customerKey, out var acc))
             {
                 acc = new Accumulator();
@@ -85,6 +86,8 @@ public sealed class WholesaleByCustomerHandler
             }
 
             acc.SaleIds.Add(sale.Id.Value);
+            if (sale.CreatedAt > acc.LastSaleAt)
+                acc.LastSaleAt = sale.CreatedAt;
             foreach (var line in sale.Details)
             {
                 products.TryGetValue(line.ProductId.Value, out var catalogCost);
@@ -97,7 +100,7 @@ public sealed class WholesaleByCustomerHandler
         }
 
         // Nombres de clientes en un solo query.
-        var customerIds = groups.Keys.Where(k => k is not null).Select(k => k!.Value).ToList();
+        var customerIds = groups.Keys.Where(k => k != WalkInKey).ToList();
         var customerNames = customerIds.Count == 0
             ? new Dictionary<Guid, string>()
             : (await _customerRepository.ListByIdsAsync(companyId, customerIds.Select(id => new CustomerId(id)), cancellationToken))
@@ -111,15 +114,16 @@ public sealed class WholesaleByCustomerHandler
                 var revenue = decimal.Round(acc.Revenue, 2, MidpointRounding.AwayFromZero);
                 var cost = decimal.Round(acc.Cost, 2, MidpointRounding.AwayFromZero);
                 var profit = revenue - cost;
-                var name = kvp.Key is null
+                Guid? customerId = kvp.Key == WalkInKey ? null : kvp.Key;
+                var name = customerId is null
                     ? "(Consumidor final)"
-                    : customerNames.TryGetValue(kvp.Key.Value, out var n) ? n : "(Cliente)";
-                var ccPending = kvp.Key is not null && ccPendingByCustomer.TryGetValue(kvp.Key.Value, out var pending)
+                    : customerNames.TryGetValue(customerId.Value, out var n) ? n : "(Cliente)";
+                var ccPending = customerId is not null && ccPendingByCustomer.TryGetValue(customerId.Value, out var pending)
                     ? pending
                     : 0m;
 
                 return new WholesaleByCustomerRow(
-                    kvp.Key,
+                    customerId,
                     name,
                     operations,
                     acc.Units,
@@ -128,9 +132,12 @@ public sealed class WholesaleByCustomerHandler
                     ccPending,
                     cost,
                     profit,
-                    Margin(revenue, profit));
+                    Margin(revenue, profit),
+                    acc.LastSaleAt);
             })
-            .OrderByDescending(r => r.Revenue)
+            // Consumidor final al final: en minoristas son la mayoría de las ventas y taparían a los clientes.
+            .OrderBy(r => r.CustomerId is null)
+            .ThenByDescending(r => r.Revenue)
             .ToList();
 
         var totalOperations = rows.Sum(r => r.Operations);
@@ -150,6 +157,8 @@ public sealed class WholesaleByCustomerHandler
             new WholesaleByCustomerResponse(saleType, rows, totals));
     }
 
+    private static readonly Guid WalkInKey = Guid.Empty;
+
     private static decimal AvgTicket(decimal revenue, int operations) =>
         operations == 0 ? 0m : decimal.Round(revenue / operations, 2, MidpointRounding.AwayFromZero);
 
@@ -162,5 +171,6 @@ public sealed class WholesaleByCustomerHandler
         public int Units { get; set; }
         public decimal Revenue { get; set; }
         public decimal Cost { get; set; }
+        public DateTime LastSaleAt { get; set; }
     }
 }
