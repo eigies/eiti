@@ -4,8 +4,9 @@ using MediatR;
 
 namespace eiti.Application.Features.Reports.Queries.WholesaleByCustomer;
 
-// Reporte de ventas mayoristas por cliente. "Mayorista" = venta por Cuenta Corriente (IsCuentaCorriente),
-// como lo define el resto del sistema. SaleType default "wholesale" pero editable (retail / all).
+// Reporte de ventas por cliente (en pantalla, "Ventas por cliente"). "Mayorista" = venta por Cuenta Corriente
+// (IsCuentaCorriente), como lo define el resto del sistema. SaleType default "wholesale"; "retail" sirve para ver
+// los clientes minoristas que vuelven a comprar, y "all" no filtra. Consumidor final va siempre al final.
 public sealed record WholesaleByCustomerQuery(
     DateTime DateFrom,
     DateTime DateTo,
