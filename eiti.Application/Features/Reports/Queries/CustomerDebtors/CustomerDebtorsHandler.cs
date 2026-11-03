@@ -31,8 +31,11 @@ public sealed class CustomerDebtorsHandler : IRequestHandler<CustomerDebtorsQuer
 
         var companyId = _currentUserService.CompanyId!;
 
-        var sales = (await _saleRepository.ListCcSalesByCompanyAsync(companyId, null, cancellationToken))
+        CustomerId? customerId = request.CustomerId is { } id ? new CustomerId(id) : null;
+
+        var sales = (await _saleRepository.ListCcSalesByCompanyAsync(companyId, customerId, cancellationToken))
             .Where(s => s.SaleStatus != SaleStatus.Cancel && s.CustomerId is not null && s.CcPendingAmount > 0)
+            .Where(s => request.BranchId is null || s.BranchId.Value == request.BranchId)
             .ToList();
 
         if (!_currentUserService.CanViewAllBranches)
@@ -48,14 +51,15 @@ public sealed class CustomerDebtorsHandler : IRequestHandler<CustomerDebtorsQuer
         var rows = new List<CustomerDebtorRow>();
         foreach (var group in grouped)
         {
-            var customerId = group.Key;
-            var customer = await _customerRepository.GetByIdAsync(new CustomerId(customerId), companyId, cancellationToken);
+            var debtorId = group.Key;
+            var customer = await _customerRepository.GetByIdAsync(new CustomerId(debtorId), companyId, cancellationToken);
 
             var owed = decimal.Round(group.Sum(s => s.CcPendingAmount), 2, MidpointRounding.AwayFromZero);
+            // El saldo a favor es del cliente, no de una sucursal: filtrar por sucursal no lo reparte.
             var credit = customer?.CreditBalance ?? 0m;
 
             rows.Add(new CustomerDebtorRow(
-                customerId,
+                debtorId,
                 customer?.FullName ?? "(Cliente)",
                 group.Count(),
                 group.Min(s => s.CreatedAt),

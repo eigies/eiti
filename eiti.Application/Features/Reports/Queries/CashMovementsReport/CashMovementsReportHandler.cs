@@ -43,6 +43,12 @@ public sealed class CashMovementsReportHandler : IRequestHandler<CashMovementsRe
 
         var types = Categories.Select(c => c.Type).ToArray();
         var branchIds = _currentUserService.CanViewAllBranches ? null : _currentUserService.AllowedBranchIds;
+        if (request.BranchId is { } branchId)
+        {
+            // Una sucursal que el usuario no puede ver no devuelve nada: la lista vacía no abre el filtro.
+            branchIds = branchIds is null || branchIds.Contains(branchId) ? [branchId] : [];
+        }
+
         var movements = await _cashSessionRepository.ListMovementsByCompanyAsync(companyId, from, to, types, branchIds, cancellationToken);
 
         var userIds = movements.Select(m => m.CreatedByUserId.Value).Distinct().ToList();

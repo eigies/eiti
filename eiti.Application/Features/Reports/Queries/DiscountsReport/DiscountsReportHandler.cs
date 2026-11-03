@@ -1,6 +1,7 @@
 using eiti.Application.Abstractions.Repositories;
 using eiti.Application.Abstractions.Services;
 using eiti.Application.Common;
+using eiti.Application.Features.Reports.Common;
 using eiti.Domain.Customers;
 using eiti.Domain.Sales;
 using MediatR;
@@ -54,6 +55,8 @@ public sealed class DiscountsReportHandler
         var sales = (await _saleRepository.ListForDiscountReportAsync(
                 companyId, from, to, request.BranchId, request.UserId, allowedBranchIds, cancellationToken))
             .Where(sale => sale.SaleStatus != SaleStatus.Cancel && sale.GeneralDiscountPercent > 0)
+            .Where(sale => (request.CustomerId is null || sale.CustomerId?.Value == request.CustomerId)
+                && ReportSaleType.Matches(sale, request.SaleType))
             .ToList();
 
         var branchNames = (await _branchRepository.ListByCompanyAsync(companyId, cancellationToken))

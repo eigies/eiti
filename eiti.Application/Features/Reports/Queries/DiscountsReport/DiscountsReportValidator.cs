@@ -1,3 +1,4 @@
+using eiti.Application.Features.Reports.Common;
 using FluentValidation;
 
 namespace eiti.Application.Features.Reports.Queries.DiscountsReport;
@@ -12,5 +13,9 @@ public sealed class DiscountsReportValidator : AbstractValidator<DiscountsReport
         RuleFor(x => x.DateTo)
             .NotEmpty().WithMessage("La fecha hasta es obligatoria.")
             .GreaterThanOrEqualTo(x => x.DateFrom).WithMessage("La fecha hasta no puede ser anterior a la fecha desde.");
+
+        RuleFor(x => x.SaleType)
+            .Must(ReportSaleType.IsValid)
+            .WithMessage("El tipo de venta es invalido.");
     }
 }

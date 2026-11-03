@@ -41,6 +41,7 @@ public sealed class StockMatrixHandler : IRequestHandler<StockMatrixQuery, Resul
         }
 
         var orderedBranches = branches
+            .Where(branch => request.BranchId is null || branch.Id.Value == request.BranchId)
             .OrderBy(branch => branch.Name)
             .ToList();
         var branchIndex = orderedBranches

@@ -7,7 +7,10 @@ namespace eiti.Application.Features.Reports.Queries.DailySalesControl;
 public sealed record DailySalesControlQuery(
     DateTime DateFrom,
     DateTime DateTo,
-    int Status = 0
+    int Status = 0,
+    Guid? BranchId = null,
+    Guid? CustomerId = null,
+    string? SaleType = null
 ) : IRequest<Result<DailySalesControlResponse>>, IRequirePermissions
 {
     public IReadOnlyCollection<string> RequiredPermissions =>

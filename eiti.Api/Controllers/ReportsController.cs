@@ -87,10 +87,11 @@ public sealed class ReportsController : ControllerBase
         [FromQuery] DateTime dateTo,
         [FromQuery] Guid? branchId,
         [FromQuery] Guid? customerId,
+        [FromQuery] string? saleType,
         CancellationToken cancellationToken = default)
     {
         var result = await _sender.Send(
-            new TradeInsByBranchQuery(dateFrom, dateTo, branchId, customerId),
+            new TradeInsByBranchQuery(dateFrom, dateTo, branchId, customerId, saleType),
             cancellationToken);
         return result.ToActionResult();
     }
@@ -101,10 +102,12 @@ public sealed class ReportsController : ControllerBase
         [FromQuery] DateTime dateTo,
         [FromQuery] Guid? branchId,
         [FromQuery] Guid? userId,
+        [FromQuery] Guid? customerId,
+        [FromQuery] string? saleType,
         CancellationToken cancellationToken = default)
     {
         var result = await _sender.Send(
-            new DiscountsReportQuery(dateFrom, dateTo, branchId, userId),
+            new DiscountsReportQuery(dateFrom, dateTo, branchId, userId, customerId, saleType),
             cancellationToken);
         return result.ToActionResult();
     }
@@ -114,25 +117,33 @@ public sealed class ReportsController : ControllerBase
         [FromQuery] DateTime dateFrom,
         [FromQuery] DateTime dateTo,
         [FromQuery] int status = 0,
+        [FromQuery] Guid? branchId = null,
+        [FromQuery] Guid? customerId = null,
+        [FromQuery] string? saleType = null,
         CancellationToken cancellationToken = default)
     {
         var result = await _sender.Send(
-            new DailySalesControlQuery(dateFrom, dateTo, status),
+            new DailySalesControlQuery(dateFrom, dateTo, status, branchId, customerId, saleType),
             cancellationToken);
         return result.ToActionResult();
     }
 
     [HttpGet("customers/debtors")]
-    public async Task<IActionResult> CustomerDebtors(CancellationToken cancellationToken)
+    public async Task<IActionResult> CustomerDebtors(
+        [FromQuery] Guid? branchId,
+        [FromQuery] Guid? customerId,
+        CancellationToken cancellationToken)
     {
-        var result = await _sender.Send(new CustomerDebtorsQuery(), cancellationToken);
+        var result = await _sender.Send(new CustomerDebtorsQuery(branchId, customerId), cancellationToken);
         return result.ToActionResult();
     }
 
     [HttpGet("stock-matrix")]
-    public async Task<IActionResult> StockMatrix(CancellationToken cancellationToken)
+    public async Task<IActionResult> StockMatrix(
+        [FromQuery] Guid? branchId,
+        CancellationToken cancellationToken)
     {
-        var result = await _sender.Send(new StockMatrixQuery(), cancellationToken);
+        var result = await _sender.Send(new StockMatrixQuery(branchId), cancellationToken);
         return result.ToActionResult();
     }
 
@@ -159,10 +170,11 @@ public sealed class ReportsController : ControllerBase
         [FromQuery] DateTime dateTo,
         [FromQuery] Guid? branchId,
         [FromQuery] string? saleType,
+        [FromQuery] Guid? customerId,
         CancellationToken cancellationToken = default)
     {
         var result = await _sender.Send(
-            new PaymentMethodsReportQuery(dateFrom, dateTo, branchId, saleType),
+            new PaymentMethodsReportQuery(dateFrom, dateTo, branchId, saleType, customerId),
             cancellationToken);
         return result.ToActionResult();
     }
@@ -185,9 +197,10 @@ public sealed class ReportsController : ControllerBase
     public async Task<IActionResult> CashMovements(
         [FromQuery] DateTime dateFrom,
         [FromQuery] DateTime dateTo,
+        [FromQuery] Guid? branchId,
         CancellationToken cancellationToken = default)
     {
-        var result = await _sender.Send(new CashMovementsReportQuery(dateFrom, dateTo), cancellationToken);
+        var result = await _sender.Send(new CashMovementsReportQuery(dateFrom, dateTo, branchId), cancellationToken);
         return result.ToActionResult();
     }
 
