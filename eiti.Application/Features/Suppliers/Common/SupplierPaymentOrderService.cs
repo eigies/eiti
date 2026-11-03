@@ -10,12 +10,21 @@ using eiti.Domain.Users;
 
 namespace eiti.Application.Features.Suppliers.Common;
 
-// Un medio dentro de un pago al proveedor. Con cheque, el monto es el del cheque (se entrega entero).
+// Cheque que emite la empresa para este pago (físico o eCheq). FechaVencimiento es la fecha de pago.
+public sealed record OwnChequeInput(
+    int BankId,
+    string Numero,
+    DateTime FechaEmision,
+    DateTime FechaVencimiento);
+
+// Un medio dentro de un pago al proveedor. Con cheque de cartera, el monto es el del cheque (se entrega entero);
+// con cheque propio (OwnCheque, en vez de ChequeId), el monto de la línea es el del cheque que se emite.
 public sealed record SupplierPaymentLineInput(
     int Method,
     decimal Amount,
     Guid? ChequeId,
-    string? Reference);
+    string? Reference,
+    OwnChequeInput? OwnCheque = null);
 
 public sealed record SupplierPaymentOrderOutcome(
     SupplierPaymentOrder Order,
@@ -28,7 +37,7 @@ public sealed record SupplierPaymentOrderOutcome(
 /// <summary>
 /// Registra un pago al proveedor con uno o más medios bajo una orden de pago (OP-####). Cada medio es un
 /// <see cref="SupplierPayment"/> completo: asiento de caja (solo el efectivo mueve el esperado), cheque de
-/// cartera entregado e imputación FIFO a las compras pendientes. Lo usan el alta de pago suelto (orden de
+/// cartera entregado o cheque propio emitido, e imputación FIFO a las compras pendientes. Lo usan el alta de pago suelto (orden de
 /// un medio) y la orden de pago. Valida todos los medios antes de tocar nada; no llama SaveChanges.
 /// </summary>
 public interface ISupplierPaymentOrderService
@@ -82,19 +91,25 @@ public sealed class SupplierPaymentOrderService : ISupplierPaymentOrderService
     private readonly ISupplierPaymentOrderRepository _supplierPaymentOrderRepository;
     private readonly IPurchaseRepository _purchaseRepository;
     private readonly IChequeRepository _chequeRepository;
+    private readonly IBankRepository _bankRepository;
+    private readonly ICompanyRepository _companyRepository;
 
     public SupplierPaymentOrderService(
         ISupplierRepository supplierRepository,
         ISupplierPaymentRepository supplierPaymentRepository,
         ISupplierPaymentOrderRepository supplierPaymentOrderRepository,
         IPurchaseRepository purchaseRepository,
-        IChequeRepository chequeRepository)
+        IChequeRepository chequeRepository,
+        IBankRepository bankRepository,
+        ICompanyRepository companyRepository)
     {
         _supplierRepository = supplierRepository;
         _supplierPaymentRepository = supplierPaymentRepository;
         _supplierPaymentOrderRepository = supplierPaymentOrderRepository;
         _purchaseRepository = purchaseRepository;
         _chequeRepository = chequeRepository;
+        _bankRepository = bankRepository;
+        _companyRepository = companyRepository;
     }
 
     public async Task<Result<SupplierPaymentOrderOutcome>> CreateAsync(
@@ -113,6 +128,7 @@ public sealed class SupplierPaymentOrderService : ISupplierPaymentOrderService
         // Primero se validan todos los medios: si uno falla, no queda nada a medio registrar.
         var resolved = new List<(PurchasePaymentMethod Method, decimal Amount, Cheque? Cheque, string? Reference)>();
         var chequeIds = new HashSet<Guid>();
+        var ownChequeKeys = new HashSet<(int BankId, string Numero)>();
         foreach (var line in lines)
         {
             if (!Enum.IsDefined(typeof(PurchasePaymentMethod), line.Method))
@@ -125,8 +141,17 @@ public sealed class SupplierPaymentOrderService : ISupplierPaymentOrderService
             var amount = line.Amount;
             Cheque? cheque = null;
 
-            // Pago con cheque: referencia un cheque en cartera y se usa por su valor completo (sin particionar).
-            if (method == PurchasePaymentMethod.Check)
+            // Pago con cheque propio: se arma acá pero se da de alta recién con el pago.
+            if (method == PurchasePaymentMethod.Check && line.OwnCheque is not null)
+            {
+                var ownCheque = await BuildOwnChequeAsync(line.OwnCheque, amount, supplier, companyId, ownChequeKeys, cancellationToken);
+                if (ownCheque.IsFailure)
+                    return Result<SupplierPaymentOrderOutcome>.Failure(ownCheque.Error);
+
+                cheque = ownCheque.Value;
+            }
+            // Pago con cheque de cartera: referencia uno en cartera y se usa por su valor completo (sin particionar).
+            else if (method == PurchasePaymentMethod.Check)
             {
                 if (line.ChequeId is null)
                     return Result<SupplierPaymentOrderOutcome>.Failure(SupplierPaymentLineErrors.ChequeRequired);
@@ -182,8 +207,11 @@ public sealed class SupplierPaymentOrderService : ISupplierPaymentOrderService
             // Caja: el cheque/transferencia no mueven efectivo (dirección None); el efectivo sí.
             session.RegisterSupplierPaymentExpense(amount, payment.Id, userId, method);
 
-            // El cheque sale de cartera (Entregado al proveedor).
-            cheque?.EndorseToSupplier();
+            // El de cartera sale de cartera (Entregado al proveedor); el propio ya nace entregado.
+            if (cheque?.Origen == ChequeOrigen.Propio)
+                await _chequeRepository.AddAsync(cheque, cancellationToken);
+            else
+                cheque?.EndorseToSupplier();
 
             // Imputación FIFO medio por medio, cada una con su back-link: así anular la orden revierte
             // exactamente lo que imputó cada medio. El resultado es el mismo que imputar el total.
@@ -256,6 +284,37 @@ public sealed class SupplierPaymentOrderService : ISupplierPaymentOrderService
         var order = await _supplierPaymentOrderRepository.GetByIdAsync(orderId, companyId.Value, cancellationToken);
         if (order is { Status: PurchasePaymentStatus.Active })
             order.Cancel(userId.Value);
+    }
+
+    // Arma el cheque propio sin darlo de alta: si después falla otro medio, no queda nada registrado.
+    private async Task<Result<Cheque>> BuildOwnChequeAsync(
+        OwnChequeInput input,
+        decimal amount,
+        Supplier supplier,
+        CompanyId companyId,
+        HashSet<(int BankId, string Numero)> keysInThisPayment,
+        CancellationToken cancellationToken)
+    {
+        var bank = await _bankRepository.GetByIdAsync(input.BankId, companyId, cancellationToken);
+        if (bank is null)
+            return Result<Cheque>.Failure(SupplierPaymentLineErrors.OwnChequeBankNotFound);
+
+        var numero = input.Numero.Trim();
+        if (!keysInThisPayment.Add((input.BankId, numero))
+            || await _chequeRepository.ExistsActiveOwnAsync(companyId, input.BankId, numero, cancellationToken))
+            return Result<Cheque>.Failure(SupplierPaymentLineErrors.OwnChequeDuplicate);
+
+        var company = await _companyRepository.GetByIdAsync(companyId, cancellationToken);
+        return Result<Cheque>.Success(Cheque.CreateOwn(
+            companyId,
+            supplier.Id,
+            input.BankId,
+            numero,
+            company?.Name.Value ?? string.Empty,
+            amount,
+            input.FechaEmision,
+            input.FechaVencimiento,
+            null));
     }
 
     // Dos medios pueden imputar la misma factura: al usuario se le muestra una fila por factura.

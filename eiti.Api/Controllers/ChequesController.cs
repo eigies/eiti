@@ -2,6 +2,7 @@ using eiti.Api.Extensions;
 using eiti.Application.Features.Cheques.Commands.UpdateChequeStatus;
 using eiti.Application.Features.Cheques.Queries.GetChequeById;
 using eiti.Application.Features.Cheques.Queries.ListCheques;
+using eiti.Application.Features.Cheques.Queries.ListOwnChequesDue;
 using eiti.Domain.Cheques;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -28,15 +29,27 @@ public sealed class ChequesController : ControllerBase
         [FromQuery] DateTime? fechaVencFrom,
         [FromQuery] DateTime? fechaVencTo,
         [FromQuery] string? numero,
+        [FromQuery] int? origen,
         CancellationToken cancellationToken)
     {
         ChequeStatus? chequeStatus = estado.HasValue && Enum.IsDefined(typeof(ChequeStatus), estado.Value)
             ? (ChequeStatus)estado.Value
             : null;
+        ChequeOrigen? chequeOrigen = origen.HasValue && Enum.IsDefined(typeof(ChequeOrigen), origen.Value)
+            ? (ChequeOrigen)origen.Value
+            : null;
 
         var result = await _sender.Send(
-            new ListChequesQuery(chequeStatus, bankId, fechaVencFrom, fechaVencTo, numero),
+            new ListChequesQuery(chequeStatus, bankId, fechaVencFrom, fechaVencTo, numero, chequeOrigen),
             cancellationToken);
+        return result.ToActionResult();
+    }
+
+    // Cheques propios que vencen hoy (el lunes, también los del fin de semana): el aviso al entrar a EITI.
+    [HttpGet("own/due")]
+    public async Task<IActionResult> ListOwnDue(CancellationToken cancellationToken)
+    {
+        var result = await _sender.Send(new ListOwnChequesDueQuery(), cancellationToken);
         return result.ToActionResult();
     }
 

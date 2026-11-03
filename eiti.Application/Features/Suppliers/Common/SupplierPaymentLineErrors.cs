@@ -20,7 +20,15 @@ public static class SupplierPaymentLineErrors
 
     public static readonly Error ChequeRequired = Error.Validation(
         "Suppliers.AddPayment.ChequeRequired",
-        "Para pagar con cheque debe seleccionar un cheque en cartera.");
+        "Para pagar con cheque elegí uno en cartera o cargá uno propio.");
+
+    public static readonly Error OwnChequeBankNotFound = Error.NotFound(
+        "Suppliers.AddPayment.OwnChequeBankNotFound",
+        "El banco del cheque propio no existe.");
+
+    public static readonly Error OwnChequeDuplicate = Error.Conflict(
+        "Suppliers.AddPayment.OwnChequeDuplicate",
+        "Ya hay un cheque propio con ese número en ese banco.");
 
     public static readonly Error ChequeNotFound = Error.NotFound(
         "Suppliers.AddPayment.ChequeNotFound",

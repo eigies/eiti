@@ -68,7 +68,7 @@ public sealed class AddSupplierPaymentOrderHandler
             command.Date,
             command.Notes,
             command.Lines
-                .Select(l => new SupplierPaymentLineInput(l.Method, l.Amount, l.ChequeId, l.Reference))
+                .Select(l => new SupplierPaymentLineInput(l.Method, l.Amount, l.ChequeId, l.Reference, l.OwnCheque))
                 .ToList(),
             companyId,
             userId,

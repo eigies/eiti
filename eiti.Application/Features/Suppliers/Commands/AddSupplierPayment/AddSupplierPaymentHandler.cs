@@ -64,7 +64,7 @@ public sealed class AddSupplierPaymentHandler : IRequestHandler<AddSupplierPayme
             session,
             command.Date,
             command.Notes,
-            [new SupplierPaymentLineInput(command.Method, command.Amount, command.ChequeId, command.Reference)],
+            [new SupplierPaymentLineInput(command.Method, command.Amount, command.ChequeId, command.Reference, command.OwnCheque)],
             companyId,
             userId,
             cancellationToken);

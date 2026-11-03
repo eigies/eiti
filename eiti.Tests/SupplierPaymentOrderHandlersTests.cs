@@ -200,8 +200,119 @@ public sealed class SupplierPaymentOrderHandlersTests
     }
 
     private static AddSupplierPaymentOrderLine Line(
-        PurchasePaymentMethod method, decimal amount, Guid? chequeId = null, string? reference = null) =>
-        new((int)method, amount, chequeId, reference);
+        PurchasePaymentMethod method, decimal amount, Guid? chequeId = null, string? reference = null,
+        OwnChequeInput? ownCheque = null) =>
+        new((int)method, amount, chequeId, reference, ownCheque);
+
+    // ── Cheque propio ────────────────────────────────────────────────────────
+
+    private const int OwnBankId = 7;
+
+    private static OwnChequeInput Own(string numero = "00012345", int bankId = OwnBankId) =>
+        new(bankId, numero, new DateTime(2026, 10, 2), new DateTime(2026, 11, 2));
+
+    private Task<Result<AddSupplierPaymentOrderResponse>> PayWithOwnChequesAsync(params AddSupplierPaymentOrderLine[] lines) =>
+        OrderHandler().Handle(
+            new AddSupplierPaymentOrderCommand(_supplier.Id, new DateTime(2026, 10, 2), null, lines),
+            CancellationToken.None);
+
+    [Fact]
+    public async Task ChequePropio_NaceEntregadoAlProveedor_NoMueveCaja_EImputa()
+    {
+        var compra = AddPurchase("COMP-0112", 400_000m);
+
+        var result = await PayWithOwnChequesAsync(Line(PurchasePaymentMethod.Check, 300_000m, ownCheque: Own()));
+
+        result.IsSuccess.Should().BeTrue();
+        var cheque = _cheques.Values.Single();
+        cheque.Origen.Should().Be(ChequeOrigen.Propio);
+        cheque.Estado.Should().Be(ChequeStatus.Entregado);
+        cheque.SupplierId.Should().Be(_supplier.Id);
+        cheque.BankId.Should().Be(OwnBankId);
+        cheque.Numero.Should().Be("00012345");
+        cheque.Monto.Should().Be(300_000m);
+        cheque.Titular.Should().Be("Legacy Company");
+        cheque.FechaVencimiento.Should().Be(new DateTime(2026, 11, 2));
+        _payments.Single().ChequeId.Should().Be(cheque.Id);
+        compra.PendingAmount.Should().Be(100_000m);
+        _session.ExpectedClosingAmount.Should().Be(200_000m, "el cheque no mueve efectivo");
+    }
+
+    [Fact]
+    public async Task ChequePropio_PagoSuelto_TambienSeCarga()
+    {
+        AddPurchase("COMP-0112", 400_000m);
+
+        var result = await SingleHandler().Handle(
+            new AddSupplierPaymentCommand(
+                _supplier.Id, (int)PurchasePaymentMethod.Check, 150_000m, new DateTime(2026, 10, 2), null, null, null, Own()),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        _cheques.Values.Single().Origen.Should().Be(ChequeOrigen.Propio);
+        _payments.Single().Amount.Should().Be(150_000m);
+    }
+
+    [Fact]
+    public async Task ChequePropio_BancoInexistente_NoRegistraNada()
+    {
+        AddPurchase("COMP-0112", 400_000m);
+
+        var result = await PayWithOwnChequesAsync(
+            Line(PurchasePaymentMethod.Cash, 50_000m),
+            Line(PurchasePaymentMethod.Check, 300_000m, ownCheque: Own(bankId: 99)));
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Be(SupplierPaymentLineErrors.OwnChequeBankNotFound);
+        _orders.Should().BeEmpty();
+        _cheques.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ChequePropio_NumeroYaCargadoEnEseBanco_SeRechaza()
+    {
+        AddPurchase("COMP-0112", 800_000m);
+        (await PayWithOwnChequesAsync(Line(PurchasePaymentMethod.Check, 300_000m, ownCheque: Own()))).IsSuccess.Should().BeTrue();
+
+        var result = await PayWithOwnChequesAsync(Line(PurchasePaymentMethod.Check, 100_000m, ownCheque: Own()));
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Be(SupplierPaymentLineErrors.OwnChequeDuplicate);
+        _cheques.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task ChequePropio_MismoNumeroDosVecesEnElPago_SeRechaza()
+    {
+        AddPurchase("COMP-0112", 800_000m);
+
+        var result = await PayWithOwnChequesAsync(
+            Line(PurchasePaymentMethod.Check, 300_000m, ownCheque: Own()),
+            Line(PurchasePaymentMethod.Check, 100_000m, ownCheque: Own()));
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Be(SupplierPaymentLineErrors.OwnChequeDuplicate);
+        _orders.Should().BeEmpty();
+        _cheques.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ChequePropio_AlAnularLaOrden_QuedaAnulado_NoVuelveACartera()
+    {
+        var compra = AddPurchase("COMP-0112", 400_000m);
+        var deCartera = AddCheque(100_000m);
+        (await PayWithOwnChequesAsync(
+            Line(PurchasePaymentMethod.Check, 300_000m, ownCheque: Own()),
+            Line(PurchasePaymentMethod.Check, 100_000m, deCartera.Id))).IsSuccess.Should().BeTrue();
+
+        var result = await CancelOrderHandler().Handle(
+            new CancelSupplierPaymentOrderCommand(_supplier.Id, _orders.Single().Id), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        _cheques.Values.Single(c => c.Origen == ChequeOrigen.Propio).Estado.Should().Be(ChequeStatus.Anulado);
+        deCartera.Estado.Should().Be(ChequeStatus.EnCartera, "el de un cliente sí vuelve a cartera");
+        compra.PendingAmount.Should().Be(400_000m);
+    }
 
     private Purchase AddPurchase(string code, decimal total)
     {
@@ -264,13 +375,33 @@ public sealed class SupplierPaymentOrderHandlersTests
         chequeRepository
             .Setup(r => r.GetByIdAsync(It.IsAny<Guid>(), _companyId, It.IsAny<CancellationToken>()))
             .ReturnsAsync((Guid id, CompanyId _, CancellationToken _) => _cheques.GetValueOrDefault(id));
+        chequeRepository
+            .Setup(r => r.AddAsync(It.IsAny<Cheque>(), It.IsAny<CancellationToken>()))
+            .Callback<Cheque, CancellationToken>((c, _) => _cheques[c.Id] = c)
+            .Returns(Task.CompletedTask);
+        chequeRepository
+            .Setup(r => r.ExistsActiveOwnAsync(_companyId, It.IsAny<int>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((CompanyId _, int bankId, string numero, CancellationToken _) => _cheques.Values.Any(c =>
+                c.Origen == ChequeOrigen.Propio && c.BankId == bankId && c.Numero == numero && c.Estado != ChequeStatus.Anulado));
+
+        var bankRepository = new Mock<IBankRepository>();
+        bankRepository
+            .Setup(r => r.GetByIdAsync(OwnBankId, _companyId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Bank.Create(_companyId, "BANCO GALICIA"));
+
+        var companyRepository = new Mock<ICompanyRepository>();
+        companyRepository
+            .Setup(r => r.GetByIdAsync(_companyId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Company.CreateLegacy(_companyId));
 
         return new SupplierPaymentOrderService(
             new Mock<ISupplierRepository>().Object,
             _paymentRepository.Object,
             _orderRepository.Object,
             purchaseRepository.Object,
-            chequeRepository.Object);
+            chequeRepository.Object,
+            bankRepository.Object,
+            companyRepository.Object);
     }
 
     private (Mock<ICurrentUserService>, Mock<ISupplierRepository>, Mock<ICashDrawerRepository>, Mock<ICashSessionRepository>) Context()
