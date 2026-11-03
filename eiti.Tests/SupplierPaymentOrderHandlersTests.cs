@@ -654,6 +654,22 @@ public sealed class SupplierPaymentOrderHandlersTests
     }
 
     [Fact]
+    public async Task Extracto_MarcaQueMedioEsChequePropio_ParaAvisarQueNoVuelveACartera()
+    {
+        AddPurchase("COMP-0112", 400_000m);
+        var deCartera = AddCheque(100_000m);
+        (await PayWithOwnChequesAsync(
+            Line(PurchasePaymentMethod.Check, 300_000m, ownCheque: Own()),
+            Line(PurchasePaymentMethod.Check, 100_000m, deCartera.Id))).IsSuccess.Should().BeTrue();
+
+        var result = await LedgerHandler([]).Handle(new GetSupplierLedgerQuery(_supplier.Id), CancellationToken.None);
+
+        var means = result.Value.Rows.Single(r => r.Code == _orders.Single().Code).Means;
+        means.Single(m => m.ChequeNumber == "00012345").OwnCheque.Should().BeTrue();
+        means.Single(m => m.ChequeNumber == deCartera.Numero).OwnCheque.Should().BeFalse();
+    }
+
+    [Fact]
     public async Task Extracto_UnRenglonPorOrden_ConMediosEImputaciones_YCuadraConLasTarjetas()
     {
         var today = BusinessCalendar.ToBusinessDate(DateTime.UtcNow);
