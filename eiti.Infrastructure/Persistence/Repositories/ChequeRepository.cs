@@ -28,6 +28,11 @@ public sealed class ChequeRepository : IChequeRepository
             query = query.Where(c => c.BankId == filters.BankId.Value);
         }
 
+        if (filters.Origen.HasValue)
+        {
+            query = query.Where(c => c.Origen == filters.Origen.Value);
+        }
+
         if (!string.IsNullOrWhiteSpace(filters.Numero))
         {
             var numero = filters.Numero.Trim();
@@ -61,6 +66,16 @@ public sealed class ChequeRepository : IChequeRepository
         return await _db.Cheques
             .Where(c => c.CompanyId == companyId && idList.Contains(c.Id))
             .ToListAsync(ct);
+    }
+
+    public async Task<bool> ExistsActiveOwnAsync(CompanyId companyId, int bankId, string numero, CancellationToken ct)
+    {
+        return await _db.Cheques.AnyAsync(c =>
+            c.CompanyId == companyId
+            && c.Origen == ChequeOrigen.Propio
+            && c.BankId == bankId
+            && c.Numero == numero
+            && c.Estado != ChequeStatus.Anulado, ct);
     }
 
     public async Task AddAsync(Cheque cheque, CancellationToken ct)

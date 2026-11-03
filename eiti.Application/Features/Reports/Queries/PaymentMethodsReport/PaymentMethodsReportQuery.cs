@@ -8,7 +8,8 @@ public sealed record PaymentMethodsReportQuery(
     DateTime DateFrom,
     DateTime DateTo,
     Guid? BranchId = null,
-    string? SaleType = null
+    string? SaleType = null,
+    Guid? CustomerId = null
 ) : IRequest<Result<PaymentMethodsReportResponse>>, IRequirePermissions
 {
     public IReadOnlyCollection<string> RequiredPermissions => [PermissionCodes.ReportsPayments];

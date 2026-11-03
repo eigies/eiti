@@ -193,7 +193,7 @@ public sealed class DiscountsReportHandlerTests
         var branchId = Guid.NewGuid();
 
         await new ReportsController(sender.Object).DiscountsReport(
-            new DateTime(2026, 10, 1), new DateTime(2026, 10, 31), branchId, _seller, CancellationToken.None);
+            new DateTime(2026, 10, 1), new DateTime(2026, 10, 31), branchId, _seller, null, null, CancellationToken.None);
 
         sent.Should().Be(new DiscountsReportQuery(new DateTime(2026, 10, 1), new DateTime(2026, 10, 31), branchId, _seller));
     }

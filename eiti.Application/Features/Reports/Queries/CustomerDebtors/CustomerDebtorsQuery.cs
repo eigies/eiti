@@ -4,8 +4,10 @@ using MediatR;
 
 namespace eiti.Application.Features.Reports.Queries.CustomerDebtors;
 
-public sealed record CustomerDebtorsQuery
-    : IRequest<Result<CustomerDebtorsResponse>>, IRequirePermissions
+public sealed record CustomerDebtorsQuery(
+    Guid? BranchId = null,
+    Guid? CustomerId = null
+) : IRequest<Result<CustomerDebtorsResponse>>, IRequirePermissions
 {
     public IReadOnlyCollection<string> RequiredPermissions => [PermissionCodes.ReportsDebtors];
 }

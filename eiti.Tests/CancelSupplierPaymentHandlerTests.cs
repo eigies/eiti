@@ -101,7 +101,9 @@ public sealed class CancelSupplierPaymentHandlerTests
                 supplierPaymentRepository.Object,
                 new Mock<ISupplierPaymentOrderRepository>().Object,
                 purchaseRepository.Object,
-                new Mock<IChequeRepository>().Object),
+                new Mock<IChequeRepository>().Object,
+                new Mock<IBankRepository>().Object,
+                new Mock<ICompanyRepository>().Object),
             unitOfWork.Object);
 
         var result = await handler.Handle(

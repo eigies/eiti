@@ -60,7 +60,8 @@ public sealed class ChequeFilterTests
             currentUserService.Object,
             chequeRepository.Object,
             bankRepository.Object,
-            saleRepository.Object);
+            saleRepository.Object,
+            new Mock<ISupplierRepository>().Object);
 
         var result = await handler.Handle(
             new ListChequesQuery(null, null, null, null, null),

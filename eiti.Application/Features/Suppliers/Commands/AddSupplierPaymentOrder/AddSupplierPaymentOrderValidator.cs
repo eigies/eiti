@@ -1,3 +1,4 @@
+using eiti.Application.Features.Suppliers.Common;
 using eiti.Domain.Purchases;
 using FluentValidation;
 
@@ -33,8 +34,15 @@ public sealed class AddSupplierPaymentOrderValidator : AbstractValidator<AddSupp
                 .WithMessage("El método de pago es inválido.");
             line.RuleFor(l => l.Amount).GreaterThan(0).WithMessage("El monto debe ser mayor a cero.");
             line.RuleFor(l => l.ChequeId)
-                .NotEmpty().WithMessage("Debe seleccionar un cheque en cartera.")
-                .When(l => l.Method == (int)PurchasePaymentMethod.Check);
+                .NotEmpty().WithMessage("Elegí un cheque en cartera o cargá uno propio.")
+                .When(l => l.Method == (int)PurchasePaymentMethod.Check && l.OwnCheque is null);
+            line.RuleFor(l => l.ChequeId)
+                .Empty().WithMessage("Un cheque es de cartera o propio, no los dos.")
+                .When(l => l.OwnCheque is not null);
+            line.RuleFor(l => l.OwnCheque)
+                .Null().WithMessage("Un cheque propio solo va con el medio Cheque.")
+                .When(l => l.Method != (int)PurchasePaymentMethod.Check);
+            line.RuleFor(l => l.OwnCheque!).SetValidator(new OwnChequeInputValidator()).When(l => l.OwnCheque is not null);
             line.RuleFor(l => l.Reference).MaximumLength(120).When(l => l.Reference != null);
         });
     }

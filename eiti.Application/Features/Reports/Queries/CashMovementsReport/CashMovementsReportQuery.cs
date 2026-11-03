@@ -6,7 +6,8 @@ namespace eiti.Application.Features.Reports.Queries.CashMovementsReport;
 
 public sealed record CashMovementsReportQuery(
     DateTime DateFrom,
-    DateTime DateTo
+    DateTime DateTo,
+    Guid? BranchId = null
 ) : IRequest<Result<CashMovementsReportResponse>>, IRequirePermissions
 {
     public IReadOnlyCollection<string> RequiredPermissions => [PermissionCodes.ReportsCash];

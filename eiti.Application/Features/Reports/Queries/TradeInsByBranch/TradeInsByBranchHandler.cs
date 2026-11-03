@@ -1,6 +1,7 @@
 using eiti.Application.Abstractions.Repositories;
 using eiti.Application.Abstractions.Services;
 using eiti.Application.Common;
+using eiti.Application.Features.Reports.Common;
 using MediatR;
 
 namespace eiti.Application.Features.Reports.Queries.TradeInsByBranch;
@@ -42,8 +43,10 @@ public sealed class TradeInsByBranchHandler
             : _currentUserService.AllowedBranchIds;
 
         // Ventas con canje del período (excluye canceladas, respeta sucursales permitidas).
-        var sales = await _saleRepository.ListForTradeInReportAsync(
-            companyId, from, to, request.BranchId, request.CustomerId, allowedBranchIds, cancellationToken);
+        var sales = (await _saleRepository.ListForTradeInReportAsync(
+                companyId, from, to, request.BranchId, request.CustomerId, allowedBranchIds, cancellationToken))
+            .Where(sale => ReportSaleType.Matches(sale, request.SaleType))
+            .ToList();
 
         // Agregación por sucursal + producto.
         var groups = new Dictionary<(Guid BranchId, Guid ProductId), Accumulator>();

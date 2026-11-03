@@ -1,3 +1,4 @@
+using eiti.Application.Features.Reports.Common;
 using FluentValidation;
 
 namespace eiti.Application.Features.Reports.Queries.DailySalesControl;
@@ -22,5 +23,9 @@ public sealed class DailySalesControlValidator : AbstractValidator<DailySalesCon
         RuleFor(query => query.Status)
             .InclusiveBetween(0, 3)
             .WithMessage("El estado de venta es invalido.");
+
+        RuleFor(x => x.SaleType)
+            .Must(ReportSaleType.IsValid)
+            .WithMessage("El tipo de venta es invalido.");
     }
 }

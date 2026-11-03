@@ -17,6 +17,9 @@ public sealed class Cheque
     public DateTime FechaEmision { get; private set; }
     public DateTime FechaVencimiento { get; private set; }
     public ChequeStatus Estado { get; private set; }
+    public ChequeOrigen Origen { get; private set; } = ChequeOrigen.Tercero;
+    // Proveedor al que se le entregó un cheque propio. Null en los de terceros.
+    public Guid? SupplierId { get; private set; }
     public string? Notas { get; private set; }
     public DateTime CreatedAt { get; private set; }
     public DateTime UpdatedAt { get; private set; }
@@ -88,6 +91,26 @@ public sealed class Cheque
         return new Cheque(companyId, null, null, ccPaymentId, bankId, numero, titular, cuitDni, monto, fechaEmision, fechaVencimiento, notas);
     }
 
+    // Cheque propio: nace entregado al proveedor, nunca pasa por cartera. El CUIT queda vacío: la empresa
+    // no lo guarda (vive en su perfil fiscal) y el titular ya la identifica.
+    public static Cheque CreateOwn(
+        CompanyId companyId,
+        Guid supplierId,
+        int bankId,
+        string numero,
+        string titular,
+        decimal monto,
+        DateTime fechaEmision,
+        DateTime fechaVencimiento,
+        string? notas)
+    {
+        var cheque = new Cheque(companyId, null, null, null, bankId, numero, titular, string.Empty, monto, fechaEmision, fechaVencimiento, notas);
+        cheque.Origen = ChequeOrigen.Propio;
+        cheque.SupplierId = supplierId;
+        cheque.Estado = ChequeStatus.Entregado;
+        return cheque;
+    }
+
     // Endoso a proveedor: el cheque sale de cartera para pagar una compra.
     // No se expone vía TransitionTo para que el cambio de estado manual no permita "Entregado".
     public void EndorseToSupplier()
@@ -104,12 +127,29 @@ public sealed class Cheque
     // Reverso del endoso (al anular el pago de la compra): vuelve a cartera.
     public void ReturnToCartera()
     {
+        if (Origen == ChequeOrigen.Propio)
+        {
+            throw new InvalidOperationException("Own cheques were never en cartera: void them instead.");
+        }
+
         if (Estado != ChequeStatus.Entregado)
         {
             throw new InvalidOperationException("Only cheques entregados can return to cartera.");
         }
 
         Estado = ChequeStatus.EnCartera;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    // Reverso de un cheque propio (al anular el pago): no vuelve a cartera, queda anulado.
+    public void VoidOwn()
+    {
+        if (Origen != ChequeOrigen.Propio || Estado != ChequeStatus.Entregado)
+        {
+            throw new InvalidOperationException("Only own cheques entregados can be voided.");
+        }
+
+        Estado = ChequeStatus.Anulado;
         UpdatedAt = DateTime.UtcNow;
     }
 

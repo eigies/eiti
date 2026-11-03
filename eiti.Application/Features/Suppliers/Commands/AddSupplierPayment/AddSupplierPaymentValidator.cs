@@ -1,3 +1,4 @@
+using eiti.Application.Features.Suppliers.Common;
 using eiti.Domain.Purchases;
 using FluentValidation;
 
@@ -13,8 +14,15 @@ public sealed class AddSupplierPaymentValidator : AbstractValidator<AddSupplierP
             .Must(m => Enum.IsDefined(typeof(PurchasePaymentMethod), m))
             .WithMessage("Invalid payment method.");
         RuleFor(x => x.ChequeId)
-            .NotEmpty().WithMessage("Debe seleccionar un cheque en cartera.")
-            .When(x => x.Method == (int)PurchasePaymentMethod.Check);
+            .NotEmpty().WithMessage("Elegí un cheque en cartera o cargá uno propio.")
+            .When(x => x.Method == (int)PurchasePaymentMethod.Check && x.OwnCheque is null);
+        RuleFor(x => x.ChequeId)
+            .Empty().WithMessage("Un cheque es de cartera o propio, no los dos.")
+            .When(x => x.OwnCheque is not null);
+        RuleFor(x => x.OwnCheque)
+            .Null().WithMessage("Un cheque propio solo va con el medio Cheque.")
+            .When(x => x.Method != (int)PurchasePaymentMethod.Check);
+        RuleFor(x => x.OwnCheque!).SetValidator(new OwnChequeInputValidator()).When(x => x.OwnCheque is not null);
         RuleFor(x => x.Reference)
             .MaximumLength(120).When(x => x.Reference != null);
         RuleFor(x => x.Notes)

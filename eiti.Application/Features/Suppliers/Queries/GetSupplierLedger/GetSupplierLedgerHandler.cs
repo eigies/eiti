@@ -101,7 +101,8 @@ public sealed class GetSupplierLedgerHandler : IRequestHandler<GetSupplierLedger
                 payment.Reference,
                 cheque?.Numero,
                 cheque is null ? null : bankNames.GetValueOrDefault(cheque.BankId),
-                cheque?.FechaVencimiento);
+                cheque?.FechaVencimiento,
+                OwnCheque: cheque?.Origen == ChequeOrigen.Propio);
         }
 
         IReadOnlyList<LedgerImputationResponse> ImputationsOf(IEnumerable<SupplierPayment> lines) =>

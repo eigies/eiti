@@ -16,4 +16,6 @@ public sealed record ChequeDetailResponse(
     string? SaleCode,
     string SaleType,
     DateTime CreatedAt,
-    DateTime UpdatedAt);
+    DateTime UpdatedAt,
+    int Origen = 1,
+    string? SupplierName = null);

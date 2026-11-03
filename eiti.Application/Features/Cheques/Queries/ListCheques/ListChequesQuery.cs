@@ -10,7 +10,8 @@ public sealed record ListChequesQuery(
     int? BankId,
     DateTime? FechaVencFrom,
     DateTime? FechaVencTo,
-    string? Numero
+    string? Numero,
+    ChequeOrigen? Origen = null
 ) : IRequest<Result<IReadOnlyList<ChequeListItemResponse>>>, IRequirePermissions
 {
     public IReadOnlyCollection<string> RequiredPermissions => [PermissionCodes.ChequesManage];
