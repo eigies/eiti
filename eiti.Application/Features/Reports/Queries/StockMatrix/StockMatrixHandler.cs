@@ -44,6 +44,10 @@ public sealed class StockMatrixHandler : IRequestHandler<StockMatrixQuery, Resul
             .Where(branch => request.BranchId is null || branch.Id.Value == request.BranchId)
             .OrderBy(branch => branch.Name)
             .ToList();
+        // Una sucursal pedida que el usuario no puede ver no devuelve nada, igual que en Caja.
+        if (request.BranchId.HasValue && orderedBranches.Count == 0)
+            return Result<StockMatrixResponse>.Success(new StockMatrixResponse([], []));
+
         var branchIndex = orderedBranches
             .Select((branch, index) => (branch.Id.Value, index))
             .ToDictionary(x => x.Item1, x => x.index);

@@ -6,7 +6,7 @@ using MediatR;
 
 namespace eiti.Application.Features.Cheques.Queries.ListOwnChequesDue;
 
-public sealed class ListOwnChequesDueHandler : IRequestHandler<ListOwnChequesDueQuery, Result<IReadOnlyList<OwnChequeDueResponse>>>
+public sealed class ListOwnChequesDueHandler : IRequestHandler<ListOwnChequesDueQuery, Result<IReadOnlyList<ListOwnChequesDueResponse>>>
 {
     private readonly ICurrentUserService _currentUserService;
     private readonly IChequeRepository _chequeRepository;
@@ -25,11 +25,11 @@ public sealed class ListOwnChequesDueHandler : IRequestHandler<ListOwnChequesDue
         _supplierRepository = supplierRepository;
     }
 
-    public async Task<Result<IReadOnlyList<OwnChequeDueResponse>>> Handle(ListOwnChequesDueQuery request, CancellationToken cancellationToken)
+    public async Task<Result<IReadOnlyList<ListOwnChequesDueResponse>>> Handle(ListOwnChequesDueQuery request, CancellationToken cancellationToken)
     {
         var authCheck = _currentUserService.EnsureAuthenticated();
         if (authCheck.IsFailure)
-            return Result<IReadOnlyList<OwnChequeDueResponse>>.Failure(authCheck.Error);
+            return Result<IReadOnlyList<ListOwnChequesDueResponse>>.Failure(authCheck.Error);
 
         var companyId = _currentUserService.CompanyId!;
         var (from, to) = OwnChequeDueWindow.For(BusinessCalendar.ToBusinessDate(DateTime.UtcNow));
@@ -38,13 +38,13 @@ public sealed class ListOwnChequesDueHandler : IRequestHandler<ListOwnChequesDue
         var cheques = await _chequeRepository.ListAsync(
             new ChequeFilters(ChequeStatus.Entregado, null, from, to, null, ChequeOrigen.Propio), companyId, cancellationToken);
         if (cheques.Count == 0)
-            return Result<IReadOnlyList<OwnChequeDueResponse>>.Success([]);
+            return Result<IReadOnlyList<ListOwnChequesDueResponse>>.Success([]);
 
         var bankNames = (await _bankRepository.ListAsync(false, companyId, cancellationToken)).ToDictionary(b => b.Id, b => b.Name);
         var supplierNames = (await _supplierRepository.ListAsync(companyId.Value, false, null, cancellationToken)).ToDictionary(s => s.Id, s => s.Name);
 
-        return Result<IReadOnlyList<OwnChequeDueResponse>>.Success(cheques
-            .Select(c => new OwnChequeDueResponse(
+        return Result<IReadOnlyList<ListOwnChequesDueResponse>>.Success(cheques
+            .Select(c => new ListOwnChequesDueResponse(
                 c.Id,
                 c.Numero,
                 bankNames.GetValueOrDefault(c.BankId, "Unknown"),

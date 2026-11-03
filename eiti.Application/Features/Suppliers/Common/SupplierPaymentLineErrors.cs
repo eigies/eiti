@@ -26,6 +26,10 @@ public static class SupplierPaymentLineErrors
         "Suppliers.AddPayment.OwnChequeBankNotFound",
         "El banco del cheque propio no existe.");
 
+    public static readonly Error OwnChequeBankNotEnabled = Error.Validation(
+        "Suppliers.AddPayment.OwnChequeBankNotEnabled",
+        "Ese banco no está habilitado para cheques.");
+
     public static readonly Error OwnChequeDuplicate = Error.Conflict(
         "Suppliers.AddPayment.OwnChequeDuplicate",
         "Ya hay un cheque propio con ese número en ese banco.");

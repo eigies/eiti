@@ -103,6 +103,24 @@ public sealed class OwnChequeTests
             .IsValid.Should().BeFalse();
     }
 
+    // Sin fecha de pago el cheque no entra nunca en el aviso del día que vence.
+    [Fact]
+    public void Validador_ChequePropioSinFechas_SeRechaza()
+    {
+        new AddSupplierPaymentOrderValidator()
+            .Validate(Order(null, new OwnChequeInput(7, "1", default, default)))
+            .IsValid.Should().BeFalse();
+    }
+
+    // El cheque guarda solo el día: la hora no puede dar vuelta las fechas.
+    [Fact]
+    public void Validador_MismoDiaConDistintaHora_SeAcepta()
+    {
+        new AddSupplierPaymentOrderValidator()
+            .Validate(Order(null, new OwnChequeInput(7, "1", Emision.AddHours(15), Emision)))
+            .IsValid.Should().BeTrue();
+    }
+
     [Fact]
     public void Validador_FechaDePagoAnteriorALaEmision_SeRechaza()
     {

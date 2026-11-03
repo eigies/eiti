@@ -49,7 +49,7 @@ public sealed class PaymentMethodsReportHandler
         //     medio real) que se imputa FIFO como SaleCcPayment con metodo CustomerCredit.
         // Por eso filtrar las ventas por IsCuentaCorriente y despues leer SalePayments devolvia
         // vacio para Mayorista: una venta CC no tiene pagos directos.
-        var saleType = (request.SaleType ?? "all").ToLowerInvariant();
+        var saleType = string.IsNullOrWhiteSpace(request.SaleType) ? "all" : request.SaleType.ToLowerInvariant();
         var includeRetail = saleType is "all" or "retail";
         var includeWholesale = saleType is "all" or "wholesale";
 

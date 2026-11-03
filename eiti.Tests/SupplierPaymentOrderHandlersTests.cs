@@ -208,6 +208,8 @@ public sealed class SupplierPaymentOrderHandlersTests
 
     private const int OwnBankId = 7;
 
+    private const int CardOnlyBankId = 77;
+
     private static OwnChequeInput Own(string numero = "00012345", int bankId = OwnBankId) =>
         new(bankId, numero, new DateTime(2026, 10, 2), new DateTime(2026, 11, 2));
 
@@ -251,6 +253,21 @@ public sealed class SupplierPaymentOrderHandlersTests
         result.IsSuccess.Should().BeTrue();
         _cheques.Values.Single().Origen.Should().Be(ChequeOrigen.Propio);
         _payments.Single().Amount.Should().Be(150_000m);
+    }
+
+    [Fact]
+    public async Task ChequePropio_BancoNoHabilitadoParaCheques_NoRegistraNada()
+    {
+        AddPurchase("COMP-0112", 400_000m);
+
+        var result = await PayWithOwnChequesAsync(
+            Line(PurchasePaymentMethod.Cash, 50_000m),
+            Line(PurchasePaymentMethod.Check, 300_000m, ownCheque: Own(bankId: CardOnlyBankId)));
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Be(SupplierPaymentLineErrors.OwnChequeBankNotEnabled);
+        _orders.Should().BeEmpty();
+        _cheques.Should().BeEmpty();
     }
 
     [Fact]
@@ -388,6 +405,9 @@ public sealed class SupplierPaymentOrderHandlersTests
         bankRepository
             .Setup(r => r.GetByIdAsync(OwnBankId, _companyId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(Bank.Create(_companyId, "BANCO GALICIA"));
+        bankRepository
+            .Setup(r => r.GetByIdAsync(CardOnlyBankId, _companyId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Bank.Create(_companyId, "SOLO TARJETAS", useForCheque: false));
 
         var companyRepository = new Mock<ICompanyRepository>();
         companyRepository

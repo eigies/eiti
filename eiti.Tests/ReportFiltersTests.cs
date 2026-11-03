@@ -199,6 +199,25 @@ public sealed class ReportFiltersTests
     }
 
     [Fact]
+    public async Task PaymentMethods_ABlankSaleType_MeansAll()
+    {
+        _sales.Setup(r => r.ListWithPaymentsForReportAsync(
+                _companyId, It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<Guid?>(),
+                It.IsAny<IReadOnlyCollection<Guid>?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+        _customerPayments.Setup(r => r.ListForPaymentMethodsReportAsync(
+                _companyId.Value, It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<Guid?>(),
+                It.IsAny<IReadOnlyCollection<Guid>?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([CcPayment(_ana, 30m)]);
+
+        var result = await new PaymentMethodsReportHandler(
+                _currentUser.Object, _sales.Object, _customerPayments.Object, _banks.Object)
+            .Handle(new PaymentMethodsReportQuery(From, To, SaleType: "  "), CancellationToken.None);
+
+        result.Value.Rows.Sum(row => row.Total).Should().Be(30m);
+    }
+
+    [Fact]
     public async Task Cash_AsksOnlyForTheRequestedBranch()
     {
         await CashHandler().Handle(new CashMovementsReportQuery(From, To, _mataderos.Id.Value), CancellationToken.None);
@@ -266,11 +285,27 @@ public sealed class ReportFiltersTests
     }
 
     [Fact]
+    public async Task Stock_ABranchTheUserCannotSee_ReturnsNothing()
+    {
+        _currentUser.SetupGet(s => s.CanViewAllBranches).Returns(false);
+        _currentUser.SetupGet(s => s.AllowedBranchIds).Returns([_mataderos.Id.Value]);
+        _stocks.Setup(r => r.ListByCompanyAsync(_companyId, It.IsAny<CancellationToken>())).ReturnsAsync([]);
+
+        var result = await new StockMatrixHandler(
+                _currentUser.Object, _branches.Object, _products.Object, _stocks.Object)
+            .Handle(new StockMatrixQuery(_sanCristobal.Id.Value), CancellationToken.None);
+
+        result.Value.Branches.Should().BeEmpty();
+        result.Value.Rows.Should().BeEmpty();
+    }
+
+    [Fact]
     public void Validators_RejectAnUnknownSaleType()
     {
         new DailySalesControlValidator().Validate(new DailySalesControlQuery(From, To, SaleType: "otro")).IsValid.Should().BeFalse();
         new TradeInsByBranchValidator().Validate(new TradeInsByBranchQuery(From, To, SaleType: "otro")).IsValid.Should().BeFalse();
         new DiscountsReportValidator().Validate(new DiscountsReportQuery(From, To, SaleType: "otro")).IsValid.Should().BeFalse();
+        new PaymentMethodsReportValidator().Validate(new PaymentMethodsReportQuery(From, To, SaleType: "otro")).IsValid.Should().BeFalse();
     }
 
     [Theory]

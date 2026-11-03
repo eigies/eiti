@@ -6,7 +6,7 @@ namespace eiti.Application.Features.Cheques.Queries.ListOwnChequesDue;
 
 // Cheques propios que vencen hoy: lo que se debita del banco y hay que avisar al entrar a EITI.
 public sealed record ListOwnChequesDueQuery
-    : IRequest<Result<IReadOnlyList<OwnChequeDueResponse>>>, IRequirePermissions
+    : IRequest<Result<IReadOnlyList<ListOwnChequesDueResponse>>>, IRequirePermissions
 {
     public IReadOnlyCollection<string> RequiredPermissions => [PermissionCodes.ChequesManage];
 }

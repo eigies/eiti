@@ -7,6 +7,8 @@ using eiti.Domain.Companies;
 using eiti.Domain.Purchases;
 using eiti.Domain.Suppliers;
 using eiti.Domain.Users;
+using eiti.Application.Features.Banks.Common;
+using eiti.Domain.Banks;
 
 namespace eiti.Application.Features.Suppliers.Common;
 
@@ -298,6 +300,9 @@ public sealed class SupplierPaymentOrderService : ISupplierPaymentOrderService
         var bank = await _bankRepository.GetByIdAsync(input.BankId, companyId, cancellationToken);
         if (bank is null)
             return Result<Cheque>.Failure(SupplierPaymentLineErrors.OwnChequeBankNotFound);
+
+        if (!BankUsageRules.Supports(bank, BankUsage.Cheque))
+            return Result<Cheque>.Failure(SupplierPaymentLineErrors.OwnChequeBankNotEnabled);
 
         var numero = input.Numero.Trim();
         if (!keysInThisPayment.Add((input.BankId, numero))
