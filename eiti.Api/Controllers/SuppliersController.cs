@@ -6,6 +6,7 @@ using eiti.Application.Features.Suppliers.Commands.CancelSupplierPaymentOrder;
 using eiti.Application.Features.Suppliers.Commands.CreateSupplier;
 using eiti.Application.Features.Suppliers.Commands.DeactivateSupplier;
 using eiti.Application.Features.Suppliers.Commands.UpdateSupplier;
+using eiti.Application.Features.Suppliers.Common;
 using eiti.Application.Features.Suppliers.Queries.GetSupplierAccount;
 using eiti.Application.Features.Suppliers.Queries.GetSupplierLedger;
 using eiti.Application.Features.Suppliers.Queries.ListSupplierAccounts;
@@ -108,12 +109,12 @@ public sealed class SuppliersController : ControllerBase
         CancellationToken cancellationToken)
     {
         var result = await _sender.Send(
-            new AddSupplierPaymentCommand(id, request.Method, request.Amount, request.Date, request.Reference, request.Notes, request.ChequeId),
+            new AddSupplierPaymentCommand(id, request.Method, request.Amount, request.Date, request.Reference, request.Notes, request.ChequeId, request.OwnCheque),
             cancellationToken);
         return result.ToActionResult();
     }
 
-    // Pago con varios medios (cheques de cartera, transferencia, efectivo) bajo una orden de pago.
+    // Pago con varios medios (cheques de cartera o propios, transferencia, efectivo) bajo una orden de pago.
     [HttpPost("{id:guid}/payment-orders")]
     public async Task<IActionResult> AddSupplierPaymentOrder(
         Guid id,
@@ -125,7 +126,7 @@ public sealed class SuppliersController : ControllerBase
                 id,
                 request.Date,
                 request.Notes,
-                request.Lines?.Select(l => new AddSupplierPaymentOrderLine(l.Method, l.Amount, l.ChequeId, l.Reference)).ToList() ?? []),
+                request.Lines?.Select(l => new AddSupplierPaymentOrderLine(l.Method, l.Amount, l.ChequeId, l.Reference, l.OwnCheque)).ToList() ?? []),
             cancellationToken);
         return result.ToActionResult();
     }
@@ -189,13 +190,15 @@ public sealed record AddSupplierPaymentRequest(
     DateTime Date,
     string? Reference,
     string? Notes,
-    Guid? ChequeId = null);
+    Guid? ChequeId = null,
+    OwnChequeInput? OwnCheque = null);
 
 public sealed record AddSupplierPaymentOrderLineRequest(
     int Method,
     decimal Amount,
     Guid? ChequeId = null,
-    string? Reference = null);
+    string? Reference = null,
+    OwnChequeInput? OwnCheque = null);
 
 public sealed record AddSupplierPaymentOrderRequest(
     DateTime Date,

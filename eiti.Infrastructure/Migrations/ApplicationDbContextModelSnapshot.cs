@@ -512,6 +512,11 @@ namespace eiti.Infrastructure.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
 
+                    b.Property<int>("Origen")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1);
+
                     b.Property<Guid?>("SaleCcPaymentId")
                         .HasColumnType("uuid");
 
@@ -519,6 +524,9 @@ namespace eiti.Infrastructure.Migrations
                         .HasColumnType("integer");
 
                     b.Property<Guid?>("SalePaymentSaleId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("SupplierId")
                         .HasColumnType("uuid");
 
                     b.Property<string>("Titular")
@@ -542,6 +550,12 @@ namespace eiti.Infrastructure.Migrations
                     b.HasIndex("SaleCcPaymentId");
 
                     b.HasIndex("SalePaymentSaleId");
+
+                    b.HasIndex("SupplierId");
+
+                    b.HasIndex("CompanyId", "BankId", "Numero")
+                        .IsUnique()
+                        .HasFilter("\"Origen\" = 2 AND \"Estado\" <> 5");
 
                     b.ToTable("Cheques", (string)null);
                 });

@@ -10,7 +10,9 @@ public sealed record DiscountsReportQuery(
     DateTime DateFrom,
     DateTime DateTo,
     Guid? BranchId = null,
-    Guid? UserId = null
+    Guid? UserId = null,
+    Guid? CustomerId = null,
+    string? SaleType = null
 ) : IRequest<Result<DiscountsReportResponse>>, IRequirePermissions
 {
     public IReadOnlyCollection<string> RequiredPermissions => [PermissionCodes.ReportsSalesDiscounts];

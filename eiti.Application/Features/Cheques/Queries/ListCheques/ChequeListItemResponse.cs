@@ -10,4 +10,6 @@ public sealed record ChequeListItemResponse(
     int Estado,
     string EstadoName,
     string? SaleCode,
-    string SaleType);
+    string SaleType,
+    int Origen,
+    string? SupplierName);

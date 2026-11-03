@@ -1,3 +1,4 @@
+using eiti.Application.Features.Reports.Common;
 using FluentValidation;
 
 namespace eiti.Application.Features.Reports.Queries.PaymentMethodsReport;
@@ -14,5 +15,9 @@ public sealed class PaymentMethodsReportValidator : AbstractValidator<PaymentMet
             .LessThanOrEqualTo(x => x.DateTo)
             .When(x => x.DateFrom != default && x.DateTo != default)
             .WithMessage("La fecha desde no puede ser posterior a la fecha hasta.");
+
+        RuleFor(x => x.SaleType)
+            .Must(ReportSaleType.IsValid)
+            .WithMessage("El tipo de venta es invalido.");
     }
 }

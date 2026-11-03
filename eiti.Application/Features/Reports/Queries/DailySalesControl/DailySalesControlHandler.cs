@@ -1,6 +1,7 @@
 using eiti.Application.Abstractions.Repositories;
 using eiti.Application.Abstractions.Services;
 using eiti.Application.Common;
+using eiti.Application.Features.Reports.Common;
 using eiti.Domain.Customers;
 using eiti.Domain.Sales;
 using MediatR;
@@ -62,6 +63,12 @@ public sealed class DailySalesControlHandler
                 .Where(sale => allowedBranchIds.Contains(sale.BranchId.Value))
                 .ToList();
         }
+
+        sales = sales
+            .Where(sale => (request.BranchId is null || sale.BranchId.Value == request.BranchId)
+                && (request.CustomerId is null || sale.CustomerId?.Value == request.CustomerId)
+                && ReportSaleType.Matches(sale, request.SaleType))
+            .ToList();
 
         var products = (await _productRepository.GetByCompanyIdAsync(companyId, cancellationToken))
             .ToDictionary(product => product.Id.Value);

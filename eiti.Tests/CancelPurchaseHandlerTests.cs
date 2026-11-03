@@ -102,7 +102,9 @@ public sealed class CancelPurchaseHandlerTests
                 supplierPaymentRepository.Object,
                 new Mock<ISupplierPaymentOrderRepository>().Object,
                 purchaseRepository.Object,
-                new Mock<IChequeRepository>().Object),
+                new Mock<IChequeRepository>().Object,
+                new Mock<IBankRepository>().Object,
+                new Mock<ICompanyRepository>().Object),
             NoCreditNotes(),
             new Mock<IUnitOfWork>().Object);
 

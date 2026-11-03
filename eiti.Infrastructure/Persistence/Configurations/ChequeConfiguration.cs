@@ -53,6 +53,13 @@ public sealed class ChequeConfiguration : IEntityTypeConfiguration<Cheque>
             .HasDefaultValue(ChequeStatus.EnCartera)
             .IsRequired();
 
+        builder.Property(c => c.Origen)
+            .HasConversion<int>()
+            .HasDefaultValue(ChequeOrigen.Tercero)
+            .IsRequired();
+
+        builder.Property(c => c.SupplierId).IsRequired(false);
+
         builder.Property(c => c.Notas)
             .HasMaxLength(500)
             .IsRequired(false);
@@ -65,5 +72,11 @@ public sealed class ChequeConfiguration : IEntityTypeConfiguration<Cheque>
         builder.HasIndex(c => c.BankId);
         builder.HasIndex(c => c.Estado);
         builder.HasIndex(c => c.FechaVencimiento);
+        builder.HasIndex(c => c.SupplierId);
+
+        // Un solo cheque propio vigente por banco y número. Anulado (Estado 5) el número se puede volver a usar.
+        builder.HasIndex(c => new { c.CompanyId, c.BankId, c.Numero })
+            .IsUnique()
+            .HasFilter("\"Origen\" = 2 AND \"Estado\" <> 5");
     }
 }

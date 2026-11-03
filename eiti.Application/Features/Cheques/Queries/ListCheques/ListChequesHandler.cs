@@ -12,17 +12,20 @@ public sealed class ListChequesHandler : IRequestHandler<ListChequesQuery, Resul
     private readonly IChequeRepository _chequeRepository;
     private readonly IBankRepository _bankRepository;
     private readonly ISaleRepository _saleRepository;
+    private readonly ISupplierRepository _supplierRepository;
 
     public ListChequesHandler(
         ICurrentUserService currentUserService,
         IChequeRepository chequeRepository,
         IBankRepository bankRepository,
-        ISaleRepository saleRepository)
+        ISaleRepository saleRepository,
+        ISupplierRepository supplierRepository)
     {
         _currentUserService = currentUserService;
         _chequeRepository = chequeRepository;
         _bankRepository = bankRepository;
         _saleRepository = saleRepository;
+        _supplierRepository = supplierRepository;
     }
 
     public async Task<Result<IReadOnlyList<ChequeListItemResponse>>> Handle(ListChequesQuery request, CancellationToken cancellationToken)
@@ -32,7 +35,7 @@ public sealed class ListChequesHandler : IRequestHandler<ListChequesQuery, Resul
             return Result<IReadOnlyList<ChequeListItemResponse>>.Failure(authCheck.Error);
 
         var companyId = _currentUserService.CompanyId!;
-        var filters = new ChequeFilters(request.Estado, request.BankId, request.FechaVencFrom, request.FechaVencTo, request.Numero);
+        var filters = new ChequeFilters(request.Estado, request.BankId, request.FechaVencFrom, request.FechaVencTo, request.Numero, request.Origen);
         var cheques = await _chequeRepository.ListAsync(filters, companyId, cancellationToken);
 
         var allBanks = await _bankRepository.ListAsync(false, companyId, cancellationToken);
@@ -70,13 +73,23 @@ public sealed class ListChequesHandler : IRequestHandler<ListChequesQuery, Resul
             }
         }
 
+        // Los propios no vienen de una venta: muestran el proveedor al que se le entregaron.
+        var supplierNames = cheques.Any(c => c.SupplierId.HasValue)
+            ? (await _supplierRepository.ListAsync(companyId.Value, false, null, cancellationToken)).ToDictionary(s => s.Id, s => s.Name)
+            : new Dictionary<Guid, string>();
+
         var response = cheques.Select(c =>
         {
             var bankName = bankNameById.TryGetValue(c.BankId, out var name) ? name : "Unknown";
             string? saleCode;
             string saleType;
 
-            if (c.SaleCcPaymentId.HasValue)
+            if (c.Origen == ChequeOrigen.Propio)
+            {
+                saleType = "Propio";
+                saleCode = null;
+            }
+            else if (c.SaleCcPaymentId.HasValue)
             {
                 saleType = "CC";
                 saleCodes.TryGetValue(c.SaleCcPaymentId.Value, out saleCode);
@@ -102,7 +115,9 @@ public sealed class ListChequesHandler : IRequestHandler<ListChequesQuery, Resul
                 (int)c.Estado,
                 c.Estado.ToString(),
                 saleCode,
-                saleType);
+                saleType,
+                (int)c.Origen,
+                c.SupplierId is { } supplierId ? supplierNames.GetValueOrDefault(supplierId) : null);
         }).ToList();
 
         return Result<IReadOnlyList<ChequeListItemResponse>>.Success(response);

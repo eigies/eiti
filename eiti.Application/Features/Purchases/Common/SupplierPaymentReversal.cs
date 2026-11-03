@@ -10,7 +10,8 @@ namespace eiti.Application.Features.Purchases.Common;
 
 // Revierte un pago de proveedor COMPLETO, reutilizado por "anular pago" y por "anular compra (revertir el pago)".
 // Deshace las imputaciones FIFO que generó el pago (sus compras vuelven a Pendiente), deja el saldo a favor
-// como estaba antes del pago, reintegra la caja (solo efectivo) con la sesión provista y devuelve el cheque a cartera.
+// como estaba antes del pago, reintegra la caja (solo efectivo) con la sesión provista y devuelve el cheque a cartera
+// (uno propio nunca estuvo en cartera: queda anulado).
 // NO llama SaveChanges ni Update del proveedor: eso queda a cargo del handler.
 internal static class SupplierPaymentReversal
 {
@@ -54,7 +55,12 @@ internal static class SupplierPaymentReversal
         {
             var cheque = await chequeRepository.GetByIdAsync(payment.ChequeId.Value, companyId, cancellationToken);
             if (cheque is not null && cheque.Estado == ChequeStatus.Entregado)
-                cheque.ReturnToCartera();
+            {
+                if (cheque.Origen == ChequeOrigen.Propio)
+                    cheque.VoidOwn();
+                else
+                    cheque.ReturnToCartera();
+            }
         }
 
         payment.Cancel();

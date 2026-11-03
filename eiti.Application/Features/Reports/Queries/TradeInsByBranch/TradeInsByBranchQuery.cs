@@ -11,7 +11,8 @@ public sealed record TradeInsByBranchQuery(
     DateTime DateFrom,
     DateTime DateTo,
     Guid? BranchId = null,
-    Guid? CustomerId = null
+    Guid? CustomerId = null,
+    string? SaleType = null
 ) : IRequest<Result<TradeInsByBranchResponse>>, IRequirePermissions
 {
     public IReadOnlyCollection<string> RequiredPermissions => [PermissionCodes.ReportsSalesTradeIns];

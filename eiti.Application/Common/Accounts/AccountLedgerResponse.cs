@@ -45,7 +45,8 @@ public sealed record LedgerMeansResponse(
     string? BankName = null,
     DateTime? DueDate = null,
     int? CardInstallments = null,
-    decimal? CardSurcharge = null);
+    decimal? CardSurcharge = null,
+    bool OwnCheque = false);
 
 // A qué factura/venta se aplicó (parte de) un pago, cobro o nota de crédito.
 public sealed record LedgerImputationResponse(

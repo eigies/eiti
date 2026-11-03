@@ -1,6 +1,7 @@
 using eiti.Application.Abstractions.Repositories;
 using eiti.Application.Abstractions.Services;
 using eiti.Application.Common;
+using eiti.Domain.Cheques;
 using MediatR;
 
 namespace eiti.Application.Features.Cheques.Queries.GetChequeById;
@@ -11,17 +12,20 @@ public sealed class GetChequeByIdHandler : IRequestHandler<GetChequeByIdQuery, R
     private readonly IChequeRepository _chequeRepository;
     private readonly IBankRepository _bankRepository;
     private readonly ISaleRepository _saleRepository;
+    private readonly ISupplierRepository _supplierRepository;
 
     public GetChequeByIdHandler(
         ICurrentUserService currentUserService,
         IChequeRepository chequeRepository,
         IBankRepository bankRepository,
-        ISaleRepository saleRepository)
+        ISaleRepository saleRepository,
+        ISupplierRepository supplierRepository)
     {
         _currentUserService = currentUserService;
         _chequeRepository = chequeRepository;
         _bankRepository = bankRepository;
         _saleRepository = saleRepository;
+        _supplierRepository = supplierRepository;
     }
 
     public async Task<Result<ChequeDetailResponse>> Handle(GetChequeByIdQuery request, CancellationToken cancellationToken)
@@ -41,8 +45,17 @@ public sealed class GetChequeByIdHandler : IRequestHandler<GetChequeByIdQuery, R
 
         string? saleCode = null;
         string saleType;
+        string? supplierName = null;
 
-        if (cheque.SaleCcPaymentId.HasValue)
+        if (cheque.Origen == ChequeOrigen.Propio)
+        {
+            saleType = "Propio";
+            var supplier = cheque.SupplierId is { } supplierId
+                ? await _supplierRepository.GetByIdAsync(supplierId, companyId.Value, cancellationToken)
+                : null;
+            supplierName = supplier?.Name;
+        }
+        else if (cheque.SaleCcPaymentId.HasValue)
         {
             saleType = "CC";
             var customerPaymentSaleCodes = await _saleRepository.GetCodesByCustomerPaymentIdsAsync(
@@ -79,6 +92,8 @@ public sealed class GetChequeByIdHandler : IRequestHandler<GetChequeByIdQuery, R
             saleCode,
             saleType,
             cheque.CreatedAt,
-            cheque.UpdatedAt));
+            cheque.UpdatedAt,
+            (int)cheque.Origen,
+            supplierName));
     }
 }

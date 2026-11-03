@@ -49,7 +49,7 @@ public sealed class PaymentMethodsReportHandler
         //     medio real) que se imputa FIFO como SaleCcPayment con metodo CustomerCredit.
         // Por eso filtrar las ventas por IsCuentaCorriente y despues leer SalePayments devolvia
         // vacio para Mayorista: una venta CC no tiene pagos directos.
-        var saleType = (request.SaleType ?? "all").ToLowerInvariant();
+        var saleType = string.IsNullOrWhiteSpace(request.SaleType) ? "all" : request.SaleType.ToLowerInvariant();
         var includeRetail = saleType is "all" or "retail";
         var includeWholesale = saleType is "all" or "wholesale";
 
@@ -80,7 +80,8 @@ public sealed class PaymentMethodsReportHandler
             // Se excluyen las ventas CC a proposito: su dinero entra por el cobro de cuenta
             // corriente. Un SalePayment sobre una venta CC es una anomalia (ver lessons.md) y
             // contarlo ademas del cobro duplicaria el importe.
-            foreach (var sale in sales.Where(s => !s.IsCuentaCorriente))
+            foreach (var sale in sales.Where(s => !s.IsCuentaCorriente
+                && (request.CustomerId is null || s.CustomerId?.Value == request.CustomerId)))
             {
                 foreach (var payment in sale.Payments)
                 {
@@ -94,7 +95,7 @@ public sealed class PaymentMethodsReportHandler
             var ccPayments = await _customerPaymentRepository.ListForPaymentMethodsReportAsync(
                 companyId.Value, from, to, request.BranchId, allowedBranchIds, cancellationToken);
 
-            foreach (var payment in ccPayments)
+            foreach (var payment in ccPayments.Where(p => request.CustomerId is null || p.CustomerId == request.CustomerId))
             {
                 Accumulate(payment.Method, payment.Amount, payment.CardBankId, payment.CardCuotas);
             }
