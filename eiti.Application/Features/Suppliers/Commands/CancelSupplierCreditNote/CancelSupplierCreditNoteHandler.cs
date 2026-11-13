@@ -2,18 +2,14 @@ using eiti.Application.Abstractions.Data;
 using eiti.Application.Abstractions.Repositories;
 using eiti.Application.Abstractions.Services;
 using eiti.Application.Common;
+using eiti.Application.Features.Purchases.Common;
 using eiti.Domain.Common;
-using eiti.Domain.Purchases;
 using MediatR;
 
 namespace eiti.Application.Features.Suppliers.Commands.CancelSupplierCreditNote;
 
-// Anula una nota de crédito de proveedor: deshace SOLO sus propias imputaciones (las de un pago
-// o las de otra NC quedan intactas), devuelve el crédito no consumido y registra la anulación en
-// caja como movimiento neutro.
-//
-// No reutiliza SupplierPaymentReversal: esa función reintegra efectivo al cajón y devuelve el
-// cheque a cartera, y una NC no movió ni una cosa ni la otra.
+// Anula una nota de crédito de proveedor sola. La anulación en sí (sus imputaciones, el saldo, la caja) vive en
+// SupplierCreditNoteCancellation, compartida con "anular la compra con sus NC".
 public sealed class CancelSupplierCreditNoteHandler
     : IRequestHandler<CancelSupplierCreditNoteCommand, Result<CancelSupplierCreditNoteResponse>>
 {
@@ -79,38 +75,16 @@ public sealed class CancelSupplierCreditNoteHandler
                     : CancelSupplierCreditNoteErrors.NoCashSessionOpen);
         var session = resolve.Session!;
 
-        // Cuánto de la NC llegó a imputarse. Se calcula ANTES de revertir, porque después las
-        // filas quedan canceladas y ya no suman.
-        var purchases = await _purchaseRepository.ListByCreditNoteIdAsync(
-            companyId.Value, note.Id, cancellationToken);
-        var imputedTotal = purchases
-            .SelectMany(p => p.Payments)
-            .Where(p => p.CreditNoteId == note.Id && p.Status == PurchasePaymentStatus.Active)
-            .Sum(p => p.Amount);
-
-        // Desimputar devuelve `imputedTotal` al saldo disponible; de ahí hay que sacar lo que
-        // aportó ESTA nota. La resta ingenua (note.Amount - imputedTotal) destruía el saldo
-        // que el proveedor ya tenía antes de emitirla: el applicator consume todo el saldo,
-        // no solo el de la nota, así que las imputaciones tagueadas pueden superar su importe.
-        var restored = supplier.CreditBalance + imputedTotal;
-        if (restored < note.Amount)
+        // El saldo a favor no puede quedar negativo: si el crédito de la nota ya se usó sin su back-link, lo que
+        // vuelve al desimputar no alcanza para sacarle su importe.
+        var cancellation = await SupplierCreditNoteCancellation.PrepareAsync(
+            note, _purchaseRepository, companyId.Value, cancellationToken);
+        if (supplier.CreditBalance + cancellation.CreditDelta < 0m)
             return Result<CancelSupplierCreditNoteResponse>.Failure(
                 CancelSupplierCreditNoteErrors.CreditAlreadyConsumed);
 
-        foreach (var purchase in purchases)
-        {
-            purchase.RevertCreditNote(note.Id);
-        }
-
-        if (imputedTotal > 0m)
-            supplier.AddCredit(imputedTotal);
-
-        supplier.ConsumeCredit(note.Amount);
-
+        cancellation.Apply(supplier, session, userId);
         _supplierRepository.Update(supplier);
-
-        session.RegisterSupplierCreditNoteCancellation(note.Amount, note.Id, note.Code, userId);
-        note.Cancel(userId.Value);
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 

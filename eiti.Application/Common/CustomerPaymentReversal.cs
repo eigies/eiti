@@ -15,6 +15,18 @@ namespace eiti.Application.Common;
 // SaveChanges — lo hace el handler. La resolución de la caja (y sus errores) queda en cada caller.
 internal static class CustomerPaymentReversal
 {
+    // Cuánto cambiaría el saldo a favor al revertir el cobro, sin tocar nada: la misma cuenta que ReverseAsync. Para
+    // chequear el saldo antes de mutar (anular una venta junto con sus NC en modo "Anular los pagos").
+    public static async Task<decimal> CreditDeltaAsync(
+        CustomerPayment payment,
+        ISaleRepository saleRepository,
+        CompanyId companyId,
+        CancellationToken cancellationToken)
+    {
+        var sales = await saleRepository.ListByCustomerPaymentIdAsync(companyId, payment.Id, cancellationToken);
+        return ImputedTotal(sales, payment.Id) - payment.Amount;
+    }
+
     public static async Task ReverseAsync(
         CustomerPayment payment,
         Customer customer,
@@ -33,9 +45,7 @@ internal static class CustomerPaymentReversal
         var imputedTotal = 0m;
         foreach (var sale in sales)
         {
-            imputedTotal += sale.CcPayments
-                .Where(p => p.CustomerPaymentId == payment.Id && p.Status == SaleCcPaymentStatus.Active)
-                .Sum(p => p.Amount);
+            imputedTotal += ImputedTotal([sale], payment.Id);
 
             var revertedFromPaid = sale.RevertCustomerCredit(payment.Id);
 
@@ -89,4 +99,11 @@ internal static class CustomerPaymentReversal
 
         payment.Cancel();
     }
+
+    // Lo imputado por el cobro que sigue vigente (filas con su back-link).
+    private static decimal ImputedTotal(IEnumerable<Sale> sales, Guid paymentId) =>
+        sales
+            .SelectMany(s => s.CcPayments)
+            .Where(p => p.CustomerPaymentId == paymentId && p.Status == SaleCcPaymentStatus.Active)
+            .Sum(p => p.Amount);
 }
