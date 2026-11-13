@@ -52,11 +52,9 @@ public sealed class UpdateSaleHandlerTests
             new Mock<IStockMovementRepository>().Object,
             new Mock<ICashDrawerRepository>().Object,
             new Mock<ICashSessionRepository>().Object,
-            new Mock<ISaleTransportAssignmentRepository>().Object,
             new Mock<IAddressRepository>().Object,
             new Mock<IBankRepository>().Object,
             NoFiscalDocuments(),
-            new Mock<ICustomerCreditNoteRepository>().Object,
             new RetailDiscountPolicy(new Mock<ICompanyRepository>().Object),
             new Mock<IUnitOfWork>().Object);
 
@@ -183,50 +181,50 @@ public sealed class UpdateSaleHandlerTests
         result.IsSuccess.Should().BeTrue();
     }
 
-    // Misma regla que CancelSale (NCC-003 de LACTEOS BARRAZA): anular por acá tampoco deja una NC vigente
-    // apuntando a una venta anulada.
+    // Anular por acá no resolvía lo que CancelSale sí: los cobros CC imputados quedaban vigentes sobre una venta
+    // anulada, igual que las NC (NCC-003 de LACTEOS BARRAZA). Ninguna pantalla anula por acá: se rechaza y se manda a
+    // Anular, que resuelve cobros, notas de crédito, transporte y factura.
     [Fact]
-    public async Task Handle_ShouldRejectCancel_WhenSaleHasActiveCreditNote()
+    public async Task Handle_ShouldRejectCancel_AndPointToCancelSale()
     {
         var companyId = CompanyId.New();
         var scenario = CreateScenario(companyId);
         var unitOfWork = new Mock<IUnitOfWork>();
-        var handler = CreateHandler(companyId, scenario, new Mock<IBankRepository>().Object,
-            unitOfWork: unitOfWork, creditNotes: [LinkedCreditNote(companyId, scenario, "NCC-003")]);
+        var handler = CreateHandler(companyId, scenario, new Mock<IBankRepository>().Object, unitOfWork: unitOfWork);
 
         var result = await handler.Handle(
             UpdateCommand(scenario, quantity: 1) with { IdSaleStatus = (int)SaleStatus.Cancel },
             CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
-        result.Error!.Code.Should().Be("Sales.Update.HasActiveCreditNote");
-        result.Error.Description.Should().Contain("NCC-003");
+        result.Error!.Code.Should().Be("Sales.Update.CannotCancel");
+        result.Error.Description.Should().Contain("Anular");
         scenario.Sale.SaleStatus.Should().Be(SaleStatus.OnHold);
-        scenario.Stock.ReservedQuantity.Should().Be(1);
+        scenario.Stock.ReservedQuantity.Should().Be(1, "la reserva no se libera");
         unitOfWork.Verify(x => x.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
     }
 
+    // El caso que motivó el bloqueo: una venta CC con un cobro imputado. Anularla por acá dejaba el cobro vigente.
     [Fact]
-    public async Task Handle_ShouldAllowCancel_WhenLinkedCreditNoteIsCancelled()
+    public async Task Handle_ShouldRejectCancel_WhenCcSaleHasActiveCollections()
     {
         var companyId = CompanyId.New();
-        var scenario = CreateScenario(companyId);
-        var note = LinkedCreditNote(companyId, scenario, "NCC-002");
-        note.Cancel(Guid.NewGuid());
-        var handler = CreateHandler(companyId, scenario, new Mock<IBankRepository>().Object, creditNotes: [note]);
+        var scenario = CreateScenario(companyId, cuentaCorriente: true);
+        scenario.Sale.ApplyCustomerCredit(40m, DateTime.UtcNow, Guid.NewGuid(), "Saldo a favor aplicado automáticamente");
+        var unitOfWork = new Mock<IUnitOfWork>();
+        var handler = CreateHandler(companyId, scenario, new Mock<IBankRepository>().Object, unitOfWork: unitOfWork);
 
         var result = await handler.Handle(
             UpdateCommand(scenario, quantity: 1) with { IdSaleStatus = (int)SaleStatus.Cancel },
             CancellationToken.None);
 
-        result.IsSuccess.Should().BeTrue(result.IsFailure ? result.Error!.Description : string.Empty);
-        scenario.Sale.SaleStatus.Should().Be(SaleStatus.Cancel);
+        result.IsFailure.Should().BeTrue();
+        result.Error!.Code.Should().Be("Sales.Update.CannotCancel");
+        scenario.Sale.SaleStatus.Should().Be(SaleStatus.OnHold);
+        scenario.Sale.CcPayments.Should().ContainSingle(p => p.Status == SaleCcPaymentStatus.Active);
+        scenario.Stock.ReservedQuantity.Should().Be(1);
+        unitOfWork.Verify(x => x.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
     }
-
-    private static CustomerCreditNote LinkedCreditNote(CompanyId companyId, UpdateSaleScenario scenario, string code) =>
-        CustomerCreditNote.Create(
-            companyId.Value, Guid.NewGuid(), scenario.Branch.Id.Value, code, 50m,
-            "cambio de modelo", DateTime.UtcNow, scenario.Sale.Id.Value, Guid.NewGuid());
 
     private static ISaleFiscalDocumentRepository NoFiscalDocuments()
     {
@@ -255,17 +253,19 @@ public sealed class UpdateSaleHandlerTests
         return invoice;
     }
 
-    private static UpdateSaleScenario CreateScenario(CompanyId companyId)
+    private static UpdateSaleScenario CreateScenario(CompanyId companyId, bool cuentaCorriente = false)
     {
         var branch = Branch.Create(companyId, "Sucursal Centro", "SC", "San Martin 123");
         var product = Product.Create(companyId, "BAT-001", "BAT-001", "Contoso", "Bateria nueva", null, 100m, 70m, null);
-        var sale = Sale.Create(
-            companyId,
-            branch.Id,
-            null,
-            false,
-            SaleStatus.OnHold,
-            [SaleDetail.Create(product.Id, 1, product.Price)]);
+        var sale = cuentaCorriente
+            ? Sale.CreateCc(companyId, branch.Id, CustomerId.New(), [SaleDetail.Create(product.Id, 1, product.Price)])
+            : Sale.Create(
+                companyId,
+                branch.Id,
+                null,
+                false,
+                SaleStatus.OnHold,
+                [SaleDetail.Create(product.Id, 1, product.Price)]);
         var stock = BranchProductStock.Create(companyId, branch.Id, product.Id);
         stock.ApplyManualEntry(10);
         stock.Reserve(1);
@@ -278,8 +278,7 @@ public sealed class UpdateSaleHandlerTests
         UpdateSaleScenario scenario,
         IBankRepository bankRepository,
         IReadOnlyList<SaleFiscalDocument>? fiscalDocuments = null,
-        Mock<IUnitOfWork>? unitOfWork = null,
-        List<CustomerCreditNote>? creditNotes = null)
+        Mock<IUnitOfWork>? unitOfWork = null)
     {
         var currentUserService = new Mock<ICurrentUserService>();
         var saleRepository = new Mock<ISaleRepository>();
@@ -294,11 +293,6 @@ public sealed class UpdateSaleHandlerTests
         fiscalDocumentRepository
             .Setup(repository => repository.ListBySaleAsync(scenario.Sale.Id, companyId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(fiscalDocuments ?? []);
-
-        var creditNoteRepository = new Mock<ICustomerCreditNoteRepository>();
-        creditNoteRepository
-            .Setup(repository => repository.ListBySaleAsync(companyId.Value, scenario.Sale.Id.Value, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(creditNotes ?? []);
 
         currentUserService.SetupGet(service => service.IsAuthenticated).Returns(true);
         currentUserService.SetupGet(service => service.CompanyId).Returns(companyId);
@@ -324,11 +318,9 @@ public sealed class UpdateSaleHandlerTests
             stockMovementRepository.Object,
             new Mock<ICashDrawerRepository>().Object,
             cashSessionRepository.Object,
-            new Mock<ISaleTransportAssignmentRepository>().Object,
             new Mock<IAddressRepository>().Object,
             bankRepository,
             fiscalDocumentRepository.Object,
-            creditNoteRepository.Object,
             new RetailDiscountPolicy(new Mock<ICompanyRepository>().Object),
             unitOfWork.Object);
     }

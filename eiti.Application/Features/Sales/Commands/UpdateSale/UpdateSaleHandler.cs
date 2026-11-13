@@ -7,13 +7,11 @@ using eiti.Application.Features.Banks.Common;
 using eiti.Application.Features.Sales.Common;
 using eiti.Domain.Banks;
 using eiti.Domain.Cash;
-using eiti.Domain.Common;
 using eiti.Domain.Companies;
 using eiti.Domain.Customers;
 using eiti.Domain.Products;
 using eiti.Domain.Sales;
 using eiti.Domain.Stock;
-using eiti.Domain.Transport;
 using MediatR;
 
 namespace eiti.Application.Features.Sales.Commands.UpdateSale;
@@ -28,11 +26,9 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
     private readonly IStockMovementRepository _stockMovementRepository;
     private readonly ICashDrawerRepository _cashDrawerRepository;
     private readonly ICashSessionRepository _cashSessionRepository;
-    private readonly ISaleTransportAssignmentRepository _saleTransportAssignmentRepository;
     private readonly IAddressRepository _addressRepository;
     private readonly IBankRepository _bankRepository;
     private readonly ISaleFiscalDocumentRepository _fiscalDocuments;
-    private readonly ICustomerCreditNoteRepository _creditNoteRepository;
     private readonly IRetailDiscountPolicy _retailDiscountPolicy;
     private readonly IUnitOfWork _unitOfWork;
 
@@ -45,11 +41,9 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
         IStockMovementRepository stockMovementRepository,
         ICashDrawerRepository cashDrawerRepository,
         ICashSessionRepository cashSessionRepository,
-        ISaleTransportAssignmentRepository saleTransportAssignmentRepository,
         IAddressRepository addressRepository,
         IBankRepository bankRepository,
         ISaleFiscalDocumentRepository fiscalDocuments,
-        ICustomerCreditNoteRepository creditNoteRepository,
         IRetailDiscountPolicy retailDiscountPolicy,
         IUnitOfWork unitOfWork)
     {
@@ -61,11 +55,9 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
         _stockMovementRepository = stockMovementRepository;
         _cashDrawerRepository = cashDrawerRepository;
         _cashSessionRepository = cashSessionRepository;
-        _saleTransportAssignmentRepository = saleTransportAssignmentRepository;
         _addressRepository = addressRepository;
         _bankRepository = bankRepository;
         _fiscalDocuments = fiscalDocuments;
-        _creditNoteRepository = creditNoteRepository;
         _retailDiscountPolicy = retailDiscountPolicy;
         _unitOfWork = unitOfWork;
     }
@@ -170,6 +162,14 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
             return Result<UpdateSaleResponse>.Failure(UpdateSaleErrors.NotEditable);
         }
 
+        // Por acá no se anula: la venta quedaba anulada con sus cobros CC imputados vigentes, porque solo CancelSale
+        // los resuelve (saldo a favor o anular los pagos), igual que las NC vinculadas, el transporte y la nota de
+        // crédito fiscal. Ninguna pantalla anula por acá.
+        if (request.IdSaleStatus == (int)SaleStatus.Cancel)
+        {
+            return Result<UpdateSaleResponse>.Failure(UpdateSaleErrors.CannotCancel);
+        }
+
         // Una venta facturada (o con la factura en trámite, que puede terminar autorizada) no cambia de
         // importe: la factura quedaría por un monto y la venta por otro (pasó con MAT-3358). Se compara
         // contra el total al final, así cobrar o cambiar datos que no mueven el total sigue permitido.
@@ -181,8 +181,6 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
         // Lo que pidió la factura: la mercadería más el recargo de tarjeta que ya estaba cobrado. Las facturas
         // anteriores a este dato facturaron la mercadería.
         var invoicedCharge = invoiceDocument?.RequestedTotal ?? sale.TotalAmount;
-
-        var existingTransportAssignmentId = sale.TransportAssignmentId;
 
         Customer? customer = null;
         if (request.CustomerId.HasValue)
@@ -209,8 +207,7 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
             .Select(group => new
             {
                 ProductId = group.Key,
-                Quantity = group.Sum(item => item.Quantity),
-                UnitPrice = group.First().UnitPrice
+                Quantity = group.Sum(item => item.Quantity)
             })
             .ToList();
 
@@ -229,40 +226,24 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
             return Result<UpdateSaleResponse>.Failure(UpdateSaleErrors.CannotChargeCuentaCorriente);
         }
 
-        // Anular por acá tampoco puede dejar una NC vigente sobre una venta anulada: misma regla que CancelSale.
-        if (requestedStatus == SaleStatus.Cancel)
+        // Tope de descuento: se compara contra la venta guardada, antes de pisarla, para validar solo lo que
+        // cambia.
+        var previousGeneralDiscountPercent = sale.GeneralDiscountPercent;
+        var discountCheck = await _retailDiscountPolicy.EnsureWithinLimitAsync(
+            companyId,
+            request.GeneralDiscountPercent,
+            groupedDetails.Select(detail => new RetailDiscountLine(detail.ProductId, detail.DiscountPercent)).ToList(),
+            sale,
+            cancellationToken);
+        if (discountCheck.IsFailure)
         {
-            var activeCreditNotes = (await _creditNoteRepository.ListBySaleAsync(companyId.Value, sale.Id.Value, cancellationToken))
-                .Where(note => note.Status == CreditNoteStatus.Active)
-                .Select(note => note.Code)
-                .ToList();
-            if (activeCreditNotes.Count > 0)
-            {
-                return Result<UpdateSaleResponse>.Failure(UpdateSaleErrors.HasActiveCreditNote(activeCreditNotes));
-            }
+            return Result<UpdateSaleResponse>.Failure(discountCheck.Error);
         }
 
-        // Tope de descuento: se compara contra la venta guardada, antes de pisarla, para validar solo lo que
-        // cambia. Anular no aplica los descuentos del request, así que no se valida.
-        var previousGeneralDiscountPercent = sale.GeneralDiscountPercent;
-        if (requestedStatus != SaleStatus.Cancel)
+        var singleCard = SaleCardPayment.EnsureSingleCard(request.Payments.Select(payment => payment.IdPaymentMethod));
+        if (singleCard.IsFailure)
         {
-            var discountCheck = await _retailDiscountPolicy.EnsureWithinLimitAsync(
-                companyId,
-                request.GeneralDiscountPercent,
-                groupedDetails.Select(detail => new RetailDiscountLine(detail.ProductId, detail.DiscountPercent)).ToList(),
-                sale,
-                cancellationToken);
-            if (discountCheck.IsFailure)
-            {
-                return Result<UpdateSaleResponse>.Failure(discountCheck.Error);
-            }
-
-            var singleCard = SaleCardPayment.EnsureSingleCard(request.Payments.Select(payment => payment.IdPaymentMethod));
-            if (singleCard.IsFailure)
-            {
-                return Result<UpdateSaleResponse>.Failure(singleCard.Error);
-            }
+            return Result<UpdateSaleResponse>.Failure(singleCard.Error);
         }
 
         var productMap = new Dictionary<Guid, Product>();
@@ -342,61 +323,55 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
                 cancellationToken);
         }
 
-        IReadOnlyList<SalePayment> salePayments = sale.Payments.ToList();
-        IReadOnlyList<SaleTradeIn> saleTradeIns = sale.TradeIns.ToList();
-        var cardSurchargeTotal = 0m;
-
-        if (requestedStatus != SaleStatus.Cancel)
+        Bank? cardBank = null;
+        foreach (var reqPayment in request.Payments)
         {
-            Bank? cardBank = null;
-            foreach (var reqPayment in request.Payments)
+            if ((SalePaymentMethod)reqPayment.IdPaymentMethod == SalePaymentMethod.Card && reqPayment.CardBankId.HasValue)
             {
-                if ((SalePaymentMethod)reqPayment.IdPaymentMethod == SalePaymentMethod.Card && reqPayment.CardBankId.HasValue)
+                cardBank = await _bankRepository.GetByIdAsync(reqPayment.CardBankId.Value, companyId, cancellationToken);
+                if (!BankUsageRules.Supports(cardBank, BankUsage.Card))
                 {
-                    cardBank = await _bankRepository.GetByIdAsync(reqPayment.CardBankId.Value, companyId, cancellationToken);
-                    if (!BankUsageRules.Supports(cardBank, BankUsage.Card))
-                    {
-                        return Result<UpdateSaleResponse>.Failure(UpdateSaleErrors.CardBankInvalid);
-                    }
-                }
-
-                if ((SalePaymentMethod)reqPayment.IdPaymentMethod == SalePaymentMethod.Transfer && reqPayment.TransferBankId.HasValue)
-                {
-                    var bank = await _bankRepository.GetByIdAsync(reqPayment.TransferBankId.Value, companyId, cancellationToken);
-                    if (!BankUsageRules.Supports(bank, BankUsage.Transfer))
-                    {
-                        return Result<UpdateSaleResponse>.Failure(UpdateSaleErrors.TransferBankInvalid);
-                    }
+                    return Result<UpdateSaleResponse>.Failure(UpdateSaleErrors.CardBankInvalid);
                 }
             }
 
-            // El monto de la línea de tarjeta es la base (lo que paga esa tarjeta de la venta): el recargo sale
-            // del plan sobre esa base. El "Cobrar" de Gestión de Ventas tiene que mandar la base, no lo cobrado.
-            var cardLine = request.Payments.FirstOrDefault(
-                payment => (SalePaymentMethod)payment.IdPaymentMethod == SalePaymentMethod.Card);
-            var cardCharge = cardLine is null
-                ? null
-                : SaleCardPayment.Charge(cardBank, cardLine.CardCuotas, cardLine.Amount);
-            cardSurchargeTotal = cardCharge?.Surcharge ?? 0m;
-
-            try
+            if ((SalePaymentMethod)reqPayment.IdPaymentMethod == SalePaymentMethod.Transfer && reqPayment.TransferBankId.HasValue)
             {
-                salePayments = BuildPayments(request.Payments, cardCharge);
+                var bank = await _bankRepository.GetByIdAsync(reqPayment.TransferBankId.Value, companyId, cancellationToken);
+                if (!BankUsageRules.Supports(bank, BankUsage.Transfer))
+                {
+                    return Result<UpdateSaleResponse>.Failure(UpdateSaleErrors.TransferBankInvalid);
+                }
             }
-            catch (ArgumentException ex)
-            {
-                return Result<UpdateSaleResponse>.Failure(
-                    Error.Validation("Sales.Update.InvalidPayments", ex.Message));
-            }
-
-            var tradeInsResult = await BuildTradeInsAsync(request.TradeIns, productMap, companyId, cancellationToken);
-            if (!tradeInsResult.IsSuccess)
-            {
-                return Result<UpdateSaleResponse>.Failure(tradeInsResult.Error);
-            }
-
-            saleTradeIns = tradeInsResult.Value;
         }
+
+        // El monto de la línea de tarjeta es la base (lo que paga esa tarjeta de la venta): el recargo sale
+        // del plan sobre esa base. El "Cobrar" de Gestión de Ventas tiene que mandar la base, no lo cobrado.
+        var cardLine = request.Payments.FirstOrDefault(
+            payment => (SalePaymentMethod)payment.IdPaymentMethod == SalePaymentMethod.Card);
+        var cardCharge = cardLine is null
+            ? null
+            : SaleCardPayment.Charge(cardBank, cardLine.CardCuotas, cardLine.Amount);
+        var cardSurchargeTotal = cardCharge?.Surcharge ?? 0m;
+
+        IReadOnlyList<SalePayment> salePayments;
+        try
+        {
+            salePayments = BuildPayments(request.Payments, cardCharge);
+        }
+        catch (ArgumentException ex)
+        {
+            return Result<UpdateSaleResponse>.Failure(
+                Error.Validation("Sales.Update.InvalidPayments", ex.Message));
+        }
+
+        var tradeInsResult = await BuildTradeInsAsync(request.TradeIns, productMap, companyId, cancellationToken);
+        if (!tradeInsResult.IsSuccess)
+        {
+            return Result<UpdateSaleResponse>.Failure(tradeInsResult.Error);
+        }
+
+        IReadOnlyList<SaleTradeIn> saleTradeIns = tradeInsResult.Value;
 
         try
         {
@@ -517,23 +492,6 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
                         cancellationToken);
                 }
             }
-            else if (requestedStatus == SaleStatus.Cancel)
-            {
-                var currentDetailsSnapshot = currentGroupedDetails.Select(detail =>
-                    SaleDetail.Create(new ProductId(detail.ProductId), detail.Quantity, detail.UnitPrice)).ToList();
-
-                sale.Update(
-                    customer?.Id,
-                    requestedStatus,
-                    request.HasDelivery,
-                    currentDetailsSnapshot,
-                    sale.Payments.ToList(),
-                    sale.TradeIns.ToList(),
-                    deliveryAddress: request.DeliveryAddress,
-                    // Los pagos se conservan tal cual: también el recargo de la tarjeta que ya traen.
-                    cardSurchargeTotal: sale.CardSurchargeTotal,
-                    contactPhone: request.ContactPhone);
-            }
             else
             {
                 foreach (var detail in groupedDetails)
@@ -560,19 +518,6 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
             }
 
             sale.TrackGeneralDiscount(previousGeneralDiscountPercent, _currentUserService.UserId?.Value, request.GeneralDiscountReason);
-
-            if (requestedStatus == SaleStatus.Cancel && existingTransportAssignmentId is not null)
-            {
-                var assignment = await _saleTransportAssignmentRepository.GetByIdAsync(
-                    existingTransportAssignmentId,
-                    companyId,
-                    cancellationToken);
-
-                if (assignment is not null && assignment.Status != SaleTransportStatus.Delivered)
-                {
-                    assignment.Cancel();
-                }
-            }
         }
         catch (ArgumentException ex)
         {
@@ -588,22 +533,19 @@ public sealed class UpdateSaleHandler : IRequestHandler<UpdateSaleCommand, Resul
         sale.SetSourceChannel(request.SourceChannel);
 
         // Banco de la transferencia (los datos de la tarjeta ya los cargó BuildPayments).
-        if (requestedStatus != SaleStatus.Cancel)
+        var paymentRequestByMethod = request.Payments
+            .GroupBy(p => p.IdPaymentMethod)
+            .ToDictionary(g => g.Key, g => g.First());
+
+        foreach (var payment in sale.Payments)
         {
-            var paymentRequestByMethod = request.Payments
-                .GroupBy(p => p.IdPaymentMethod)
-                .ToDictionary(g => g.Key, g => g.First());
+            var methodKey = (int)payment.Method;
+            if (!paymentRequestByMethod.TryGetValue(methodKey, out var reqLine))
+                continue;
 
-            foreach (var payment in sale.Payments)
+            if (payment.Method == SalePaymentMethod.Transfer && reqLine.TransferBankId.HasValue)
             {
-                var methodKey = (int)payment.Method;
-                if (!paymentRequestByMethod.TryGetValue(methodKey, out var reqLine))
-                    continue;
-
-                if (payment.Method == SalePaymentMethod.Transfer && reqLine.TransferBankId.HasValue)
-                {
-                    payment.SetTransferBank(reqLine.TransferBankId.Value);
-                }
+                payment.SetTransferBank(reqLine.TransferBankId.Value);
             }
         }
 

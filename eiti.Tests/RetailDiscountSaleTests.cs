@@ -423,8 +423,8 @@ public sealed class RetailDiscountSaleTests
         return new UpdateSaleHandler(
             CurrentUser().Object, _sales.Object, _customers.Object, products.Object, Stocks().Object,
             new Mock<IStockMovementRepository>().Object, new Mock<ICashDrawerRepository>().Object,
-            new Mock<ICashSessionRepository>().Object, new Mock<ISaleTransportAssignmentRepository>().Object,
+            new Mock<ICashSessionRepository>().Object,
             new Mock<IAddressRepository>().Object, new Mock<IBankRepository>().Object, fiscal.Object,
-            new Mock<ICustomerCreditNoteRepository>().Object, new RetailDiscountPolicy(_companies.Object), _unitOfWork.Object);
+            new RetailDiscountPolicy(_companies.Object), _unitOfWork.Object);
     }
 }
