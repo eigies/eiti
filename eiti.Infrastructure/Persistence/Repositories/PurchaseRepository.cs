@@ -149,14 +149,25 @@ public sealed class PurchaseRepository : IPurchaseRepository
     {
         // Compras con saldo pendiente del proveedor (Active = no pagada ni cancelada), más vieja primero (FIFO).
         // Tracked (sin AsNoTracking): el saldo a favor aplicado en cascada se persiste en el SaveChanges del handler.
-        return await _context.Purchases
+        var pending = await _context.Purchases
             .Include(p => p.Details)
             .Include(p => p.Payments)
             .Where(p => p.CompanyId == companyId
                 && p.SupplierId == supplierId
                 && p.Status == PurchaseStatus.Active)
-            .OrderBy(p => p.CreatedAt)
             .ToListAsync(ct);
+
+        // El SQL ve el estado guardado. Una compra que en esta misma operación volvió a pendiente (al anular la NC
+        // que la saldaba) sigue Pagada en la base, y una recién anulada sigue Pendiente: se corrige con el estado en
+        // memoria de las ya cargadas, igual que ListPendingCcSalesByCustomerAsync del lado de clientes.
+        var reopened = _context.Purchases.Local
+            .Where(p => p.CompanyId == companyId && p.SupplierId == supplierId && p.Status == PurchaseStatus.Active);
+
+        return pending
+            .Union(reopened)
+            .Where(p => p.Status == PurchaseStatus.Active)
+            .OrderBy(p => p.CreatedAt)
+            .ToList();
     }
 
     private IQueryable<Purchase> BuildQuery(

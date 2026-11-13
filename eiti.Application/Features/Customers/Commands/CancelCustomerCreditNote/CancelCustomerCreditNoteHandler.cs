@@ -2,20 +2,16 @@ using eiti.Application.Abstractions.Data;
 using eiti.Application.Abstractions.Repositories;
 using eiti.Application.Abstractions.Services;
 using eiti.Application.Common;
+using eiti.Application.Features.Customers.Common;
 using eiti.Domain.Common;
 using eiti.Domain.Customers;
-using eiti.Domain.Sales;
-using eiti.Domain.Stock;
 using MediatR;
 
 namespace eiti.Application.Features.Customers.Commands.CancelCustomerCreditNote;
 
-// Anula una nota de crédito: deshace SOLO sus propias imputaciones (las de un cobro o las de
-// otra NC quedan intactas), devuelve el crédito no consumido y registra la anulación en caja
-// como movimiento neutro.
-//
-// No reutiliza CustomerPaymentReversal: esa función reintegra efectivo al cajón y devuelve el
-// cheque a cartera, y una NC no movió ni una cosa ni la otra.
+// Anula una nota de crédito de cliente sola. La anulación en sí (sus imputaciones, el stock de las ventas que
+// vuelven a pendiente, el saldo, la caja) vive en CustomerCreditNoteCancellation, compartida con "anular la venta
+// con sus NC".
 public sealed class CancelCustomerCreditNoteHandler
     : IRequestHandler<CancelCustomerCreditNoteCommand, Result<CancelCustomerCreditNoteResponse>>
 {
@@ -87,65 +83,17 @@ public sealed class CancelCustomerCreditNoteHandler
                     : CancelCustomerCreditNoteErrors.NoCashSessionOpen);
         var session = resolve.Session!;
 
-        // Cuánto de la NC llegó a imputarse. Se calcula ANTES de revertir, porque después las
-        // filas quedan canceladas y ya no suman.
-        var sales = await _saleRepository.ListByCreditNoteIdAsync(companyId, note.Id, cancellationToken);
-        var imputedTotal = sales
-            .SelectMany(s => s.CcPayments)
-            .Where(p => p.CreditNoteId == note.Id && p.Status == SaleCcPaymentStatus.Active)
-            .Sum(p => p.Amount);
-
-        // Desimputar devuelve `imputedTotal` al saldo disponible; de ahí hay que sacar lo que
-        // aportó ESTA nota. La resta ingenua (note.Amount - imputedTotal) destruía el saldo
-        // que el cliente ya tenía antes de emitirla: el applicator consume todo el saldo,
-        // no solo el de la nota, así que las imputaciones tagueadas pueden superar su importe.
-        var restored = customer.CreditBalance + imputedTotal;
-        if (restored < note.Amount)
+        // El saldo a favor no puede quedar negativo: si el crédito de la nota ya se usó sin su back-link, lo que
+        // vuelve al desimputar no alcanza para sacarle su importe.
+        var cancellation = await CustomerCreditNoteCancellation.PrepareAsync(
+            note, _saleRepository, companyId, cancellationToken);
+        if (customer.CreditBalance + cancellation.CreditDelta < 0m)
             return Result<CancelCustomerCreditNoteResponse>.Failure(
                 CancelCustomerCreditNoteErrors.CreditAlreadyConsumed);
 
-        foreach (var sale in sales)
-        {
-            var revertedFromPaid = sale.RevertCreditNote(note.Id);
-
-            if (!revertedFromPaid)
-                continue;
-
-            // La venta volvió de Paid a pendiente: el stock vuelve a reservado.
-            foreach (var detail in sale.Details)
-            {
-                var stock = await _branchProductStockRepository.GetOrCreateAsync(
-                    sale.BranchId,
-                    detail.ProductId,
-                    companyId,
-                    cancellationToken);
-
-                stock.RevertSaleOut(detail.Quantity);
-                await _stockMovementRepository.AddAsync(
-                    StockMovement.Create(
-                        companyId,
-                        sale.BranchId,
-                        stock.ProductId,
-                        stock.Id,
-                        StockMovementType.Reserve,
-                        detail.Quantity,
-                        "Sale",
-                        sale.Id.Value,
-                        "Stock reverted to reserved (credit note cancelled).",
-                        userId),
-                    cancellationToken);
-            }
-        }
-
-        if (imputedTotal > 0m)
-            customer.AddCredit(imputedTotal);
-
-        customer.ConsumeCredit(note.Amount);
-
+        await cancellation.ApplyAsync(
+            customer, session, _branchProductStockRepository, _stockMovementRepository, companyId, userId, cancellationToken);
         _customerRepository.Update(customer);
-
-        session.RegisterCustomerCreditNoteCancellation(note.Amount, note.Id, note.Code, userId);
-        note.Cancel(userId.Value);
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 

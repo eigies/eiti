@@ -88,10 +88,12 @@ public sealed class SalesController : ControllerBase
         Guid id,
         [FromQuery] int? refundMode,
         [FromQuery] bool confirmInvoiceReceiver,
+        [FromQuery] bool cancelLinkedCreditNotes,
         CancellationToken cancellationToken)
     {
         var mode = refundMode.HasValue ? (CcCancellationRefundMode?)refundMode.Value : null;
-        var result = await _sender.Send(new CancelSaleCommand(id, mode, confirmInvoiceReceiver), cancellationToken);
+        var result = await _sender.Send(
+            new CancelSaleCommand(id, mode, confirmInvoiceReceiver, cancelLinkedCreditNotes), cancellationToken);
         return result.ToActionResult();
     }
 

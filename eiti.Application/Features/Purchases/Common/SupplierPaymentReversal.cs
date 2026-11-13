@@ -15,6 +15,18 @@ namespace eiti.Application.Features.Purchases.Common;
 // NO llama SaveChanges ni Update del proveedor: eso queda a cargo del handler.
 internal static class SupplierPaymentReversal
 {
+    // Cuánto cambiaría el saldo a favor al revertir el pago, sin tocar nada: la misma cuenta que ReverseAsync. Para
+    // chequear el saldo antes de mutar (anular una compra junto con sus NC en modo "Revertir el pago").
+    public static async Task<decimal> CreditDeltaAsync(
+        SupplierPayment payment,
+        IPurchaseRepository purchaseRepository,
+        CompanyId companyId,
+        CancellationToken cancellationToken)
+    {
+        var purchases = await purchaseRepository.ListBySupplierPaymentIdAsync(companyId.Value, payment.Id, cancellationToken);
+        return ImputedRows(purchases, payment.Id).Sum(row => row.Amount) - payment.Amount;
+    }
+
     public static async Task ReverseAsync(
         SupplierPayment payment,
         Supplier supplier,
@@ -30,10 +42,7 @@ internal static class SupplierPaymentReversal
         var imputedTotal = 0m;
         foreach (var purchase in purchases)
         {
-            var rows = purchase.Payments
-                .Where(p => p.SupplierPaymentId == payment.Id && p.Status == PurchasePaymentStatus.Active)
-                .ToList();
-            foreach (var row in rows)
+            foreach (var row in ImputedRows([purchase], payment.Id))
             {
                 imputedTotal += row.Amount;
                 purchase.CancelPayment(row.Id);
@@ -65,4 +74,11 @@ internal static class SupplierPaymentReversal
 
         payment.Cancel();
     }
+
+    // Las imputaciones vigentes con back-link al pago.
+    private static List<PurchasePayment> ImputedRows(IEnumerable<Purchase> purchases, Guid paymentId) =>
+        purchases
+            .SelectMany(p => p.Payments)
+            .Where(p => p.SupplierPaymentId == paymentId && p.Status == PurchasePaymentStatus.Active)
+            .ToList();
 }
