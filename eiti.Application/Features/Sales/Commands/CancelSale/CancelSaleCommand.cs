@@ -17,10 +17,15 @@ public enum CcCancellationRefundMode
 /// El usuario vio que la factura se emitió a otro receptor que el de la ficha actual del cliente y confirmó
 /// que la nota de crédito salga al de la factura. Sin esto, con receptores distintos no se anula nada.
 /// </param>
+/// <param name="CancelLinkedCreditNotes">
+/// El usuario vio las notas de crédito vigentes emitidas sobre la venta y confirmó anularlas junto con ella. Sin
+/// esto, con alguna vigente no se anula nada (Sales.Cancel.HasActiveCreditNote las nombra para preguntar).
+/// </param>
 public sealed record CancelSaleCommand(
     Guid Id,
     CcCancellationRefundMode? RefundMode = null,
-    bool ConfirmInvoiceReceiver = false
+    bool ConfirmInvoiceReceiver = false,
+    bool CancelLinkedCreditNotes = false
 ) : IRequest<Result>, IRequirePermissions
 {
     public IReadOnlyCollection<string> RequiredPermissions => [PermissionCodes.SalesDelete];

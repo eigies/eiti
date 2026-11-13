@@ -63,6 +63,13 @@ public sealed class CancelSupplierPaymentHandler : IRequestHandler<CancelSupplie
         if (reversible.IsFailure)
             return reversible;
 
+        // El saldo a favor no puede quedar negativo: si lo que el pago dejó a favor ya lo consumió otra compra sin
+        // back-link al pago, la reversa saca más de lo que recupera.
+        var balanceAfter = supplier.CreditBalance
+            + await _supplierPaymentOrderService.ReversalCreditDeltaAsync([payment], companyId, cancellationToken);
+        if (balanceAfter < 0m)
+            return Result.Failure(CancelSupplierPaymentErrors.CreditAlreadyConsumed(-balanceAfter));
+
         // Para efectivo hay que reintegrar a la caja; otros métodos no movieron efectivo.
         // Exige caja propia (drawer asignado) o permiso CashDrawerViewAll.
         CashSession? session = null;

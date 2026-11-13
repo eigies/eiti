@@ -6,6 +6,7 @@ using eiti.Application.Features.Customers.Common;
 using eiti.Application.Features.Sales.Commands.CancelSale;
 using eiti.Domain.Branches;
 using eiti.Domain.Cash;
+using eiti.Domain.Common;
 using eiti.Domain.Companies;
 using eiti.Domain.Customers;
 using eiti.Domain.Products;
@@ -162,6 +163,64 @@ public sealed class CancelSaleHandlerTests
         ctx.Customer.CreditBalance.Should().Be(0m);
     }
 
+    // ── "Anular los pagos" cuando lo que el cobro dejó a favor ya se usó ────────
+    // Un cobro de 80.000 imputó 50.000 a la venta y dejó 30.000 a favor; otra venta los consumió sin back-link al
+    // cobro. Revertirlo devuelve los 50.000 imputados y saca los 80.000: el saldo quedaría en −30.000.
+
+    private static (CcCancelContext Ctx, Sale Sale, CustomerPayment Payment) CobroWithLeftover()
+    {
+        var ctx = new CcCancelContext();
+        var sale = ctx.CreateCcSale(200000m);
+        var payment = CustomerPayment.Create(
+            ctx.CompanyId.Value, ctx.Customer.Id.Value, ctx.BranchId.Value, SalePaymentMethod.Transfer,
+            80000m, DateTime.UtcNow, null, null, ctx.UserId.Value);
+        ctx.Customer.AddCredit(80000m);
+        ctx.Customer.ConsumeCredit(50000m);
+        sale.ApplyCustomerCredit(50000m, DateTime.UtcNow, payment.Id, "Saldo a favor aplicado automáticamente");
+        ctx.CustomerPaymentRepository
+            .Setup(x => x.GetByIdAsync(payment.Id, ctx.CompanyId.Value, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(payment);
+        return (ctx, sale, payment);
+    }
+
+    [Fact]
+    public async Task Handle_ReversePayments_ConElSobranteDelCobroYaUsado_RechazaYNoTocaNada()
+    {
+        var (ctx, sale, _) = CobroWithLeftover();
+        var other = ctx.CreateCcSale(30000m);
+        ctx.ApplyCredit(other, 30000m);
+
+        var result = await ctx.Handler.Handle(
+            new CancelSaleCommand(sale.Id.Value, CcCancellationRefundMode.ReversePayments), CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("Sales.Cancel.CreditAlreadyConsumed");
+        result.Error.Description.Should().Contain("30.000,00").And.Contain("Saldo a favor");
+        ctx.CustomerReceiptService.Verify(x => x.ReversePaymentAsync(
+            It.IsAny<CustomerPayment>(), It.IsAny<Customer>(), It.IsAny<CashSession?>(), It.IsAny<CompanyId>(),
+            It.IsAny<UserId>(), It.IsAny<CancellationToken>()), Times.Never);
+        sale.SaleStatus.Should().Be(SaleStatus.OnHold);
+        sale.CcPayments.Should().OnlyContain(p => p.Status == SaleCcPaymentStatus.Active);
+        ctx.StockOf(sale).ReservedQuantity.Should().Be(1);
+        ctx.Customer.CreditBalance.Should().Be(0m);
+        ctx.UnitOfWork.Verify(x => x.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    // Con el sobrante todavía a favor, la reversa cierra en cero: se anula.
+    [Fact]
+    public async Task Handle_ReversePayments_ConElSobranteDelCobroTodaviaAFavor_SeAnula()
+    {
+        var (ctx, sale, payment) = CobroWithLeftover();
+
+        var result = await ctx.Handler.Handle(
+            new CancelSaleCommand(sale.Id.Value, CcCancellationRefundMode.ReversePayments), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue(result.IsFailure ? result.Error.Description : string.Empty);
+        ctx.CustomerReceiptService.Verify(x => x.ReversePaymentAsync(
+            payment, ctx.Customer, It.IsAny<CashSession?>(), ctx.CompanyId, ctx.UserId, It.IsAny<CancellationToken>()), Times.Once);
+        sale.SaleStatus.Should().Be(SaleStatus.Cancel);
+    }
+
     // ── Nota de crédito vigente vinculada a la venta ─────────────────────────────
     // Caso real (LACTEOS BARRAZA, 29/10): MAT-3844 tenía vigente la NCC-003 por la 24KD que el cliente cambió.
     // Se anuló la venta y se rehízo sin la 24KD: lo que la NC había imputado volvió como saldo a favor y la 24KD
@@ -180,7 +239,8 @@ public sealed class CancelSaleHandlerTests
 
         result.IsFailure.Should().BeTrue();
         result.Error.Code.Should().Be("Sales.Cancel.HasActiveCreditNote");
-        result.Error.Description.Should().Contain("NCC-003");
+        // El mensaje nombra la nota y su importe: el front lo muestra para pedir la confirmación.
+        result.Error.Description.Should().Contain("NCC-003").And.Contain("195.000,00").And.Contain("Si confirmás");
         sale.SaleStatus.Should().NotBe(SaleStatus.Cancel);
         sale.CcPayments.Should().OnlyContain(p => p.Status == SaleCcPaymentStatus.Active);
         ctx.Customer.CreditBalance.Should().Be(0m);
@@ -199,6 +259,87 @@ public sealed class CancelSaleHandlerTests
 
         result.IsSuccess.Should().BeTrue(result.IsFailure ? result.Error.Description : string.Empty);
         sale.SaleStatus.Should().Be(SaleStatus.Cancel);
+    }
+
+    // ── Anular la venta junto con sus notas de crédito vigentes ────────────────
+    // Forma del caso MAT-3844 (LACTEOS BARRAZA): la venta tenía saldo previo imputado al crearse y NCC-003 emitida
+    // sobre ella. La NC imputó FIFO: primero saldó una venta más vieja y el resto cayó en la venta misma. Anulando
+    // todo junto, la nota se lleva lo suyo de las dos ventas y la vieja vuelve a deber.
+
+    [Fact]
+    public async Task Handle_CasoMat3844_AnulaLaVentaYSuNota_LaVentaViejaVuelveAPendiente()
+    {
+        var ctx = new CcCancelContext();
+        var older = ctx.CreateCcSale(100000m);
+        ctx.Customer.AddCredit(14407.17m);
+        var sale = ctx.CreateCcSale(586000m);
+        ctx.ApplyCredit(sale, 14407.17m);
+        var note = ctx.IssueCreditNote(sale, "NCC-003", 195000m);
+        ctx.ApplyCredit(older, 100000m, note.Id);
+        ctx.ApplyCredit(sale, 95000m, note.Id);
+        older.SaleStatus.Should().Be(SaleStatus.Paid);
+        ctx.Customer.CreditBalance.Should().Be(0m);
+
+        var result = await ctx.Handler.Handle(
+            new CancelSaleCommand(sale.Id.Value, CcCancellationRefundMode.Credit, CancelLinkedCreditNotes: true),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue(result.IsFailure ? result.Error.Description : string.Empty);
+        note.Status.Should().Be(CreditNoteStatus.Cancelled);
+        sale.SaleStatus.Should().Be(SaleStatus.Cancel);
+        sale.CcPayments.Should().OnlyContain(p => p.Status == SaleCcPaymentStatus.Cancelled);
+        ctx.StockOf(sale).ReservedQuantity.Should().Be(0);
+        ctx.StockOf(sale).OnHandQuantity.Should().Be(1);
+
+        // La venta vieja vuelve a pendiente y su batería, de vendida a reservada.
+        older.SaleStatus.Should().Be(SaleStatus.OnHold);
+        ctx.StockOf(older).OnHandQuantity.Should().Be(1);
+        ctx.StockOf(older).ReservedQuantity.Should().Be(1);
+
+        // El saldo previo que devuelve la venta anulada se imputa FIFO a la vieja, que no llega a saldarse.
+        older.CcPayments.Where(p => p.Status == SaleCcPaymentStatus.Active).Should().ContainSingle()
+            .Which.Should().Match<SaleCcPayment>(p => p.Amount == 14407.17m && p.CreditNoteId == null);
+        ctx.Customer.CreditBalance.Should().Be(0m);
+        ctx.Session.Movements.Should().ContainSingle(m => m.Type == CashMovementType.CustomerCreditNoteCancellation);
+        ctx.UnitOfWork.Verify(x => x.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    // NCC-010 sobre una venta pendiente: su crédito quedó a saldo y otra venta lo consumió sin back-link. La venta no
+    // tiene cobros que devolver, así que anular la nota dejaría el saldo en negativo: no se anula nada.
+    [Fact]
+    public async Task Handle_SaldoCombinadoInsuficiente_RechazaYNoTocaNada()
+    {
+        var ctx = new CcCancelContext();
+        var sale = ctx.CreateCcSale(200000m);
+        var note = ctx.IssueCreditNote(sale, "NCC-010", 50000m);
+        var other = ctx.CreateCcSale(80000m);
+        ctx.ApplyCredit(other, 50000m);
+
+        var result = await ctx.Handler.Handle(
+            new CancelSaleCommand(sale.Id.Value, CancelLinkedCreditNotes: true), CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("Sales.Cancel.InsufficientCreditForCreditNotes");
+        result.Error.Description.Should().Contain("NCC-010").And.Contain("50.000,00");
+        ctx.ShouldBeUntouched(sale, note);
+        other.CcPayments.Should().OnlyContain(p => p.Status == SaleCcPaymentStatus.Active);
+    }
+
+    // Anular la nota queda en la caja (movimiento neutro), igual que anularla sola: sin caja abierta no se anula nada.
+    [Fact]
+    public async Task Handle_ConNotaYSinCajaAbierta_RechazaYNoTocaNada()
+    {
+        var ctx = new CcCancelContext(withOpenSession: false);
+        var sale = ctx.CreateCcSale(200000m);
+        var note = ctx.IssueCreditNote(sale, "NCC-011", 50000m);
+        ctx.ApplyCredit(sale, 50000m, note.Id);
+
+        var result = await ctx.Handler.Handle(
+            new CancelSaleCommand(sale.Id.Value, CancelLinkedCreditNotes: true), CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("Sales.Cancel.CreditNoteNoCashSessionOpen");
+        ctx.ShouldBeUntouched(sale, note);
     }
 
     private static ICustomerCreditNoteRepository NoCreditNotes()
@@ -285,12 +426,17 @@ public sealed class CancelSaleHandlerTests
         public Mock<ICustomerReceiptService> CustomerReceiptService { get; } = new();
         public Mock<ISaleInvoicingService> Invoicing { get; } = new();
         public Mock<IUnitOfWork> UnitOfWork { get; } = new();
+        public CashSession Session { get; }
         public CancelSaleHandler Handler { get; }
 
         private readonly Mock<IBranchProductStockRepository> _stockRepository = new();
         private readonly List<CustomerCreditNote> _creditNotes = [];
+        private readonly List<Sale> _sales = [];
+        private readonly Dictionary<SaleId, BranchProductStock> _stocks = [];
 
-        public CcCancelContext()
+        // Los repositorios responden como los reales sobre las ventas que conoce el contexto: las de una nota por su
+        // back-link, y las pendientes (no anuladas y con saldo) según su estado en memoria, más viejas primero.
+        public CcCancelContext(bool withOpenSession = true)
         {
             Customer = Customer.Create(CompanyId, "LACTEOS", "BARRAZA", null);
 
@@ -306,7 +452,26 @@ public sealed class CancelSaleHandlerTests
 
             SaleRepository
                 .Setup(x => x.ListPendingCcSalesByCustomerAsync(CompanyId, Customer.Id, It.IsAny<CancellationToken>()))
-                .ReturnsAsync([]);
+                .ReturnsAsync(() => _sales.Where(s => s.SaleStatus != SaleStatus.Cancel && s.CcPendingAmount > 0).ToList());
+            SaleRepository
+                .Setup(x => x.ListByCreditNoteIdAsync(CompanyId, It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync((CompanyId _, Guid noteId, CancellationToken _) =>
+                    _sales.Where(s => s.CcPayments.Any(p => p.CreditNoteId == noteId)).ToList());
+            SaleRepository
+                .Setup(x => x.ListByCustomerPaymentIdAsync(CompanyId, It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync((CompanyId _, Guid paymentId, CancellationToken _) =>
+                    _sales.Where(s => s.CcPayments.Any(p => p.CustomerPaymentId == paymentId)).ToList());
+
+            var drawer = CashDrawer.Create(CompanyId, BranchId, "Caja 1");
+            Session = CashSession.Open(CompanyId, BranchId, drawer.Id, UserId, 0m, null);
+            var drawerRepository = new Mock<ICashDrawerRepository>();
+            drawerRepository
+                .Setup(x => x.GetByAssignedUserAsync(UserId, CompanyId, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(drawer);
+            var sessionRepository = new Mock<ICashSessionRepository>();
+            sessionRepository
+                .Setup(x => x.GetOpenByDrawerAsync(drawer.Id, CompanyId, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(withOpenSession ? Session : null);
 
             CustomerReceiptService
                 .Setup(x => x.EnsureReversibleAloneAsync(
@@ -323,8 +488,8 @@ public sealed class CancelSaleHandlerTests
                 SaleRepository.Object,
                 _stockRepository.Object,
                 new Mock<IStockMovementRepository>().Object,
-                new Mock<ICashDrawerRepository>().Object,
-                new Mock<ICashSessionRepository>().Object,
+                drawerRepository.Object,
+                sessionRepository.Object,
                 new Mock<ISaleTransportAssignmentRepository>().Object,
                 customerRepository.Object,
                 CustomerPaymentRepository.Object,
@@ -344,6 +509,36 @@ public sealed class CancelSaleHandlerTests
             return note;
         }
 
+        // Igual, con el crédito de la nota entrando al saldo a favor: lo que imputa cada test con ApplyCredit sale de ahí.
+        public CustomerCreditNote IssueCreditNote(Sale sale, string code, decimal amount)
+        {
+            var note = LinkCreditNote(sale, code, amount);
+            Customer.AddCredit(amount);
+            return note;
+        }
+
+        // Imputa saldo a favor como CustomerCreditApplicator (con el back-link a la nota, si viene) y, si la venta
+        // queda pagada, confirma su stock de reservado a vendido como los handlers que lo llaman.
+        public void ApplyCredit(Sale sale, decimal amount, Guid? creditNoteId = null)
+        {
+            Customer.ConsumeCredit(amount);
+            if (sale.ApplyCustomerCredit(amount, DateTime.UtcNow, Guid.Empty, "Saldo a favor aplicado automáticamente", creditNoteId))
+                StockOf(sale).ConfirmSaleOut(1);
+        }
+
+        public BranchProductStock StockOf(Sale sale) => _stocks[sale.Id];
+
+        public void ShouldBeUntouched(Sale sale, CustomerCreditNote note)
+        {
+            note.Status.Should().Be(CreditNoteStatus.Active);
+            sale.SaleStatus.Should().Be(SaleStatus.OnHold);
+            sale.CcPayments.Should().NotContain(p => p.Status != SaleCcPaymentStatus.Active);
+            StockOf(sale).ReservedQuantity.Should().Be(1);
+            Customer.CreditBalance.Should().Be(0m);
+            Session.Movements.Should().NotContain(m => m.Type == CashMovementType.CustomerCreditNoteCancellation);
+            UnitOfWork.Verify(x => x.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+        }
+
         // Venta CC pendiente (OnHold) de una unidad, con su stock reservado como lo deja CreateCcSale.
         public Sale CreateCcSale(decimal price)
         {
@@ -361,6 +556,8 @@ public sealed class CancelSaleHandlerTests
                 .Setup(x => x.GetByIdAsync(sale.Id, It.IsAny<CancellationToken>()))
                 .ReturnsAsync(sale);
 
+            _sales.Add(sale);
+            _stocks[sale.Id] = stock;
             _sale = sale;
             return sale;
         }

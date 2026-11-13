@@ -374,14 +374,11 @@ public sealed class SaleCardSurchargeInvoicingTests
         var sessions = new Mock<ICashSessionRepository>();
         sessions.Setup(x => x.GetOpenForBranchAsync(_branch.Id, DrawerId, _companyId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(CashSession.Open(_companyId, _branch.Id, DrawerId, userId, 0m, null));
-        var creditNotes = new Mock<ICustomerCreditNoteRepository>();
-        creditNotes.Setup(x => x.ListBySaleAsync(_companyId.Value, sale.Id.Value, It.IsAny<CancellationToken>())).ReturnsAsync([]);
-
         return new UpdateSaleHandler(
             currentUser.Object, sales.Object, new Mock<ICustomerRepository>().Object, products.Object,
             stocks.Object, new Mock<IStockMovementRepository>().Object, new Mock<ICashDrawerRepository>().Object,
-            sessions.Object, new Mock<ISaleTransportAssignmentRepository>().Object, new Mock<IAddressRepository>().Object,
-            banks.Object, FiscalDocuments(sale, invoice).Object, creditNotes.Object,
+            sessions.Object, new Mock<IAddressRepository>().Object,
+            banks.Object, FiscalDocuments(sale, invoice).Object,
             new RetailDiscountPolicy(new Mock<ICompanyRepository>().Object), (unitOfWork ?? new Mock<IUnitOfWork>()).Object);
     }
 

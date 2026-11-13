@@ -60,9 +60,10 @@ public sealed class PurchasesController : ControllerBase
     public async Task<IActionResult> CancelPurchase(
         Guid id,
         [FromQuery] PurchaseCancellationRefundMode? refundMode,
+        [FromQuery] bool cancelLinkedCreditNotes,
         CancellationToken cancellationToken)
     {
-        var result = await _sender.Send(new CancelPurchaseCommand(id, refundMode), cancellationToken);
+        var result = await _sender.Send(new CancelPurchaseCommand(id, refundMode, cancelLinkedCreditNotes), cancellationToken);
         return result.ToActionResult();
     }
 

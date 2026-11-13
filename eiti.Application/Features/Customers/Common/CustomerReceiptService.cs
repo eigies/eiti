@@ -81,6 +81,16 @@ public interface ICustomerReceiptService
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// Cuánto cambiaría el saldo a favor al revertir estos cobros, sin tocar nada (la misma cuenta que la reversa).
+    /// Para rechazar antes de mutar una reversa que lo dejaría negativo: pasa cuando lo que un cobro dejó a favor
+    /// ya lo consumió otra venta sin back-link al cobro.
+    /// </summary>
+    Task<decimal> ReversalCreditDeltaAsync(
+        IEnumerable<CustomerPayment> payments,
+        CompanyId companyId,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// Revierte un cobro suelto (imputaciones, stock, saldo a favor, caja, cheque). Si era el único medio de
     /// su recibo, el recibo queda anulado con él. Chequear antes con <see cref="EnsureReversibleAloneAsync"/>.
     /// </summary>
@@ -322,6 +332,17 @@ public sealed class CustomerReceiptService : ICustomerReceiptService
         }
 
         return Result.Success();
+    }
+
+    public async Task<decimal> ReversalCreditDeltaAsync(
+        IEnumerable<CustomerPayment> payments,
+        CompanyId companyId,
+        CancellationToken cancellationToken)
+    {
+        var delta = 0m;
+        foreach (var payment in payments)
+            delta += await CustomerPaymentReversal.CreditDeltaAsync(payment, _saleRepository, companyId, cancellationToken);
+        return delta;
     }
 
     public async Task ReversePaymentAsync(

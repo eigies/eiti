@@ -13,9 +13,14 @@ public enum PurchaseCancellationRefundMode
     ReversePayments = 2
 }
 
+/// <param name="CancelLinkedCreditNotes">
+/// El usuario vio las notas de crédito vigentes emitidas sobre la compra y confirmó anularlas junto con ella. Sin
+/// esto, con alguna vigente no se anula nada (Purchases.Cancel.HasActiveCreditNote las nombra para preguntar).
+/// </param>
 public sealed record CancelPurchaseCommand(
     Guid Id,
-    PurchaseCancellationRefundMode? RefundMode = null
+    PurchaseCancellationRefundMode? RefundMode = null,
+    bool CancelLinkedCreditNotes = false
 ) : IRequest<Result>, IRequirePermissions
 {
     public IReadOnlyCollection<string> RequiredPermissions => [PermissionCodes.PurchasesCancel];

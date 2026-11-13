@@ -1,9 +1,12 @@
+using System.Globalization;
 using eiti.Application.Common;
 
 namespace eiti.Application.Features.Sales.Commands.CancelSale;
 
 public static class CancelSaleErrors
 {
+    private static readonly CultureInfo Argentina = CultureInfo.GetCultureInfo("es-AR");
+
     public static readonly Error NotFound = Error.NotFound(
         "Sales.Cancel.NotFound",
         "The requested sale was not found.");
@@ -24,11 +27,34 @@ public static class CancelSaleErrors
         "Sales.Cancel.NoOpenSessionForHistoricalCancel",
         "No hay una sesión de caja abierta para registrar la cancelación histórica.");
 
-    public static Error HasActiveCreditNote(IReadOnlyCollection<string> codes) => Error.Conflict(
+    // Sin la confirmación del usuario no se anula nada. El front muestra este mensaje (nombra cada nota y su importe)
+    // y, si confirma, reenvía con cancelLinkedCreditNotes=true.
+    public static Error HasActiveCreditNote(IReadOnlyCollection<(string Code, decimal Amount)> notes) => Error.Conflict(
         "Sales.Cancel.HasActiveCreditNote",
-        codes.Count == 1
-            ? $"La venta tiene vigente la nota de crédito {codes.First()}. Anulala primero desde la cuenta corriente del cliente: si no, su crédito le queda a favor aunque la venta ya no exista."
-            : $"La venta tiene vigentes las notas de crédito {string.Join(", ", codes)}. Anulalas primero desde la cuenta corriente del cliente: si no, su crédito le queda a favor aunque la venta ya no exista.");
+        notes.Count == 1
+            ? $"La venta tiene vigente la nota de crédito {Describe(notes)}. Si confirmás, se anula junto con la venta: lo que imputó vuelve a quedar pendiente y su crédito sale del saldo a favor del cliente."
+            : $"La venta tiene vigentes las notas de crédito {Describe(notes)}. Si confirmás, se anulan junto con la venta: lo que imputaron vuelve a quedar pendiente y su crédito sale del saldo a favor del cliente.");
+
+    // Anular las notas saca su crédito del saldo a favor; si ya se usó sin su back-link y lo que devuelve la venta
+    // no alcanza, el saldo quedaría negativo.
+    public static Error InsufficientCreditForCreditNotes(IReadOnlyCollection<string> codes, decimal missing) => Error.Conflict(
+        "Sales.Cancel.InsufficientCreditForCreditNotes",
+        $"No se anuló nada: anular la venta con {(codes.Count == 1 ? "la nota de crédito" : "las notas de crédito")} {string.Join(", ", codes)} dejaría el saldo a favor del cliente en negativo (faltan {Money(missing)}). Su crédito ya se usó y lo que devuelve la anulación de la venta no alcanza para cubrirlo.");
+
+    // "Anular los pagos" sin NC: lo que un cobro dejó a favor ya lo consumió otra venta sin back-link al cobro, y la
+    // reversa dejaría el saldo negativo. "Saldo a favor" siempre se puede: devuelve lo cobrado sin tocar los cobros.
+    public static Error CreditAlreadyConsumed(decimal missing) => Error.Conflict(
+        "Sales.Cancel.CreditAlreadyConsumed",
+        $"No se anuló nada: anular los pagos dejaría el saldo a favor del cliente en negativo (faltan {Money(missing)}), porque lo que esos cobros dejaron a favor ya se usó en otras ventas. Podés anular la venta eligiendo \"Saldo a favor\".");
+
+    // Anular una nota registra un movimiento (neutro) en la caja, igual que anularla sola desde la cuenta del cliente.
+    public static readonly Error CreditNoteNoCashSessionOpen = Error.Conflict(
+        "Sales.Cancel.CreditNoteNoCashSessionOpen",
+        "Para anular la nota de crédito junto con la venta necesitás una caja abierta: la anulación queda registrada en la caja.");
+
+    public static readonly Error CreditNoteNoAssignedCashDrawer = Error.Conflict(
+        "Sales.Cancel.CreditNoteNoAssignedCashDrawer",
+        "Para anular la nota de crédito junto con la venta necesitás una caja asignada (o permiso para ver todas las cajas).");
 
     public static readonly Error RefundModeRequired = Error.Validation(
         "Sales.Cancel.RefundModeRequired",
@@ -47,4 +73,9 @@ public static class CancelSaleErrors
     public static readonly Error NoOpenSessionForRefund = Error.Conflict(
         "Sales.Cancel.NoOpenSessionForRefund",
         "Para anular los pagos en efectivo necesitás una caja abierta. Abrí caja o elegí 'saldo a favor'.");
+
+    private static string Describe(IEnumerable<(string Code, decimal Amount)> notes) =>
+        string.Join(", ", notes.Select(note => $"{note.Code} por {Money(note.Amount)}"));
+
+    private static string Money(decimal amount) => amount.ToString("$ #,##0.00", Argentina);
 }

@@ -414,6 +414,93 @@ public sealed class CustomerReceiptHandlersTests
         _customer.CreditBalance.Should().Be(50_000m);
     }
 
+    // ── Sobrante del cobro ya usado ──────────────────────────────────────────
+    // Lo que un cobro deja a favor lo puede consumir otra venta sin back-link al cobro. Anular el cobro saca su importe
+    // entero del saldo pero solo recupera lo imputado con su back-link: el saldo quedaría negativo en silencio. Se
+    // rechaza antes de tocar nada, igual que anular una NC cuyo crédito ya se usó.
+
+    // Otra venta CC consume saldo a favor sin back-link a ningún cobro (al crearse, o por el FIFO de otra operación).
+    private Sale ConsumeCreditWithNewSale(string code, decimal amount)
+    {
+        var sale = AddCcSale(code, amount);
+        _customer.ConsumeCredit(amount);
+        sale.ApplyCustomerCredit(amount, DateTime.UtcNow, Guid.Empty, "Saldo a favor aplicado automáticamente");
+        return sale;
+    }
+
+    [Fact]
+    public async Task AnularCobro_CuyoSobranteYaUsoOtraVenta_SeRechazaYNoTocaNada()
+    {
+        var venta = AddCcSale("VENT-0101", 60_000m, withStock: true);
+        (await Handler().Handle(
+            new AddCustomerReceiptCommand(_customer.Id.Value, new DateTime(2026, 10, 2), null,
+                [new AddCustomerReceiptLine((int)SalePaymentMethod.Cash, 100_000m, null)]),
+            CancellationToken.None)).IsSuccess.Should().BeTrue();
+        _customer.CreditBalance.Should().Be(40_000m);
+        var otra = ConsumeCreditWithNewSale("VENT-0102", 40_000m);
+        var payment = _payments.Single();
+        var cajaEsperada = _session.ExpectedClosingAmount;
+
+        var result = await CancelPaymentHandler().Handle(
+            new CancelCustomerPaymentCommand(_customer.Id.Value, payment.Id), CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("Customers.CancelPayment.CreditAlreadyConsumed");
+        result.Error.Description.Should().Contain("40.000,00");
+        payment.Status.Should().Be(SaleCcPaymentStatus.Active);
+        _receipts.Single().Status.Should().Be(SaleCcPaymentStatus.Active);
+        venta.SaleStatus.Should().Be(SaleStatus.Paid);
+        otra.SaleStatus.Should().Be(SaleStatus.Paid);
+        _stock.ReservedQuantity.Should().Be(0, "la venta sigue pagada");
+        _customer.CreditBalance.Should().Be(0m);
+        _session.ExpectedClosingAmount.Should().Be(cajaEsperada, "el efectivo no sale de la caja");
+        _unitOfWork.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once, "solo el alta del cobro");
+    }
+
+    [Fact]
+    public async Task AnularRecibo_CuyoSobranteYaUsoOtraVenta_SeRechazaYNoTocaNada()
+    {
+        var venta = AddCcSale("VENT-0101", 100_000m, withStock: true);
+        (await Handler().Handle(
+            new AddCustomerReceiptCommand(_customer.Id.Value, new DateTime(2026, 10, 2), null,
+                [
+                    new AddCustomerReceiptLine((int)SalePaymentMethod.Transfer, 80_000m, "Ref. 1"),
+                    new AddCustomerReceiptLine((int)SalePaymentMethod.Cash, 50_000m, null),
+                ]),
+            CancellationToken.None)).IsSuccess.Should().BeTrue();
+        ConsumeCreditWithNewSale("VENT-0102", 30_000m);
+        var receipt = _receipts.Single();
+
+        var result = await CancelReceiptHandler().Handle(
+            new CancelCustomerReceiptCommand(_customer.Id.Value, receipt.Id), CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("Customers.CancelReceipt.CreditAlreadyConsumed");
+        result.Error.Description.Should().Contain("30.000,00");
+        receipt.Status.Should().Be(SaleCcPaymentStatus.Active);
+        _payments.Should().OnlyContain(p => p.Status == SaleCcPaymentStatus.Active);
+        venta.CcPendingAmount.Should().Be(0m);
+        _customer.CreditBalance.Should().Be(0m);
+    }
+
+    // Con el sobrante todavía a favor, la reversa cierra en cero: se anula.
+    [Fact]
+    public async Task AnularCobro_QueGeneroSaldoAFavorTodaviaDisponible_SeAnula()
+    {
+        var venta = AddCcSale("VENT-0101", 60_000m, withStock: true);
+        (await Handler().Handle(
+            new AddCustomerReceiptCommand(_customer.Id.Value, new DateTime(2026, 10, 2), null,
+                [new AddCustomerReceiptLine((int)SalePaymentMethod.Transfer, 100_000m, "Ref. 1")]),
+            CancellationToken.None)).IsSuccess.Should().BeTrue();
+
+        var result = await CancelPaymentHandler().Handle(
+            new CancelCustomerPaymentCommand(_customer.Id.Value, _payments.Single().Id), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        venta.CcPendingAmount.Should().Be(60_000m);
+        _customer.CreditBalance.Should().Be(0m);
+    }
+
     // ── Extracto ─────────────────────────────────────────────────────────────
 
     private sealed class FixedTime(DateTimeOffset now) : TimeProvider

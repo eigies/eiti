@@ -74,6 +74,16 @@ public interface ISupplierPaymentOrderService
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// Cuánto cambiaría el saldo a favor al revertir estos pagos, sin tocar nada (la misma cuenta que la reversa).
+    /// Para rechazar antes de mutar una reversa que lo dejaría negativo: pasa cuando lo que un pago dejó a favor
+    /// ya lo consumió otra compra sin back-link al pago.
+    /// </summary>
+    Task<decimal> ReversalCreditDeltaAsync(
+        IEnumerable<SupplierPayment> payments,
+        CompanyId companyId,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// Revierte un pago suelto (imputaciones, saldo a favor, caja, cheque). Si era el único medio de su
     /// orden, la orden queda anulada con él. Chequear antes con <see cref="EnsureReversibleAloneAsync"/>.
     /// </summary>
@@ -267,6 +277,17 @@ public sealed class SupplierPaymentOrderService : ISupplierPaymentOrderService
         }
 
         return Result.Success();
+    }
+
+    public async Task<decimal> ReversalCreditDeltaAsync(
+        IEnumerable<SupplierPayment> payments,
+        CompanyId companyId,
+        CancellationToken cancellationToken)
+    {
+        var delta = 0m;
+        foreach (var payment in payments)
+            delta += await SupplierPaymentReversal.CreditDeltaAsync(payment, _purchaseRepository, companyId, cancellationToken);
+        return delta;
     }
 
     public async Task ReversePaymentAsync(

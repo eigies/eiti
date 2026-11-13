@@ -71,6 +71,7 @@ public sealed class CancelSaleHandler : IRequestHandler<CancelSaleCommand, Resul
             return Result.Failure(authCheck.Error);
 
         var companyId = _currentUserService.CompanyId!;
+        var userId = _currentUserService.UserId!;
 
         var sale = await _saleRepository.GetByIdAsync(new SaleId(command.Id), cancellationToken);
 
@@ -84,23 +85,27 @@ public sealed class CancelSaleHandler : IRequestHandler<CancelSaleCommand, Resul
             return Result.Failure(CancelSaleErrors.AlreadyCancelled);
         }
 
-        // Una NC vigente sobre la venta tiene que anularse primero: si no, lo que imputó vuelve como saldo a favor
-        // y el crédito sobrevive a la venta que lo justificaba (NCC-003 de LACTEOS BARRAZA, MAT-3844). Mismo
-        // invariante que CreateCustomerCreditNote, que no emite NC sobre una venta anulada. Va antes de pedir
-        // RefundMode: no tiene sentido elegir qué hacer con lo cobrado de una anulación que se va a rechazar.
-        var activeCreditNotes = (await _creditNoteRepository.ListBySaleAsync(companyId.Value, sale.Id.Value, cancellationToken))
+        // Una NC vigente sobre la venta no puede sobrevivirla: lo que imputó volvería como saldo a favor y el crédito
+        // quedaría por una venta que ya no existe (NCC-003 de LACTEOS BARRAZA, MAT-3844). Mismo invariante que
+        // CreateCustomerCreditNote, que no emite NC sobre una venta anulada. Se anulan juntas solo si el usuario lo
+        // confirmó; sin eso, el error las nombra para que el front pregunte. Va antes de pedir RefundMode: no tiene
+        // sentido elegir qué hacer con lo cobrado de una anulación que se va a rechazar.
+        var linkedNotes = (await _creditNoteRepository.ListBySaleAsync(companyId.Value, sale.Id.Value, cancellationToken))
             .Where(note => note.Status == CreditNoteStatus.Active)
-            .Select(note => note.Code)
             .ToList();
-        if (activeCreditNotes.Count > 0)
+        if (linkedNotes.Count > 0 && !command.CancelLinkedCreditNotes)
         {
-            return Result.Failure(CancelSaleErrors.HasActiveCreditNote(activeCreditNotes));
+            return Result.Failure(CancelSaleErrors.HasActiveCreditNote(
+                linkedNotes.Select(note => (note.Code, note.Amount)).ToList()));
         }
 
+        var linkedNoteIds = linkedNotes.Select(note => note.Id).ToHashSet();
         var existingTransportAssignmentId = sale.TransportAssignmentId;
 
-        // Cobros de cuenta corriente imputados a esta venta (antes de cancelarlos).
-        var ccCancelledLines = CaptureActiveCcLines(sale);
+        // Cobros de cuenta corriente imputados a esta venta (antes de cancelarlos), sin las imputaciones de esas NC:
+        // a esas las deshace la anulación de cada nota. Contarlas también como cobradas devolvería dos veces la misma
+        // plata al saldo.
+        var ccCancelledLines = CaptureActiveCcLines(sale, linkedNoteIds);
         var ccTotal = ccCancelledLines.Sum(line => line.Amount);
         var hasCcPayments = sale.IsCuentaCorriente && ccTotal > 0;
 
@@ -110,8 +115,7 @@ public sealed class CancelSaleHandler : IRequestHandler<CancelSaleCommand, Resul
             return Result.Failure(CancelSaleErrors.RefundModeRequired);
         }
 
-        // Saldo a favor que vuelve al cliente al anular. "Saldo a favor": todo lo cobrado.
-        var creditToReturn = hasCcPayments && command.RefundMode == CcCancellationRefundMode.Credit ? ccTotal : 0m;
+        var reversePayments = hasCcPayments && command.RefundMode == CcCancellationRefundMode.ReversePayments;
 
         // La NC sale al receptor de la factura, no al de la ficha: si la ficha cambió después de facturar, el
         // usuario tiene que verlo antes de emitir un comprobante fiscal a un receptor que no es el de la ficha.
@@ -126,23 +130,89 @@ public sealed class CancelSaleHandler : IRequestHandler<CancelSaleCommand, Resul
             }
         }
 
+        // ── Lo que puede fallar en "Anular los pagos" y en las NC se resuelve antes de tocar nada ──
+
+        LinkedCobros? cobros = null;
+        if (reversePayments)
+        {
+            var prepared = await PrepareLinkedCobrosAsync(sale, linkedNoteIds, companyId, userId, cancellationToken);
+            if (prepared.IsFailure)
+                return Result.Failure(prepared.Error);
+            cobros = prepared.Value;
+        }
+
+        // Saldo a favor que vuelve al cliente al anular. "Saldo a favor": todo lo cobrado. "Anular los pagos": el
+        // saldo a favor consumido que no vuelve con la reversa de un cobro.
+        var creditToReturn = !hasCcPayments ? 0m : cobros?.UnlinkedCredit ?? ccTotal;
+
+        Customer? customer = null;
+        if (creditToReturn > 0 || linkedNotes.Count > 0)
+        {
+            customer = sale.CustomerId is null
+                ? null
+                : await _customerRepository.GetByIdAsync(sale.CustomerId, companyId, cancellationToken);
+            if (customer is null)
+                return Result.Failure(CancelSaleErrors.CustomerNotFound);
+        }
+
+        var noteCancellations = new List<CustomerCreditNoteCancellation>();
+        CashSession? noteSession = null;
+        if (linkedNotes.Count > 0)
+        {
+            // Anular una NC registra su movimiento neutro en la caja, igual que anularla sola.
+            var resolve = await CashSessionResolver.ResolveOpenSessionAsync(
+                _currentUserService, _cashDrawerRepository, _cashSessionRepository, userId, companyId, cancellationToken);
+            if (resolve.Status != CashSessionResolveStatus.Resolved)
+                return Result.Failure(resolve.Status == CashSessionResolveStatus.NoAssignedDrawer
+                    ? CancelSaleErrors.CreditNoteNoAssignedCashDrawer
+                    : CancelSaleErrors.CreditNoteNoCashSessionOpen);
+            noteSession = resolve.Session!;
+
+            foreach (var note in linkedNotes)
+            {
+                noteCancellations.Add(await CustomerCreditNoteCancellation.PrepareAsync(
+                    note, _saleRepository, companyId, cancellationToken));
+            }
+
+            // El saldo a favor no puede quedar negativo: lo que sacan las notas (su importe menos lo que vuelve al
+            // desimputarlas) tiene que alcanzar con el saldo actual más lo que devuelve la venta en el modo elegido.
+            var creditFromSale = cobros is null
+                ? creditToReturn
+                : await cobros.CreditDeltaAsync(_saleRepository, companyId, cancellationToken);
+            var balanceAfter = customer!.CreditBalance + noteCancellations.Sum(c => c.CreditDelta) + creditFromSale;
+            if (balanceAfter < 0m)
+                return Result.Failure(CancelSaleErrors.InsufficientCreditForCreditNotes(
+                    linkedNotes.Select(note => note.Code).ToList(), -balanceAfter));
+        }
+        else if (cobros is not null)
+        {
+            // "Anular los pagos" sin NC: el saldo a favor tampoco puede quedar negativo. Lo que un cobro dejó a favor
+            // puede haberlo consumido otra venta sin back-link al cobro, y entonces la reversa saca más de lo que
+            // recupera.
+            var missing = await cobros.MissingCreditAsync(sale.CustomerId, _saleRepository, companyId, cancellationToken);
+            if (missing > 0m)
+                return Result.Failure(CancelSaleErrors.CreditAlreadyConsumed(missing));
+        }
+
+        // ── Mutaciones ──
+
+        // Las NC primero: deshacen sus imputaciones (en esta venta y en otras, que vuelven a pendiente con su stock a
+        // reservado). Si la venta estaba pagada y deja de estarlo, se cancela abajo como pendiente.
+        foreach (var cancellation in noteCancellations)
+        {
+            await cancellation.ApplyAsync(
+                customer!, noteSession!, _branchProductStockRepository, _stockMovementRepository, companyId, userId, cancellationToken);
+        }
+
         // "Anular los pagos": se revierten los cobros vinculados PRIMERO (vuelven la venta a pendiente y el
         // stock a reservado), y luego se cancela la venta como pendiente. Así el stock no se maneja dos veces.
-        if (hasCcPayments && command.RefundMode == CcCancellationRefundMode.ReversePayments)
+        if (cobros is not null)
         {
-            var reversal = await ReverseLinkedCobrosAsync(sale, companyId, _currentUserService.UserId!, cancellationToken);
-            if (reversal.IsFailure)
-                return Result.Failure(reversal.Error);
-
-            // Imputaciones de saldo a favor sin un cobro que revertir: el aplicado al crear la venta
-            // (CreateCcSaleHandler, CustomerPaymentId nulo) o el FIFO de una NC / de otra anulación en modo
-            // "Saldo a favor" (CustomerPaymentId vacío). No hay caja que reintegrar, pero sí saldo que restituir:
-            // sin esto, CancelActiveCcPayments las anula y el saldo se pierde. Mismo criterio que CancelPurchaseHandler.
-            creditToReturn = sale.CcPayments
-                .Where(p => p.Status == SaleCcPaymentStatus.Active
-                    && p.Method == SalePaymentMethod.CustomerCredit
-                    && !(p.CustomerPaymentId is { } paymentId && reversal.Value.Contains(paymentId)))
-                .Sum(p => p.Amount);
+            foreach (var (payment, payer) in cobros.Payments)
+            {
+                await _customerReceiptService.ReversePaymentAsync(
+                    payment, payer, cobros.Session, companyId, userId, cancellationToken);
+            }
         }
 
         if (sale.SaleStatus == SaleStatus.OnHold)
@@ -300,19 +370,13 @@ public sealed class CancelSaleHandler : IRequestHandler<CancelSaleCommand, Resul
         // El cliente recupera el saldo a favor (no toca caja): en "Saldo a favor", lo cobrado; en "Anular los
         // pagos", el saldo a favor consumido que no volvió con la reversa de un cobro. El stock ya se devolvió
         // arriba según el estado de la venta.
-        if (creditToReturn > 0)
+        if (customer is not null)
         {
-            if (sale.CustomerId is null)
-                return Result.Failure(CancelSaleErrors.CustomerNotFound);
+            if (creditToReturn > 0)
+                customer.AddCredit(creditToReturn);
 
-            var customer = await _customerRepository.GetByIdAsync(sale.CustomerId, companyId, cancellationToken);
-            if (customer is null)
-                return Result.Failure(CancelSaleErrors.CustomerNotFound);
-
-            customer.AddCredit(creditToReturn);
-
-            // Aplicar el saldo a favor liberado a las ventas CC pendientes (FIFO), igual que un cobro:
-            // así no queda crédito "suelto" conviviendo con deuda pendiente.
+            // Aplicar el saldo a favor que queda a las ventas CC pendientes (FIFO), igual que un cobro, también a las
+            // que reabrió la anulación de una NC: así no queda crédito "suelto" conviviendo con deuda pendiente.
             var application = await CustomerCreditApplicator.ApplyToPendingCcSalesAsync(
                 customer, companyId, _saleRepository, cancellationToken);
             _customerRepository.Update(customer);
@@ -379,22 +443,65 @@ public sealed class CancelSaleHandler : IRequestHandler<CancelSaleCommand, Resul
         }
     }
 
-    private static List<(SalePaymentMethod Method, decimal Amount, Guid? SaleCcPaymentId)> CaptureActiveCcLines(Sale sale)
+    // Imputaciones vigentes de la venta, sin las de las NC que se anulan con ella.
+    private static IEnumerable<SaleCcPayment> ActiveCcPaymentsExcept(Sale sale, IReadOnlySet<Guid> creditNoteIds) =>
+        sale.CcPayments.Where(p => p.Status == SaleCcPaymentStatus.Active
+            && !(p.CreditNoteId is { } noteId && creditNoteIds.Contains(noteId)));
+
+    private static List<(SalePaymentMethod Method, decimal Amount, Guid? SaleCcPaymentId)> CaptureActiveCcLines(
+        Sale sale, IReadOnlySet<Guid> creditNoteIds)
     {
-        return sale.CcPayments
-            .Where(p => p.Status == SaleCcPaymentStatus.Active)
+        return ActiveCcPaymentsExcept(sale, creditNoteIds)
             .GroupBy(p => p.Method)
             .Select(g => (g.Key, g.Sum(p => p.Amount), g.Count() == 1 ? g.Single().Id.Value : (Guid?)null))
             .ToList();
     }
 
-    // "Anular los pagos": revierte cada cobro vinculado a la venta (efectivo a caja, crédito y cheque),
-    // reusando la misma lógica que "anular cobro". Requiere caja abierta para cobros en efectivo.
-    // Devuelve los Id de los cobros revertidos.
-    private async Task<Result<HashSet<Guid>>> ReverseLinkedCobrosAsync(Sale sale, CompanyId companyId, UserId userId, CancellationToken cancellationToken)
+    // "Anular los pagos", preparado: los cobros vinculados a revertir (con su cliente), la caja para hacerlo y el saldo
+    // a favor consumido que no vuelve con ninguna reversa.
+    private sealed record LinkedCobros(
+        IReadOnlyList<(CustomerPayment Payment, Customer Payer)> Payments,
+        decimal UnlinkedCredit,
+        CashSession? Session)
     {
-        var paymentIds = sale.CcPayments
-            .Where(p => p.Status == SaleCcPaymentStatus.Active && p.CustomerPaymentId.HasValue)
+        // Cuánto cambia el saldo a favor al aplicarlo: lo que cambia cada cobro revertido (vuelve lo que imputó en
+        // todas sus ventas y sale su importe) más el saldo a favor consumido sin un cobro detrás.
+        public async Task<decimal> CreditDeltaAsync(
+            ISaleRepository saleRepository, CompanyId companyId, CancellationToken cancellationToken)
+        {
+            var delta = UnlinkedCredit;
+            foreach (var (payment, _) in Payments)
+                delta += await CustomerPaymentReversal.CreditDeltaAsync(payment, saleRepository, companyId, cancellationToken);
+            return delta;
+        }
+
+        // Lo que le faltaría al saldo a favor de cada cliente para revertir sus cobros sin quedar negativo (0 si
+        // alcanza). Cada cobro mueve el saldo de su propio cliente; el saldo a favor consumido sin cobro detrás vuelve
+        // al cliente de la venta.
+        public async Task<decimal> MissingCreditAsync(
+            CustomerId? saleCustomerId, ISaleRepository saleRepository, CompanyId companyId, CancellationToken cancellationToken)
+        {
+            var missing = 0m;
+            foreach (var byPayer in Payments.GroupBy(p => p.Payer.Id))
+            {
+                var balance = byPayer.First().Payer.CreditBalance + (byPayer.Key == saleCustomerId ? UnlinkedCredit : 0m);
+                foreach (var (payment, _) in byPayer)
+                    balance += await CustomerPaymentReversal.CreditDeltaAsync(payment, saleRepository, companyId, cancellationToken);
+                missing += Math.Max(0m, -balance);
+            }
+            return missing;
+        }
+    }
+
+    // "Anular los pagos": revierte cada cobro vinculado a la venta (efectivo a caja, crédito y cheque), reusando la
+    // misma lógica que "anular cobro". Acá solo se lee y se valida (recibos compartidos, caja abierta para cobros en
+    // efectivo): si algo impide revertir, la anulación se rechaza antes de tocar nada.
+    private async Task<Result<LinkedCobros>> PrepareLinkedCobrosAsync(
+        Sale sale, IReadOnlySet<Guid> creditNoteIds, CompanyId companyId, UserId userId, CancellationToken cancellationToken)
+    {
+        var rows = ActiveCcPaymentsExcept(sale, creditNoteIds).ToList();
+        var paymentIds = rows
+            .Where(p => p.CustomerPaymentId.HasValue)
             .Select(p => p.CustomerPaymentId!.Value)
             .Distinct()
             .ToList();
@@ -410,33 +517,43 @@ public sealed class CancelSaleHandler : IRequestHandler<CancelSaleCommand, Resul
         // Un cobro que comparte recibo con otros medios no se revierte solo: hay que anular el recibo.
         var reversible = await _customerReceiptService.EnsureReversibleAloneAsync(payments, companyId, cancellationToken);
         if (reversible.IsFailure)
-            return Result.Failure<HashSet<Guid>>(reversible.Error);
+            return Result.Failure<LinkedCobros>(reversible.Error);
 
+        var withPayer = new List<(CustomerPayment, Customer)>();
         foreach (var payment in payments)
         {
-            var customer = await _customerRepository.GetByIdAsync(new CustomerId(payment.CustomerId), companyId, cancellationToken);
-            if (customer is null)
-                return Result.Failure<HashSet<Guid>>(CancelSaleErrors.CustomerNotFound);
-
-            CashSession? session;
-            if (payment.Method == SalePaymentMethod.Cash)
-            {
-                var resolve = await CashSessionResolver.ResolveOpenSessionAsync(
-                    _currentUserService, _cashDrawerRepository, _cashSessionRepository, userId, companyId, cancellationToken);
-                if (resolve.Status != CashSessionResolveStatus.Resolved)
-                    return Result.Failure<HashSet<Guid>>(CancelSaleErrors.NoOpenSessionForRefund);
-                session = resolve.Session;
-            }
-            else
-            {
-                session = await CashSessionResolver.ResolveOpenSessionBestEffortAsync(
-                    _currentUserService, _cashDrawerRepository, _cashSessionRepository, userId, companyId, cancellationToken);
-            }
-
-            await _customerReceiptService.ReversePaymentAsync(
-                payment, customer, session, companyId, userId, cancellationToken);
+            var payer = await _customerRepository.GetByIdAsync(new CustomerId(payment.CustomerId), companyId, cancellationToken);
+            if (payer is null)
+                return Result.Failure<LinkedCobros>(CancelSaleErrors.CustomerNotFound);
+            withPayer.Add((payment, payer));
         }
 
-        return Result.Success(payments.Select(p => p.Id).ToHashSet());
+        // Efectivo requiere caja abierta para reintegrar; el resto, reversa neutra best-effort.
+        CashSession? session;
+        if (payments.Any(p => p.Method == SalePaymentMethod.Cash))
+        {
+            var resolve = await CashSessionResolver.ResolveOpenSessionAsync(
+                _currentUserService, _cashDrawerRepository, _cashSessionRepository, userId, companyId, cancellationToken);
+            if (resolve.Status != CashSessionResolveStatus.Resolved)
+                return Result.Failure<LinkedCobros>(CancelSaleErrors.NoOpenSessionForRefund);
+            session = resolve.Session;
+        }
+        else
+        {
+            session = await CashSessionResolver.ResolveOpenSessionBestEffortAsync(
+                _currentUserService, _cashDrawerRepository, _cashSessionRepository, userId, companyId, cancellationToken);
+        }
+
+        // Imputaciones de saldo a favor sin un cobro que revertir: el aplicado al crear la venta
+        // (CreateCcSaleHandler, CustomerPaymentId nulo) o el FIFO de una NC / de otra anulación en modo
+        // "Saldo a favor" (CustomerPaymentId vacío). No hay caja que reintegrar, pero sí saldo que restituir:
+        // sin esto, CancelActiveCcPayments las anula y el saldo se pierde. Mismo criterio que CancelPurchaseHandler.
+        var reversedIds = payments.Select(p => p.Id).ToHashSet();
+        var unlinkedCredit = rows
+            .Where(p => p.Method == SalePaymentMethod.CustomerCredit
+                && !(p.CustomerPaymentId is { } paymentId && reversedIds.Contains(paymentId)))
+            .Sum(p => p.Amount);
+
+        return Result.Success(new LinkedCobros(withPayer, unlinkedCredit, session));
     }
 }

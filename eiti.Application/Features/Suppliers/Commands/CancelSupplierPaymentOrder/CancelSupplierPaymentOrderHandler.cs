@@ -64,6 +64,13 @@ public sealed class CancelSupplierPaymentOrderHandler : IRequestHandler<CancelSu
 
         var payments = await _supplierPaymentRepository.ListByOrderAsync(order.Id, companyId.Value, cancellationToken);
 
+        // El saldo a favor no puede quedar negativo: si lo que la orden dejó a favor ya lo consumió otra compra sin
+        // back-link a sus pagos, la reversa saca más de lo que recupera.
+        var balanceAfter = supplier.CreditBalance + await _supplierPaymentOrderService.ReversalCreditDeltaAsync(
+            payments.Where(p => p.Status == PurchasePaymentStatus.Active), companyId, cancellationToken);
+        if (balanceAfter < 0m)
+            return Result.Failure(CancelSupplierPaymentOrderErrors.CreditAlreadyConsumed(-balanceAfter));
+
         // Si algún medio fue en efectivo hay que reintegrarlo a la caja; el resto no movió efectivo.
         // Exige caja propia (drawer asignado) o permiso CashDrawerViewAll.
         CashSession? session = null;

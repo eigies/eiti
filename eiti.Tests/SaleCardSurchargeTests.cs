@@ -199,23 +199,6 @@ public sealed class SaleCardSurchargeTests
         sale.CardSurchargeTotal.Should().Be(11060m);
     }
 
-    // Anular por la edición conserva los pagos tal cual: el recargo de la venta tiene que seguir siendo el
-    // que traen (antes volvía a 0 y la venta anulada quedaba con un pago con recargo y sin recargo propio).
-    [Fact]
-    public async Task Cancelling_through_update_keeps_the_card_surcharge_of_the_kept_payments()
-    {
-        var card = SaleCardPayment.Charge(_moura, 3, 60000m).CreatePayment(null);
-        var sale = Sale.Create(_companyId, _branch.Id, null, false, SaleStatus.OnHold,
-            [SaleDetail.Create(_battery.Id, 1, _battery.Price)], [card], cardSurchargeTotal: 6636m);
-        _stock.Reserve(1);
-
-        var result = await UpdateHandler(sale).Handle(UpdateCommand(sale, SaleStatus.Cancel), CancellationToken.None);
-
-        result.IsSuccess.Should().BeTrue(result.IsFailure ? result.Error.Description : string.Empty);
-        sale.SaleStatus.Should().Be(SaleStatus.Cancel);
-        sale.CardSurchargeTotal.Should().Be(6636m);
-    }
-
     private CreateSaleCommand CreateCommand(SaleStatus status, params CreateSalePaymentItemRequest[] payments) =>
         new(_branch.Id.Value, null, (int)status, false, _drawerId.Value,
             [new CreateSaleDetailItemRequest(_battery.Id.Value, 1)], payments, []);
@@ -291,15 +274,11 @@ public sealed class SaleCardSurchargeTests
         var documents = new Mock<ISaleFiscalDocumentRepository>();
         documents.Setup(x => x.ListBySaleAsync(sale.Id, _companyId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(fiscalDocuments ?? []);
-        var creditNotes = new Mock<ICustomerCreditNoteRepository>();
-        creditNotes.Setup(x => x.ListBySaleAsync(_companyId.Value, sale.Id.Value, It.IsAny<CancellationToken>()))
-            .ReturnsAsync([]);
-
         return new UpdateSaleHandler(
             CurrentUser().Object, sales.Object, new Mock<ICustomerRepository>().Object, products.Object,
             stocks.Object, new Mock<IStockMovementRepository>().Object, new Mock<ICashDrawerRepository>().Object,
-            CashSessions().Object, new Mock<ISaleTransportAssignmentRepository>().Object, new Mock<IAddressRepository>().Object,
-            banks.Object, documents.Object, creditNotes.Object,
+            CashSessions().Object, new Mock<IAddressRepository>().Object,
+            banks.Object, documents.Object,
             new RetailDiscountPolicy(new Mock<ICompanyRepository>().Object), (unitOfWork ?? new Mock<IUnitOfWork>()).Object);
     }
 }
