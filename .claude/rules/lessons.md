@@ -1,5 +1,28 @@
 # Lessons Learned
 
+## El botón de anular compra no aparecía en compras pagadas, y el parche con una NC dejó la compra sin salida - 2026-11-12
+
+**Síntoma:** en Mataderos cargaron mal COMP-0218 (BATERIAS MATEO, carga parcial de una factura) y no encontraron cómo anularla. A ese proveedor le pagan por adelantado, así que el saldo a favor se aplicó solo al crearla y la compra **nació Pagada**.
+
+**Causa raíz:** `purchase-detail.component.html` mostraba "Cancelar compra" solo con `status === Active`. En julio el back empezó a permitir anular compras pagadas (con el modal que pregunta qué hacer con lo pagado: saldo a favor o revertir el pago), pero la condición del front quedó como estaba. El back y el modal estaban listos; el botón que llevaba a ellos, no.
+
+**Cómo escaló:** sin botón, el usuario "anuló" la compra con NCP-002 por el total, vinculada a COMP-0218. No había compras pendientes, así que el crédito fue a saldo a favor y COMP-0219 lo consumió al crearse, **sin back-link a la NC**. Desde ahí no había salida desde la app: anular la compra rechazaba por la NC vigente (`HasActiveCreditNote`, regla del 29/10) y anular la NC, por `CreditAlreadyConsumed`. Cada regla tenía razón por separado; juntas eran un callejón.
+
+**Fix:**
+- Front: el botón se muestra en cualquier compra no anulada.
+- Back: anular una compra (y en espejo una venta) puede anular en la misma operación las NC vigentes emitidas sobre ella, si el usuario lo confirma (`CancelLinkedCreditNotes`, por query string). Sin el flag se rechaza como antes, pero el mensaje nombra cada NC con su importe. El front reusa el ida y vuelta de `InvoiceReceiverChanged`: error → diálogo de confirmación → reintento con el flag, en detalle de compra, Gestión de Ventas y cuenta del cliente.
+- Diseño de la anulación combinada:
+  - Todo lo que puede fallar se resuelve antes de mutar: caja abierta (la anulación de cada NC deja su movimiento neutro), pagos o cobros a revertir y saldo final.
+  - Saldo final = saldo actual + lo que devuelven las imputaciones con back-link de cada NC − sus importes + lo que devuelve el documento en el modo elegido. Si da negativo, `InsufficientCreditForCreditNotes` y no se toca nada. En el caso Mateo cierra en 0.
+  - Las imputaciones de la NC sobre el mismo documento se excluyen de "lo pagado": las deshace la anulación de la nota, y contarlas dos veces habría devuelto la misma plata dos veces (en el chequeo y en el saldo).
+  - La lógica de anular una NC salió a `SupplierCreditNoteCancellation` / `CustomerCreditNoteCancellation` (preparar = leer, aplicar = mutar), usada por el handler de la NC y por `CancelPurchase` / `CancelSale`. Para "Revertir el pago" el chequeo usa `SupplierPaymentReversal.CreditDeltaAsync` / `CustomerPaymentReversal.CreditDeltaAsync`, la misma cuenta que la reversa.
+  - Al final, lo que queda a favor se imputa FIFO, también a las compras o ventas que la nota había saldado y ahora vuelven a pendiente. Para eso `ListPendingBySupplierAsync` suma las compras ya cargadas que en memoria están pendientes. El SQL ve el estado guardado, y una compra reabierta en la misma operación sigue Pagada en la base. Es el mismo criterio que ya usaba `ListPendingCcSalesByCustomerAsync`.
+  - `UpdateSale` → Cancel (solo API) mantiene el rechazo simple.
+
+**Patrón a recordar:**
+- Cuando el back amplía lo que permite una acción (anular compras pagadas), buscar en el front la condición que la muestra (`*ngIf` del botón, `canX` del componente) en el mismo cambio. Un botón oculto no lo detecta ningún test del back. El usuario no ve "no se puede": no ve nada, e improvisa con otra herramienta.
+- Dos reglas de bloqueo correctas por separado pueden formar un ciclo sin salida: "no se anula A con B vigente" + "no se anula B porque su crédito ya se usó". Al agregar una regla que rechaza, preguntarse cuál es el camino para salir de ese estado desde la app. Si no hay, el camino es hacer las dos cosas juntas y chequear el resultado combinado.
+
 ## Una NC sobrevivió a la venta que acreditaba: la 24KD se descontó dos veces - 2026-10-29
 
 **Síntoma:** el usuario reportó "la NCC-003 anula la NCC-002 pero le dio saldo a favor porque la registró como pago", culpando a un operador. LACTEOS BARRAZA (Baterías Soler) figuraba con **179.407,17 a favor** cuando en realidad **debía 15.592,83**: la diferencia eran 195.000 justos, el importe de NCC-003.
