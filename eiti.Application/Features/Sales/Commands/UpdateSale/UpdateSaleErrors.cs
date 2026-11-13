@@ -52,9 +52,9 @@ public static class UpdateSaleErrors
         "Sales.Update.CannotChargeCuentaCorriente",
         "Las ventas de Cuenta Corriente se cobran desde la cuenta del cliente, no desde esta pantalla.");
 
-    public static Error HasActiveCreditNote(IReadOnlyCollection<string> codes) => Error.Conflict(
-        "Sales.Update.HasActiveCreditNote",
-        codes.Count == 1
-            ? $"La venta tiene vigente la nota de crédito {codes.First()}. Anulala primero desde la cuenta corriente del cliente: si no, su crédito le queda a favor aunque la venta ya no exista."
-            : $"La venta tiene vigentes las notas de crédito {string.Join(", ", codes)}. Anulalas primero desde la cuenta corriente del cliente: si no, su crédito le queda a favor aunque la venta ya no exista.");
+    // Anular es CancelSale (el botón Anular): resuelve los cobros CC imputados, las NC vinculadas, el transporte y la
+    // nota de crédito fiscal. Por acá la venta quedaba anulada con todo eso vigente.
+    public static readonly Error CannotCancel = Error.Conflict(
+        "Sales.Update.CannotCancel",
+        "Las ventas no se anulan editándolas: usá Anular, que resuelve sus cobros, notas de crédito, transporte y factura.");
 }
