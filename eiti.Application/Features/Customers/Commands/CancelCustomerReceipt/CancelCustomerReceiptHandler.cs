@@ -65,6 +65,13 @@ public sealed class CancelCustomerReceiptHandler : IRequestHandler<CancelCustome
 
         var payments = await _customerPaymentRepository.ListByReceiptAsync(receipt.Id, companyId.Value, cancellationToken);
 
+        // El saldo a favor no puede quedar negativo: si lo que el recibo dejó a favor ya lo consumió otra venta sin
+        // back-link a sus cobros, la reversa saca más de lo que recupera.
+        var balanceAfter = customer.CreditBalance + await _customerReceiptService.ReversalCreditDeltaAsync(
+            payments.Where(p => p.Status == SaleCcPaymentStatus.Active), companyId, cancellationToken);
+        if (balanceAfter < 0m)
+            return Result.Failure(CancelCustomerReceiptErrors.CreditAlreadyConsumed(-balanceAfter));
+
         // Si algún medio fue en efectivo hay que sacarlo de la caja; para el resto la reversa neutra (None)
         // se registra en una caja abierta si la hay, para trazabilidad.
         CashSession? session;

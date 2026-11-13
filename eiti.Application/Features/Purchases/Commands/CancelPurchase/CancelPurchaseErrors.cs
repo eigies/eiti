@@ -33,6 +33,12 @@ public static class CancelPurchaseErrors
         "Purchases.Cancel.InsufficientCreditForCreditNotes",
         $"No se anuló nada: anular la compra con {(codes.Count == 1 ? "la nota de crédito" : "las notas de crédito")} {string.Join(", ", codes)} dejaría el saldo a favor del proveedor en negativo (faltan {Money(missing)}). Su crédito ya se usó y lo que devuelve la anulación de la compra no alcanza para cubrirlo.");
 
+    // "Revertir el pago" sin NC: lo que el pago dejó a favor ya lo consumió otra compra sin back-link al pago, y la
+    // reversa dejaría el saldo negativo. "Saldo a favor" siempre se puede: devuelve lo pagado sin tocar el pago.
+    public static Error CreditAlreadyConsumed(decimal missing) => Error.Conflict(
+        "Purchases.Cancel.CreditAlreadyConsumed",
+        $"No se anuló nada: revertir el pago dejaría el saldo a favor del proveedor en negativo (faltan {Money(missing)}), porque lo que el pago dejó a favor ya se usó en otras compras. Podés anular la compra eligiendo \"Saldo a favor\".");
+
     // Anular una nota registra un movimiento (neutro) en la caja, igual que anularla sola desde la cuenta del proveedor.
     public static readonly Error CreditNoteNoCashSessionOpen = Error.Conflict(
         "Purchases.Cancel.CreditNoteNoCashSessionOpen",

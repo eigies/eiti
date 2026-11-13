@@ -374,6 +374,76 @@ public sealed class CancelPurchaseHandlerTests
         ctx.Supplier.CreditBalance.Should().Be(380m);
     }
 
+    // ── "Revertir el pago" cuando lo que el pago dejó a favor ya se usó ─────────
+    // Un pago de 800 saldó la compra (500) y dejó 300 a favor; otra compra los consumió al crearse, sin back-link al
+    // pago. Revertir el pago devuelve los 500 imputados y saca los 800: el saldo quedaría en −300.
+
+    private static (PurchaseCancelContext Ctx, SupplierPayment Payment, Purchase Other) PaymentWithLeftoverUsed()
+    {
+        var ctx = new PurchaseCancelContext();
+        var payment = ctx.AddSupplierPayment(PurchasePaymentMethod.Cash, 800m);
+        ctx.ApplyCredit(ctx.Purchase, 500m, supplierPaymentId: payment.Id);
+        var other = ctx.AddPurchase("COMP-0012", 300m);
+        ctx.ApplyCredit(other, 300m);
+        ctx.Supplier.CreditBalance.Should().Be(0m);
+        return (ctx, payment, other);
+    }
+
+    [Fact]
+    public async Task Handle_RevertirElPago_ConElSobranteYaUsado_RechazaYNoTocaNada()
+    {
+        var (ctx, payment, other) = PaymentWithLeftoverUsed();
+
+        var result = await ctx.Handler.Handle(
+            new CancelPurchaseCommand(ctx.Purchase.Id, PurchaseCancellationRefundMode.ReversePayments), CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("Purchases.Cancel.CreditAlreadyConsumed");
+        result.Error.Description.Should().Contain("300,00").And.Contain("Saldo a favor");
+        payment.Status.Should().Be(PurchasePaymentStatus.Active);
+        ctx.Purchase.Status.Should().Be(PurchaseStatus.Paid);
+        ctx.Purchase.Payments.Should().OnlyContain(p => p.Status == PurchasePaymentStatus.Active);
+        other.Payments.Should().OnlyContain(p => p.Status == PurchasePaymentStatus.Active);
+        ctx.Stock.OnHandQuantity.Should().Be(5);
+        ctx.Supplier.CreditBalance.Should().Be(0m);
+        ctx.Session.Movements.Should().NotContain(m => m.Type == CashMovementType.PurchasePaymentCancellation);
+        ctx.UnitOfWork.Verify(x => x.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    // La salida desde la app: anular la compra con "Saldo a favor" (lo pagado vuelve al saldo, el pago queda vigente).
+    [Fact]
+    public async Task Handle_SaldoAFavor_ConElSobranteDelPagoYaUsado_SeAnula()
+    {
+        var (ctx, payment, _) = PaymentWithLeftoverUsed();
+
+        var result = await ctx.Handler.Handle(
+            new CancelPurchaseCommand(ctx.Purchase.Id, PurchaseCancellationRefundMode.Credit), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue(result.IsFailure ? result.Error.Description : string.Empty);
+        payment.Status.Should().Be(PurchasePaymentStatus.Active);
+        ctx.Purchase.Status.Should().Be(PurchaseStatus.Cancelled);
+        ctx.Supplier.CreditBalance.Should().Be(500m);
+    }
+
+    // Con el sobrante todavía a favor, la reversa cierra en cero.
+    [Fact]
+    public async Task Handle_RevertirElPago_ConElSobranteTodaviaAFavor_SeAnula()
+    {
+        var ctx = new PurchaseCancelContext();
+        var payment = ctx.AddSupplierPayment(PurchasePaymentMethod.Cash, 800m);
+        ctx.ApplyCredit(ctx.Purchase, 500m, supplierPaymentId: payment.Id);
+
+        var result = await ctx.Handler.Handle(
+            new CancelPurchaseCommand(ctx.Purchase.Id, PurchaseCancellationRefundMode.ReversePayments), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue(result.IsFailure ? result.Error.Description : string.Empty);
+        payment.Status.Should().Be(PurchasePaymentStatus.Cancelled);
+        ctx.Purchase.Status.Should().Be(PurchaseStatus.Cancelled);
+        ctx.Supplier.CreditBalance.Should().Be(0m);
+        ctx.Session.Movements.Should().ContainSingle(m =>
+            m.Type == CashMovementType.PurchasePaymentCancellation && m.Amount == 800m);
+    }
+
     // COMP-0218 (2 × 115.945,43) pagada entera con saldo a favor al crearse, sin back-link; NCP-002 por el total sobre
     // ella; su crédito quedó a favor y COMP-0219 lo consumió al crearse, también sin back-link. Saldo a favor: 0.
     private static (PurchaseCancelContext Ctx, SupplierCreditNote Note, Purchase Comp0219) MateoCase(bool withOpenSession = true)

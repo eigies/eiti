@@ -64,6 +64,13 @@ public sealed class CancelCustomerPaymentHandler : IRequestHandler<CancelCustome
         if (reversible.IsFailure)
             return reversible;
 
+        // El saldo a favor no puede quedar negativo: si lo que el cobro dejó a favor ya lo consumió otra venta sin
+        // back-link al cobro, la reversa saca más de lo que recupera.
+        var balanceAfter = customer.CreditBalance
+            + await _customerReceiptService.ReversalCreditDeltaAsync([payment], companyId, cancellationToken);
+        if (balanceAfter < 0m)
+            return Result.Failure(CancelCustomerPaymentErrors.CreditAlreadyConsumed(-balanceAfter));
+
         // Para efectivo hay que reintegrar a la caja; otros métodos no movieron efectivo.
         CashSession? session = null;
         if (payment.Method == SalePaymentMethod.Cash)

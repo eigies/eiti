@@ -135,9 +135,14 @@ public sealed class CancelPurchaseHandler : IRequestHandler<CancelPurchaseComman
                 noteCancellations.Add(await SupplierCreditNoteCancellation.PrepareAsync(
                     note, _purchaseRepository, companyId.Value, cancellationToken));
             }
+        }
 
-            // El saldo a favor no puede quedar negativo: lo que sacan las notas (su importe menos lo que vuelve al
-            // desimputarlas) tiene que alcanzar con el saldo actual más lo que devuelve la compra en el modo elegido.
+        // El saldo a favor no puede quedar negativo. Lo que sacan las notas (su importe menos lo que vuelve al
+        // desimputarlas) y, en "Revertir el pago", cada pago revertido (su importe menos lo que vuelve de sus
+        // imputaciones: lo que dejó a favor puede haberlo consumido otra compra sin back-link) tiene que alcanzar con
+        // el saldo actual más lo que devuelve la compra en el modo elegido.
+        if (linkedNotes.Count > 0 || reversePayments)
+        {
             var creditFromPurchase = !hasPayments
                 ? 0m
                 : reversePayments
@@ -145,8 +150,9 @@ public sealed class CancelPurchaseHandler : IRequestHandler<CancelPurchaseComman
                     : paidTotal;
             var balanceAfter = supplier!.CreditBalance + noteCancellations.Sum(c => c.CreditDelta) + creditFromPurchase;
             if (balanceAfter < 0m)
-                return Result.Failure(CancelPurchaseErrors.InsufficientCreditForCreditNotes(
-                    linkedNotes.Select(note => note.Code).ToList(), -balanceAfter));
+                return Result.Failure(linkedNotes.Count > 0
+                    ? CancelPurchaseErrors.InsufficientCreditForCreditNotes(linkedNotes.Select(note => note.Code).ToList(), -balanceAfter)
+                    : CancelPurchaseErrors.CreditAlreadyConsumed(-balanceAfter));
         }
 
         // ── Mutaciones ──

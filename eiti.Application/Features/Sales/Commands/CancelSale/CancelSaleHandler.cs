@@ -184,6 +184,15 @@ public sealed class CancelSaleHandler : IRequestHandler<CancelSaleCommand, Resul
                 return Result.Failure(CancelSaleErrors.InsufficientCreditForCreditNotes(
                     linkedNotes.Select(note => note.Code).ToList(), -balanceAfter));
         }
+        else if (cobros is not null)
+        {
+            // "Anular los pagos" sin NC: el saldo a favor tampoco puede quedar negativo. Lo que un cobro dejó a favor
+            // puede haberlo consumido otra venta sin back-link al cobro, y entonces la reversa saca más de lo que
+            // recupera.
+            var missing = await cobros.MissingCreditAsync(sale.CustomerId, _saleRepository, companyId, cancellationToken);
+            if (missing > 0m)
+                return Result.Failure(CancelSaleErrors.CreditAlreadyConsumed(missing));
+        }
 
         // ── Mutaciones ──
 
@@ -464,6 +473,23 @@ public sealed class CancelSaleHandler : IRequestHandler<CancelSaleCommand, Resul
             foreach (var (payment, _) in Payments)
                 delta += await CustomerPaymentReversal.CreditDeltaAsync(payment, saleRepository, companyId, cancellationToken);
             return delta;
+        }
+
+        // Lo que le faltaría al saldo a favor de cada cliente para revertir sus cobros sin quedar negativo (0 si
+        // alcanza). Cada cobro mueve el saldo de su propio cliente; el saldo a favor consumido sin cobro detrás vuelve
+        // al cliente de la venta.
+        public async Task<decimal> MissingCreditAsync(
+            CustomerId? saleCustomerId, ISaleRepository saleRepository, CompanyId companyId, CancellationToken cancellationToken)
+        {
+            var missing = 0m;
+            foreach (var byPayer in Payments.GroupBy(p => p.Payer.Id))
+            {
+                var balance = byPayer.First().Payer.CreditBalance + (byPayer.Key == saleCustomerId ? UnlinkedCredit : 0m);
+                foreach (var (payment, _) in byPayer)
+                    balance += await CustomerPaymentReversal.CreditDeltaAsync(payment, saleRepository, companyId, cancellationToken);
+                missing += Math.Max(0m, -balance);
+            }
+            return missing;
         }
     }
 

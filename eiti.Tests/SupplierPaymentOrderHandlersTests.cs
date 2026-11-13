@@ -631,6 +631,92 @@ public sealed class SupplierPaymentOrderHandlersTests
         _supplier.CreditBalance.Should().Be(0m);
     }
 
+    // ── Sobrante del pago ya usado ───────────────────────────────────────────
+    // Lo que un pago deja a favor lo puede consumir otra compra al crearse, sin back-link al pago. Anular el pago saca
+    // su importe entero del saldo pero solo recupera lo imputado con su back-link: el saldo quedaría negativo en
+    // silencio. Se rechaza antes de tocar nada, igual que anular una NC cuyo crédito ya se usó.
+
+    // Otra compra consume saldo a favor al crearse (CreatePurchaseHandler): imputación sin back-link a ningún pago.
+    private Purchase ConsumeCreditWithNewPurchase(string code, decimal amount)
+    {
+        var purchase = AddPurchase(code, amount);
+        _supplier.ConsumeCredit(amount);
+        purchase.AddPayment(PurchasePayment.Create(
+            PurchasePaymentMethod.SupplierCredit, amount, DateTime.UtcNow, null, "Saldo a favor aplicado automáticamente"));
+        return purchase;
+    }
+
+    [Fact]
+    public async Task AnularPago_CuyoSobranteYaUsoOtraCompra_SeRechazaYNoTocaNada()
+    {
+        var compra = AddPurchase("COMP-0112", 60_000m);
+        (await SingleHandler().Handle(
+            new AddSupplierPaymentCommand(_supplier.Id, (int)PurchasePaymentMethod.Cash, 100_000m, new DateTime(2026, 10, 2), null, null, null),
+            CancellationToken.None)).IsSuccess.Should().BeTrue();
+        _supplier.CreditBalance.Should().Be(40_000m);
+        var otra = ConsumeCreditWithNewPurchase("COMP-0120", 40_000m);
+        var payment = _payments.Single();
+        var movimientos = _session.Movements.Count;
+
+        var result = await CancelPaymentHandler().Handle(
+            new CancelSupplierPaymentCommand(_supplier.Id, payment.Id), CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("Suppliers.CancelPayment.CreditAlreadyConsumed");
+        result.Error.Description.Should().Contain("40.000,00");
+        payment.Status.Should().Be(PurchasePaymentStatus.Active);
+        _orders.Single().Status.Should().Be(PurchasePaymentStatus.Active);
+        compra.PendingAmount.Should().Be(0m);
+        otra.PendingAmount.Should().Be(0m);
+        _supplier.CreditBalance.Should().Be(0m);
+        _session.Movements.Should().HaveCount(movimientos, "no se reintegra el efectivo de un pago que no se anuló");
+        _unitOfWork.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once, "solo el alta del pago");
+    }
+
+    // El sobrante se usó, pero el proveedor tiene otro saldo a favor que lo cubre: la reversa no deja el saldo negativo.
+    [Fact]
+    public async Task AnularPago_CuyoSobranteYaSeUso_ConOtroSaldoQueAlcanza_SeAnula()
+    {
+        var compra = AddPurchase("COMP-0112", 60_000m);
+        (await SingleHandler().Handle(
+            new AddSupplierPaymentCommand(_supplier.Id, (int)PurchasePaymentMethod.BankTransfer, 100_000m, new DateTime(2026, 10, 2), null, null, null),
+            CancellationToken.None)).IsSuccess.Should().BeTrue();
+        ConsumeCreditWithNewPurchase("COMP-0120", 40_000m);
+        _supplier.AddCredit(50_000m); // p. ej. una NC posterior
+
+        var result = await CancelPaymentHandler().Handle(
+            new CancelSupplierPaymentCommand(_supplier.Id, _payments.Single().Id), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        compra.PendingAmount.Should().Be(60_000m);
+        _supplier.CreditBalance.Should().Be(10_000m);
+    }
+
+    [Fact]
+    public async Task AnularOrden_CuyoSobranteYaUsoOtraCompra_SeRechazaYNoTocaNada()
+    {
+        var compra = AddPurchase("COMP-0112", 100_000m);
+        (await OrderHandler().Handle(
+            new AddSupplierPaymentOrderCommand(_supplier.Id, new DateTime(2026, 10, 2), null,
+                [Line(PurchasePaymentMethod.BankTransfer, 80_000m), Line(PurchasePaymentMethod.Cash, 50_000m)]),
+            CancellationToken.None)).IsSuccess.Should().BeTrue();
+        _supplier.CreditBalance.Should().Be(30_000m);
+        ConsumeCreditWithNewPurchase("COMP-0120", 30_000m);
+        var order = _orders.Single();
+
+        var result = await CancelOrderHandler().Handle(
+            new CancelSupplierPaymentOrderCommand(_supplier.Id, order.Id), CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("Suppliers.CancelPaymentOrder.CreditAlreadyConsumed");
+        result.Error.Description.Should().Contain("30.000,00");
+        order.Status.Should().Be(PurchasePaymentStatus.Active);
+        _payments.Should().OnlyContain(p => p.Status == PurchasePaymentStatus.Active);
+        compra.PendingAmount.Should().Be(0m);
+        _supplier.CreditBalance.Should().Be(0m);
+        _session.Movements.Should().NotContain(m => m.Type == CashMovementType.PurchasePaymentCancellation);
+    }
+
     // ── Extracto ─────────────────────────────────────────────────────────────
 
     private sealed class FixedTime(DateTimeOffset now) : TimeProvider

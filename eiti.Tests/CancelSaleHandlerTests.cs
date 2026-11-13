@@ -163,6 +163,64 @@ public sealed class CancelSaleHandlerTests
         ctx.Customer.CreditBalance.Should().Be(0m);
     }
 
+    // ── "Anular los pagos" cuando lo que el cobro dejó a favor ya se usó ────────
+    // Un cobro de 80.000 imputó 50.000 a la venta y dejó 30.000 a favor; otra venta los consumió sin back-link al
+    // cobro. Revertirlo devuelve los 50.000 imputados y saca los 80.000: el saldo quedaría en −30.000.
+
+    private static (CcCancelContext Ctx, Sale Sale, CustomerPayment Payment) CobroWithLeftover()
+    {
+        var ctx = new CcCancelContext();
+        var sale = ctx.CreateCcSale(200000m);
+        var payment = CustomerPayment.Create(
+            ctx.CompanyId.Value, ctx.Customer.Id.Value, ctx.BranchId.Value, SalePaymentMethod.Transfer,
+            80000m, DateTime.UtcNow, null, null, ctx.UserId.Value);
+        ctx.Customer.AddCredit(80000m);
+        ctx.Customer.ConsumeCredit(50000m);
+        sale.ApplyCustomerCredit(50000m, DateTime.UtcNow, payment.Id, "Saldo a favor aplicado automáticamente");
+        ctx.CustomerPaymentRepository
+            .Setup(x => x.GetByIdAsync(payment.Id, ctx.CompanyId.Value, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(payment);
+        return (ctx, sale, payment);
+    }
+
+    [Fact]
+    public async Task Handle_ReversePayments_ConElSobranteDelCobroYaUsado_RechazaYNoTocaNada()
+    {
+        var (ctx, sale, _) = CobroWithLeftover();
+        var other = ctx.CreateCcSale(30000m);
+        ctx.ApplyCredit(other, 30000m);
+
+        var result = await ctx.Handler.Handle(
+            new CancelSaleCommand(sale.Id.Value, CcCancellationRefundMode.ReversePayments), CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("Sales.Cancel.CreditAlreadyConsumed");
+        result.Error.Description.Should().Contain("30.000,00").And.Contain("Saldo a favor");
+        ctx.CustomerReceiptService.Verify(x => x.ReversePaymentAsync(
+            It.IsAny<CustomerPayment>(), It.IsAny<Customer>(), It.IsAny<CashSession?>(), It.IsAny<CompanyId>(),
+            It.IsAny<UserId>(), It.IsAny<CancellationToken>()), Times.Never);
+        sale.SaleStatus.Should().Be(SaleStatus.OnHold);
+        sale.CcPayments.Should().OnlyContain(p => p.Status == SaleCcPaymentStatus.Active);
+        ctx.StockOf(sale).ReservedQuantity.Should().Be(1);
+        ctx.Customer.CreditBalance.Should().Be(0m);
+        ctx.UnitOfWork.Verify(x => x.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    // Con el sobrante todavía a favor, la reversa cierra en cero: se anula.
+    [Fact]
+    public async Task Handle_ReversePayments_ConElSobranteDelCobroTodaviaAFavor_SeAnula()
+    {
+        var (ctx, sale, payment) = CobroWithLeftover();
+
+        var result = await ctx.Handler.Handle(
+            new CancelSaleCommand(sale.Id.Value, CcCancellationRefundMode.ReversePayments), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue(result.IsFailure ? result.Error.Description : string.Empty);
+        ctx.CustomerReceiptService.Verify(x => x.ReversePaymentAsync(
+            payment, ctx.Customer, It.IsAny<CashSession?>(), ctx.CompanyId, ctx.UserId, It.IsAny<CancellationToken>()), Times.Once);
+        sale.SaleStatus.Should().Be(SaleStatus.Cancel);
+    }
+
     // ── Nota de crédito vigente vinculada a la venta ─────────────────────────────
     // Caso real (LACTEOS BARRAZA, 29/10): MAT-3844 tenía vigente la NCC-003 por la 24KD que el cliente cambió.
     // Se anuló la venta y se rehízo sin la 24KD: lo que la NC había imputado volvió como saldo a favor y la 24KD
@@ -399,6 +457,10 @@ public sealed class CancelSaleHandlerTests
                 .Setup(x => x.ListByCreditNoteIdAsync(CompanyId, It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync((CompanyId _, Guid noteId, CancellationToken _) =>
                     _sales.Where(s => s.CcPayments.Any(p => p.CreditNoteId == noteId)).ToList());
+            SaleRepository
+                .Setup(x => x.ListByCustomerPaymentIdAsync(CompanyId, It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync((CompanyId _, Guid paymentId, CancellationToken _) =>
+                    _sales.Where(s => s.CcPayments.Any(p => p.CustomerPaymentId == paymentId)).ToList());
 
             var drawer = CashDrawer.Create(CompanyId, BranchId, "Caja 1");
             Session = CashSession.Open(CompanyId, BranchId, drawer.Id, UserId, 0m, null);
