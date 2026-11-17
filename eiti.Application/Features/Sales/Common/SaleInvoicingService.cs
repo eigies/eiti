@@ -155,8 +155,10 @@ public sealed class SaleInvoicingService : ISaleInvoicingService
             RequestedType: FiscalRequestedDocumentType.Auto,
             Receiver: BuildReceiver(customer),
             Amounts: BuildAmounts(sale, requestedTotal),
-            // Fecha de negocio (día argentino), no la UTC: lo facturado después de las 21 salía con el día siguiente.
-            Date: DateOnly.FromDateTime(BusinessCalendar.ToBusinessDate(sale.CreatedAt)),
+            // La fecha de emisión, en el día argentino (no el UTC: después de las 21 salía con el día siguiente).
+            // No la de la venta: al facturar después, ARCA rechaza (10016) una fecha anterior a la de la última
+            // factura del punto de venta, y para productos solo acepta hasta 5 días atrás. Decisión del dueño 17/11.
+            Date: DateOnly.FromDateTime(BusinessCalendar.ToBusinessDate(DateTime.UtcNow)),
             // Se factura en el punto de venta de la sucursal que vende. Si es un re-envío de un intento
             // en vuelo y la sucursal ya no tiene uno, el servicio igual lo encuentra por su RequestId.
             PointOfSale: branch?.FiscalPointOfSale?.Number);
