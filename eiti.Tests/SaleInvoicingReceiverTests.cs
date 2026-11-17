@@ -307,6 +307,26 @@ public sealed class SaleInvoicingReceiverTests
         sales.Verify(x => x.AddAsync(It.IsAny<Sale>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
+    [Fact]
+    public async Task The_invoice_is_dated_on_the_local_business_day_not_the_utc_day()
+    {
+        // 16/11 21:59 en Argentina son las 00:59 UTC del 17/11: la factura sale con fecha 16/11. Con la fecha
+        // UTC, todo lo facturado después de las 21 salía con el día siguiente (y a fin de mes, en otro período).
+        var customer = Customer(IvaCondition.ConsumidorFinal, taxId: null);
+        var sale = Sale(customer);
+        typeof(eiti.Domain.Sales.Sale).GetProperty(nameof(eiti.Domain.Sales.Sale.CreatedAt))!
+            .SetValue(sale, new DateTime(2026, 11, 17, 0, 59, 0, DateTimeKind.Utc));
+        var fiscal = new Mock<IFiscalizationService>();
+        fiscal.SetupGet(x => x.IsEnabled).Returns(true);
+        fiscal.Setup(x => x.RequestDocumentAsync(It.IsAny<FiscalDocumentRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new FiscalDocumentResult(FiscalDocumentOutcome.Unavailable, ErrorMessage: "timeout"));
+
+        await InvoicingService(fiscal, customer, [], []).InvoiceAsync(sale, CancellationToken.None);
+
+        fiscal.Verify(x => x.RequestDocumentAsync(
+            It.Is<FiscalDocumentRequest>(r => r.Date == new DateOnly(2026, 11, 16)), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
     private Customer Customer(IvaCondition? condition, string? taxId) =>
         eiti.Domain.Customers.Customer.Create(_companyId, "Juan", "Perez", null, taxId: taxId, ivaCondition: condition);
 

@@ -1,3 +1,4 @@
+using eiti.Application.Common;
 using eiti.Application.Abstractions.Repositories;
 using eiti.Application.Abstractions.Services;
 using eiti.Domain.Branches;
@@ -154,7 +155,8 @@ public sealed class SaleInvoicingService : ISaleInvoicingService
             RequestedType: FiscalRequestedDocumentType.Auto,
             Receiver: BuildReceiver(customer),
             Amounts: BuildAmounts(sale, requestedTotal),
-            Date: DateOnly.FromDateTime(sale.CreatedAt),
+            // Fecha de negocio (día argentino), no la UTC: lo facturado después de las 21 salía con el día siguiente.
+            Date: DateOnly.FromDateTime(BusinessCalendar.ToBusinessDate(sale.CreatedAt)),
             // Se factura en el punto de venta de la sucursal que vende. Si es un re-envío de un intento
             // en vuelo y la sucursal ya no tiene uno, el servicio igual lo encuentra por su RequestId.
             PointOfSale: branch?.FiscalPointOfSale?.Number);
@@ -383,7 +385,7 @@ public sealed class SaleInvoicingService : ISaleInvoicingService
             RequestedType: type,
             Receiver: associatedPrinted.Receiver,
             Amounts: associatedPrinted.Amounts,
-            Date: DateOnly.FromDateTime(DateTime.UtcNow),
+            Date: DateOnly.FromDateTime(BusinessCalendar.ToBusinessDate(DateTime.UtcNow)),
             PointOfSale: associatedPrinted.PointOfSale,
             AssociatedDocument: new FiscalAssociatedDocument(
                 associatedPrinted.Type,
