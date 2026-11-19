@@ -41,15 +41,17 @@ public sealed class AuditBehavior<TRequest, TResponse> : IPipelineBehavior<TRequ
             ? await TryCaptureBeforeAsync(request, companyId.Value, cancellationToken)
             : null;
 
+        // Lo que se registra de un comando que ya corrió no depende de que el navegador siga esperando: con el
+        // token del pedido, uno abandonado perdía su auditoría (la venta MAT-4194 quedó sin rastro de quién la creó).
         try
         {
             var response = await next();
             var (succeeded, errorCode) = InspectResult(response);
             var afterJson = succeeded && companyId is not null
-                ? await TryCaptureAfterAsync(request, response, companyId.Value, cancellationToken)
+                ? await TryCaptureAfterAsync(request, response, companyId.Value, CancellationToken.None)
                 : null;
 
-            await TryWriteAsync(request, succeeded, errorCode, beforeJson, afterJson, cancellationToken);
+            await TryWriteAsync(request, succeeded, errorCode, beforeJson, afterJson);
             return response;
         }
         catch (Exception ex)
@@ -59,8 +61,7 @@ public sealed class AuditBehavior<TRequest, TResponse> : IPipelineBehavior<TRequ
                 succeeded: false,
                 errorCode: $"Exception.{ex.GetType().Name}",
                 beforeJson,
-                afterJson: null,
-                cancellationToken);
+                afterJson: null);
             throw;
         }
     }
@@ -110,8 +111,7 @@ public sealed class AuditBehavior<TRequest, TResponse> : IPipelineBehavior<TRequ
         bool succeeded,
         string? errorCode,
         string? beforeJson,
-        string? afterJson,
-        CancellationToken cancellationToken)
+        string? afterJson)
     {
         try
         {
@@ -133,7 +133,7 @@ public sealed class AuditBehavior<TRequest, TResponse> : IPipelineBehavior<TRequ
                 afterJson,
                 DateTime.UtcNow);
 
-            await _auditLogWriter.WriteAsync(entry, cancellationToken);
+            await _auditLogWriter.WriteAsync(entry, CancellationToken.None);
         }
         catch
         {

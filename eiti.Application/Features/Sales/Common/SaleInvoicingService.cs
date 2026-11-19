@@ -1,4 +1,5 @@
 using eiti.Application.Common;
+using eiti.Application.Abstractions.Data;
 using eiti.Application.Abstractions.Repositories;
 using eiti.Application.Abstractions.Services;
 using eiti.Domain.Branches;
@@ -22,6 +23,13 @@ public interface ISaleInvoicingService
 
     /// <summary>Emite (o reintenta) la factura de la venta. No lanza: informa por el resultado.</summary>
     Task<SaleInvoicingOutcome> InvoiceAsync(Sale sale, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Cómo quedó la factura de una venta ya guardada, con la misma forma que devuelve <see cref="InvoiceAsync"/>,
+    /// sin pedir nada al servicio fiscal. Null si nunca se pidió. Lo usa el alta cuando el mismo pedido llega
+    /// dos veces y se devuelve la venta que ya existe.
+    /// </summary>
+    Task<SaleInvoicingOutcome?> GetInvoiceOutcomeAsync(Sale sale, CancellationToken cancellationToken);
 
     /// <summary>
     /// Emite la nota de crédito que anula la factura vigente de la venta, al receptor de ESA factura
@@ -72,19 +80,22 @@ public sealed class SaleInvoicingService : ISaleInvoicingService
     private readonly ICustomerRepository _customerRepository;
     private readonly ICompanyRepository _companyRepository;
     private readonly IBranchRepository _branchRepository;
+    private readonly IUnitOfWork _unitOfWork;
 
     public SaleInvoicingService(
         IFiscalizationService fiscalizationService,
         ISaleFiscalDocumentRepository fiscalDocuments,
         ICustomerRepository customerRepository,
         ICompanyRepository companyRepository,
-        IBranchRepository branchRepository)
+        IBranchRepository branchRepository,
+        IUnitOfWork unitOfWork)
     {
         _fiscalizationService = fiscalizationService;
         _fiscalDocuments = fiscalDocuments;
         _customerRepository = customerRepository;
         _companyRepository = companyRepository;
         _branchRepository = branchRepository;
+        _unitOfWork = unitOfWork;
     }
 
     public bool IsEnabled => _fiscalizationService.IsEnabled;
@@ -163,7 +174,7 @@ public sealed class SaleInvoicingService : ISaleInvoicingService
             // en vuelo y la sucursal ya no tiene uno, el servicio igual lo encuentra por su RequestId.
             PointOfSale: branch?.FiscalPointOfSale?.Number);
 
-        var result = await _fiscalizationService.RequestDocumentAsync(request, cancellationToken);
+        var result = await SendAsync(request, cancellationToken);
         return Apply(document, result);
     }
 
@@ -222,6 +233,20 @@ public sealed class SaleInvoicingService : ISaleInvoicingService
         await SaleFiscalDocumentEffects.ApplyAsync(creditNote, _fiscalDocuments, cancellationToken);
 
         return outcome;
+    }
+
+    public async Task<SaleInvoicingOutcome?> GetInvoiceOutcomeAsync(Sale sale, CancellationToken cancellationToken)
+    {
+        var view = SaleInvoicingView.From(
+            await _fiscalDocuments.ListBySaleAsync(sale.Id, sale.CompanyId, cancellationToken));
+
+        return view.Invoice is null
+            ? null
+            : new SaleInvoicingOutcome(
+                view.Status != SaleInvoicingStatus.Rejected,
+                view.Status,
+                view.Invoice,
+                view.Invoice.RejectionReason);
     }
 
     public async Task<SaleFiscalReceivers> GetFiscalReceiversAsync(Sale sale, CancellationToken cancellationToken)
@@ -395,8 +420,24 @@ public sealed class SaleInvoicingService : ISaleInvoicingService
                 associatedPrinted.Number,
                 associatedPrinted.Date));
 
-        var result = await _fiscalizationService.RequestDocumentAsync(request, cancellationToken);
+        var result = await SendAsync(request, cancellationToken);
         return Apply(document, result);
+    }
+
+    /// <summary>
+    /// Pide el comprobante con el intento YA guardado en trámite. Si el pedido se corta mientras el servicio fiscal
+    /// lo emite (el navegador abandona, el contenedor se reinicia), EITI conserva el intento con su RequestId: el
+    /// callback del servicio lo completa y el reintento re-envía el mismo pedido en vez de emitir otro. Guardándolo
+    /// recién con la respuesta, la Factura A 0010-00000106 (MAT-4194, 2026-11-19) quedó emitida en ARCA sin que
+    /// EITI tuviera ni el intento.
+    ///
+    /// Guarda todo lo pendiente del pedido, no solo el comprobante: al anular, la anulación queda confirmada antes
+    /// de pedir la NC, que es lo que ya promete el diseño (anular no queda rehén del servicio fiscal).
+    /// </summary>
+    private async Task<FiscalDocumentResult> SendAsync(FiscalDocumentRequest request, CancellationToken cancellationToken)
+    {
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+        return await _fiscalizationService.RequestDocumentAsync(request, cancellationToken);
     }
 
     /// <summary>

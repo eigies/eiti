@@ -91,8 +91,15 @@ public sealed class SaleConfiguration : IEntityTypeConfiguration<Sale>
         builder.Property(sale => sale.DeliveryAddress).HasMaxLength(500).IsRequired(false);
         builder.Property(sale => sale.ContactPhone).HasMaxLength(30).IsRequired(false);
         builder.Property(sale => sale.Notes).HasMaxLength(Sale.NotesMaxLength).IsRequired(false);
+        builder.Property(sale => sale.ClientRequestId).IsRequired(false);
 
         builder.HasIndex(sale => new { sale.CompanyId, sale.CreatedAt });
+
+        // Un intento de alta crea a lo sumo una venta. Si dos pedidos con el mismo id llegan a la vez y
+        // ninguno ve al otro antes de guardar, el índice frena al segundo (409 Common.DuplicateSubmission).
+        builder.HasIndex(sale => new { sale.CompanyId, sale.ClientRequestId })
+            .IsUnique()
+            .HasFilter("\"ClientRequestId\" IS NOT NULL");
 
         builder.HasOne<Company>()
             .WithMany()
