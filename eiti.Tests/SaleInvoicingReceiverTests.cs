@@ -1,3 +1,4 @@
+using eiti.Application.Common;
 using System.Net;
 using System.Text;
 using eiti.Application.Abstractions.Data;
@@ -305,6 +306,29 @@ public sealed class SaleInvoicingReceiverTests
         result.Error.Code.Should().Be("Sales.Create.InvoicingReceiverInvalid");
         result.Error.Description.Should().StartWith("Para hacer Factura A");
         sales.Verify(x => x.AddAsync(It.IsAny<Sale>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task A_late_invoice_is_dated_on_the_day_it_is_issued_not_the_sale_day()
+    {
+        // Facturar después una venta de hace días: con la fecha de la venta ARCA la rechaza (10016) si ya hay una
+        // factura posterior en el punto de venta. La fecha es la de emisión, en el día argentino (el corte UTC de
+        // las 21 lo cubre BusinessCalendarTests).
+        var customer = Customer(IvaCondition.ConsumidorFinal, taxId: null);
+        var sale = Sale(customer);
+        typeof(eiti.Domain.Sales.Sale).GetProperty(nameof(eiti.Domain.Sales.Sale.CreatedAt))!
+            .SetValue(sale, DateTime.UtcNow.AddDays(-10));
+        var before = DateOnly.FromDateTime(BusinessCalendar.ToBusinessDate(DateTime.UtcNow));
+        var fiscal = new Mock<IFiscalizationService>();
+        fiscal.SetupGet(x => x.IsEnabled).Returns(true);
+        fiscal.Setup(x => x.RequestDocumentAsync(It.IsAny<FiscalDocumentRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new FiscalDocumentResult(FiscalDocumentOutcome.Unavailable, ErrorMessage: "timeout"));
+
+        await InvoicingService(fiscal, customer, [], []).InvoiceAsync(sale, CancellationToken.None);
+        var after = DateOnly.FromDateTime(BusinessCalendar.ToBusinessDate(DateTime.UtcNow));
+
+        fiscal.Verify(x => x.RequestDocumentAsync(
+            It.Is<FiscalDocumentRequest>(r => r.Date >= before && r.Date <= after), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     private Customer Customer(IvaCondition? condition, string? taxId) =>
