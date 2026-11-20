@@ -331,6 +331,33 @@ public sealed class SaleInvoicingReceiverTests
             It.Is<FiscalDocumentRequest>(r => r.Date >= before && r.Date <= after), It.IsAny<CancellationToken>()), Times.Once);
     }
 
+    [Fact]
+    public async Task The_invoice_is_saved_in_progress_before_it_is_requested()
+    {
+        // MAT-4194 (2026-11-19): el pedido se cortó mientras el servicio fiscal emitía la factura. El comprobante
+        // recién se guardaba con la respuesta, así que ARCA emitió la A 0010-00000106 y EITI no tenía ni el
+        // intento. Guardado antes, el callback del servicio lo completa y el reintento re-envía el mismo pedido.
+        var customer = Customer(IvaCondition.ConsumidorFinal, taxId: null);
+        var sale = Sale(customer);
+        var added = new List<SaleFiscalDocument>();
+        var events = new List<string>();
+        var fiscal = new Mock<IFiscalizationService>();
+        fiscal.SetupGet(x => x.IsEnabled).Returns(true);
+        fiscal.Setup(x => x.RequestDocumentAsync(It.IsAny<FiscalDocumentRequest>(), It.IsAny<CancellationToken>()))
+            .Callback<FiscalDocumentRequest, CancellationToken>((request, _) => events.Add($"request {request.RequestId}"))
+            .ThrowsAsync(new OperationCanceledException());
+        var unitOfWork = new Mock<IUnitOfWork>();
+        unitOfWork.Setup(x => x.SaveChangesAsync(It.IsAny<CancellationToken>()))
+            .Callback(() => events.Add($"save {string.Join(",", added.Select(d => $"{d.RequestId}={d.Status}"))}"))
+            .ReturnsAsync(1);
+
+        var invoice = () => InvoicingService(fiscal, customer, [], added, unitOfWork).InvoiceAsync(sale, CancellationToken.None);
+
+        await invoice.Should().ThrowAsync<OperationCanceledException>();
+        var requestId = $"{sale.Id.Value}:inv:1";
+        events.Should().Equal($"save {requestId}={SaleInvoicingStatus.InProgress}", $"request {requestId}");
+    }
+
     private Customer Customer(IvaCondition? condition, string? taxId) =>
         eiti.Domain.Customers.Customer.Create(_companyId, "Juan", "Perez", null, taxId: taxId, ivaCondition: condition);
 
@@ -342,7 +369,8 @@ public sealed class SaleInvoicingReceiverTests
         Mock<IFiscalizationService> fiscal,
         Customer customer,
         IReadOnlyList<SaleFiscalDocument> existing,
-        List<SaleFiscalDocument> added)
+        List<SaleFiscalDocument> added,
+        Mock<IUnitOfWork>? unitOfWork = null)
     {
         var documents = new Mock<ISaleFiscalDocumentRepository>();
         documents.Setup(x => x.ListBySaleAsync(It.IsAny<SaleId>(), _companyId, It.IsAny<CancellationToken>())).ReturnsAsync(existing);
@@ -356,7 +384,7 @@ public sealed class SaleInvoicingReceiverTests
         branches.Setup(x => x.GetByIdAsync(_branch.Id, _companyId, It.IsAny<CancellationToken>())).ReturnsAsync(_branch);
 
         return new SaleInvoicingService(fiscal.Object, documents.Object, customers.Object,
-            new Mock<ICompanyRepository>().Object, branches.Object);
+            new Mock<ICompanyRepository>().Object, branches.Object, (unitOfWork ?? new Mock<IUnitOfWork>()).Object);
     }
 
     private sealed class StubHandler(HttpStatusCode status, string body) : HttpMessageHandler

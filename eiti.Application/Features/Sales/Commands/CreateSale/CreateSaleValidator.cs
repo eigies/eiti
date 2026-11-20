@@ -35,6 +35,9 @@ public sealed class CreateSaleValidator : AbstractValidator<CreateSaleCommand>
             .MaximumLength(Sale.GeneralDiscountReasonMaxLength)
             .WithMessage($"El motivo del descuento no puede superar los {Sale.GeneralDiscountReasonMaxLength} caracteres.");
 
+        RuleFor(x => x.ClientRequestId)
+            .NotEqual(Guid.Empty).WithMessage("El id del intento de alta no es válido.");
+
         RuleFor(x => x.Details)
             .NotEmpty().WithMessage("At least one sale detail is required.");
 

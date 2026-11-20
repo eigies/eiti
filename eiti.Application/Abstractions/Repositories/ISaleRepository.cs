@@ -17,6 +17,12 @@ public interface ISaleRepository
         SaleId id,
         CancellationToken cancellationToken = default);
 
+    // Venta que creó un intento de alta (ver Sale.ClientRequestId), con lo mismo que trae GetByIdAsync.
+    Task<Sale?> GetByClientRequestIdAsync(
+        CompanyId companyId,
+        Guid clientRequestId,
+        CancellationToken cancellationToken = default);
+
     void Remove(Sale sale);
 
     // Venta por código exacto (sin distinguir mayúsculas), de cualquier fecha y canal, incluida la

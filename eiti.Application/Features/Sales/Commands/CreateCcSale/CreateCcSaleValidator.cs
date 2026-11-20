@@ -17,6 +17,9 @@ public sealed class CreateCcSaleValidator : AbstractValidator<CreateCcSaleComman
         RuleFor(x => x.CustomerId)
             .NotEmpty().WithMessage("Customer id is required for Cuenta Corriente sales.");
 
+        RuleFor(x => x.ClientRequestId)
+            .NotEqual(Guid.Empty).WithMessage("El id del intento de alta no es válido.");
+
         RuleFor(x => x.Details)
             .NotEmpty().WithMessage("At least one sale detail is required.");
 

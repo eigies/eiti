@@ -109,6 +109,18 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
         if (branchAccess.IsFailure)
             return Result<CreateSaleResponse>.Failure(branchAccess.Error);
 
+        // El mismo pedido puede llegar dos veces (Chrome reenvía el POST si la conexión se traba). Si este
+        // intento ya creó la venta se devuelve esa, antes de validar caja y stock: el reintento no tiene que
+        // fallar por algo que cambió después (una caja que se cerró) ni reservar stock otra vez.
+        if (request.ClientRequestId is Guid clientRequestId)
+        {
+            var existing = await _saleRepository.GetByClientRequestIdAsync(companyId, clientRequestId, cancellationToken);
+            if (existing is not null)
+            {
+                return Result<CreateSaleResponse>.Success(await BuildExistingSaleResponseAsync(existing, companyId, cancellationToken));
+            }
+        }
+
         var branch = await _branchRepository.GetByIdAsync(new BranchId(request.BranchId), companyId, cancellationToken);
         if (branch is null)
         {
@@ -349,6 +361,10 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
                 contactPhone: request.ContactPhone);
             sale.SetNotes(request.Notes);
             sale.TrackGeneralDiscount(previousPercent: 0m, _currentUserService.UserId?.Value, request.GeneralDiscountReason);
+            if (request.ClientRequestId is Guid requestId)
+            {
+                sale.AssignClientRequestId(requestId);
+            }
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
         {
@@ -522,59 +538,95 @@ public sealed class CreateSaleHandler : IRequestHandler<CreateSaleCommand, Resul
         await _saleRepository.AddAsync(sale, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
+        // La venta ya existe: lo que sigue no se corta aunque el navegador abandone el pedido. Cortarlo a mitad
+        // de la factura dejaba un comprobante emitido en ARCA que EITI nunca registraba (MAT-4194, 2026-11-19).
         var invoicing = await SaleInvoicingFlow.TryInvoiceAsync(
-            _saleInvoicingService, _unitOfWork, sale, request.RequestInvoicing, cancellationToken);
-
-        var customerAddress = await BuildCustomerAddress(customer, cancellationToken);
+            _saleInvoicingService, _unitOfWork, sale, request.RequestInvoicing, CancellationToken.None);
 
         return Result<CreateSaleResponse>.Success(
-            new CreateSaleResponse(
-                sale.Id.Value,
-                sale.Code,
-                sale.BranchId.Value,
-                sale.CustomerId?.Value,
-                customer?.FullName,
-                customer is null ? null : BuildCustomerDocument(customer),
-                customer?.TaxId,
-                customerAddress,
-                sale.DeliveryAddress,
-                sale.CashDrawerId?.Value,
-                sale.CashSessionId?.Value,
-                sale.HasDelivery,
-                sale.TransportAssignmentId?.Value,
-                (int)sale.SaleStatus,
-                sale.SaleStatus.ToString(),
-                sale.NoDeliverySurchargeTotal,
-                sale.TotalAmount,
-                sale.MonetaryPaidAmount,
-                sale.TradeInAmount,
-                sale.SettledAmount,
-                sale.PendingAmount,
-                sale.ChangeAmount,
-                sale.CreatedAt,
-                sale.PaidAt,
-                sale.UpdatedAt,
-                sale.IsModified,
-                sale.Details.Select(detail => new CreateSaleDetailItemResponse(
-                    detail.ProductId.Value,
-                    GetProductName(productMap, detail.ProductId.Value),
-                    GetProductBrand(productMap, detail.ProductId.Value),
-                    detail.Quantity,
-                    detail.UnitPrice,
-                    detail.DiscountPercent,
-                    detail.TotalAmount)).ToList(),
-                sale.Payments.Select(payment => new CreateSalePaymentItemResponse(
-                    (int)payment.Method,
-                    payment.Method.ToString(),
-                    payment.Amount,
-                    payment.Reference)).ToList(),
-                sale.TradeIns.Select(tradeIn => new CreateSaleTradeInItemResponse(
-                    tradeIn.ProductId.Value,
-                    GetProductName(productMap, tradeIn.ProductId.Value),
-                    GetProductBrand(productMap, tradeIn.ProductId.Value),
-                    tradeIn.Quantity,
-                    tradeIn.Amount)).ToList(),
-                CreateSaleInvoicingResponse.From(invoicing)));
+            await BuildResponseAsync(sale, customer, productMap, invoicing, CancellationToken.None));
+    }
+
+    // Reintento de un pedido que ya creó la venta: la misma respuesta que el alta, armada con lo guardado.
+    private async Task<CreateSaleResponse> BuildExistingSaleResponseAsync(
+        Sale sale,
+        CompanyId companyId,
+        CancellationToken cancellationToken)
+    {
+        var customer = sale.CustomerId is null
+            ? null
+            : await _customerRepository.GetByIdAsync(sale.CustomerId, companyId, cancellationToken);
+
+        var productIds = sale.Details.Select(detail => detail.ProductId)
+            .Concat(sale.TradeIns.Select(tradeIn => tradeIn.ProductId))
+            .Distinct()
+            .ToList();
+        var productMap = (await _productRepository.GetByIdsAsync(productIds, companyId, cancellationToken))
+            .ToDictionary(product => product.Id.Value);
+
+        var invoicing = _saleInvoicingService.IsEnabled
+            ? await _saleInvoicingService.GetInvoiceOutcomeAsync(sale, cancellationToken)
+            : null;
+
+        return await BuildResponseAsync(sale, customer, productMap, invoicing, cancellationToken);
+    }
+
+    private async Task<CreateSaleResponse> BuildResponseAsync(
+        Sale sale,
+        Customer? customer,
+        IDictionary<Guid, Product> productMap,
+        SaleInvoicingOutcome? invoicing,
+        CancellationToken cancellationToken)
+    {
+        var customerAddress = await BuildCustomerAddress(customer, cancellationToken);
+
+        return new CreateSaleResponse(
+            sale.Id.Value,
+            sale.Code,
+            sale.BranchId.Value,
+            sale.CustomerId?.Value,
+            customer?.FullName,
+            customer is null ? null : BuildCustomerDocument(customer),
+            customer?.TaxId,
+            customerAddress,
+            sale.DeliveryAddress,
+            sale.CashDrawerId?.Value,
+            sale.CashSessionId?.Value,
+            sale.HasDelivery,
+            sale.TransportAssignmentId?.Value,
+            (int)sale.SaleStatus,
+            sale.SaleStatus.ToString(),
+            sale.NoDeliverySurchargeTotal,
+            sale.TotalAmount,
+            sale.MonetaryPaidAmount,
+            sale.TradeInAmount,
+            sale.SettledAmount,
+            sale.PendingAmount,
+            sale.ChangeAmount,
+            sale.CreatedAt,
+            sale.PaidAt,
+            sale.UpdatedAt,
+            sale.IsModified,
+            sale.Details.Select(detail => new CreateSaleDetailItemResponse(
+                detail.ProductId.Value,
+                GetProductName(productMap, detail.ProductId.Value),
+                GetProductBrand(productMap, detail.ProductId.Value),
+                detail.Quantity,
+                detail.UnitPrice,
+                detail.DiscountPercent,
+                detail.TotalAmount)).ToList(),
+            sale.Payments.Select(payment => new CreateSalePaymentItemResponse(
+                (int)payment.Method,
+                payment.Method.ToString(),
+                payment.Amount,
+                payment.Reference)).ToList(),
+            sale.TradeIns.Select(tradeIn => new CreateSaleTradeInItemResponse(
+                tradeIn.ProductId.Value,
+                GetProductName(productMap, tradeIn.ProductId.Value),
+                GetProductBrand(productMap, tradeIn.ProductId.Value),
+                tradeIn.Quantity,
+                tradeIn.Amount)).ToList(),
+            CreateSaleInvoicingResponse.From(invoicing));
     }
 
     private static string? BuildCustomerDocument(Customer customer)

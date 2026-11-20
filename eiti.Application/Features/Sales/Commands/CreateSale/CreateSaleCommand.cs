@@ -26,7 +26,10 @@ public sealed record CreateSaleCommand(
     InvoiceLetter? InvoiceLetter = null,
     string? Notes = null,
     // Motivo opcional del descuento general; se guarda solo cuando el porcentaje cambia.
-    string? GeneralDiscountReason = null
+    string? GeneralDiscountReason = null,
+    // Id del intento de alta que genera el front. Si el mismo pedido llega dos veces, se devuelve la venta
+    // que creó el primero. Opcional: sin él la venta se crea como siempre.
+    Guid? ClientRequestId = null
 ) : IRequest<Result<CreateSaleResponse>>, IRequirePermissions
 {
     public IReadOnlyCollection<string> RequiredPermissions => [PermissionCodes.SalesCreate];
