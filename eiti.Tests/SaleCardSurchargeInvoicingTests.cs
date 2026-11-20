@@ -347,7 +347,7 @@ public sealed class SaleCardSurchargeInvoicingTests
         branches.Setup(x => x.GetByIdAsync(_branch.Id, _companyId, It.IsAny<CancellationToken>())).ReturnsAsync(_branch);
 
         await new SaleInvoicingService(fiscal.Object, documents.Object, new Mock<ICustomerRepository>().Object,
-                new Mock<ICompanyRepository>().Object, branches.Object)
+                new Mock<ICompanyRepository>().Object, branches.Object, new Mock<IUnitOfWork>().Object)
             .InvoiceAsync(sale, CancellationToken.None);
 
         sent.Should().NotBeNull();

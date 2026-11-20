@@ -1699,6 +1699,9 @@ namespace eiti.Infrastructure.Migrations
                     b.Property<Guid?>("CashSessionId")
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("ClientRequestId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("Code")
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)");
@@ -1802,6 +1805,10 @@ namespace eiti.Infrastructure.Migrations
                     b.HasIndex("CustomerId");
 
                     b.HasIndex("TransportAssignmentId");
+
+                    b.HasIndex("CompanyId", "ClientRequestId")
+                        .IsUnique()
+                        .HasFilter("\"ClientRequestId\" IS NOT NULL");
 
                     b.HasIndex("CompanyId", "CreatedAt");
 

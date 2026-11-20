@@ -1,3 +1,4 @@
+using eiti.Application.Abstractions.Data;
 using eiti.Application.Abstractions.Repositories;
 using eiti.Application.Abstractions.Services;
 using eiti.Application.Features.Sales.Common;
@@ -30,6 +31,8 @@ public sealed class SaleCreditNoteReceiverTests
     private readonly Mock<IFiscalizationService> _fiscal = new();
     private readonly Guid _invoiceId = Guid.NewGuid();
     private readonly Guid _creditNoteId = Guid.NewGuid();
+    private readonly Mock<IUnitOfWork> _unitOfWork = new();
+    private readonly List<string> _events = [];
 
     public SaleCreditNoteReceiverTests()
     {
@@ -47,8 +50,32 @@ public sealed class SaleCreditNoteReceiverTests
             .ReturnsAsync(Printed("creditNoteA", 4, Registered(CurrentCuit),
                 new FiscalAssociatedDocument("invoiceA", 10, 39, new DateOnly(2026, 10, 21))));
         _fiscal.Setup(x => x.RequestDocumentAsync(It.IsAny<FiscalDocumentRequest>(), It.IsAny<CancellationToken>()))
-            .Callback<FiscalDocumentRequest, CancellationToken>((request, _) => _requests.Add(request))
+            .Callback<FiscalDocumentRequest, CancellationToken>((request, _) =>
+            {
+                _requests.Add(request);
+                _events.Add($"request {request.RequestId}");
+            })
             .ReturnsAsync((FiscalDocumentRequest request, CancellationToken _) => Authorized(request));
+        _unitOfWork.Setup(x => x.SaveChangesAsync(It.IsAny<CancellationToken>()))
+            .Callback(() => _events.Add(
+                $"save {string.Join(",", _documents.Select(d => $"{d.RequestId}={d.Status}"))}"))
+            .ReturnsAsync(1);
+    }
+
+    [Fact]
+    public async Task The_credit_note_is_saved_in_progress_before_it_is_requested()
+    {
+        // Si el pedido se corta mientras el servicio fiscal emite la NC, EITI tiene que conservar el intento con su
+        // RequestId: el callback lo completa y el reintento re-envía el mismo pedido en vez de emitir otra NC.
+        var invoice = Invoice();
+
+        await Service().IssueCreditNoteAsync(_sale, CancellationToken.None);
+
+        var creditNoteRequestId = $"{_sale.Id.Value}:cn:1";
+        _events.Should().HaveCountGreaterThanOrEqualTo(2);
+        _events[0].Should().Be(
+            $"save {invoice.RequestId}={SaleInvoicingStatus.Invoiced},{creditNoteRequestId}={SaleInvoicingStatus.InProgress}");
+        _events[1].Should().Be($"request {creditNoteRequestId}");
     }
 
     [Fact]
@@ -238,6 +265,6 @@ public sealed class SaleCreditNoteReceiverTests
         branches.Setup(x => x.GetByIdAsync(_branch.Id, _companyId, It.IsAny<CancellationToken>())).ReturnsAsync(_branch);
 
         return new SaleInvoicingService(_fiscal.Object, documents.Object, customers.Object,
-            new Mock<ICompanyRepository>().Object, branches.Object);
+            new Mock<ICompanyRepository>().Object, branches.Object, _unitOfWork.Object);
     }
 }

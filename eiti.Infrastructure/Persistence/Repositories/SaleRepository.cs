@@ -38,6 +38,21 @@ public sealed class SaleRepository : ISaleRepository
             .FirstOrDefaultAsync(sale => sale.Id == id, cancellationToken);
     }
 
+    public async Task<Sale?> GetByClientRequestIdAsync(
+        CompanyId companyId,
+        Guid clientRequestId,
+        CancellationToken cancellationToken = default)
+    {
+        return await _context.Sales
+            .Include(sale => sale.Details)
+            .Include(sale => sale.Payments)
+            .Include(sale => sale.TradeIns)
+            .Include(sale => sale.CcPayments)
+            .FirstOrDefaultAsync(
+                sale => sale.CompanyId == companyId && sale.ClientRequestId == clientRequestId,
+                cancellationToken);
+    }
+
     public void Remove(Sale sale)
     {
         _context.Sales.Remove(sale);

@@ -18,7 +18,9 @@ public sealed record CreateCcSaleCommand(
     bool RequestInvoicing = false,
     // Letra que eligió el vendedor. Con factura pedida, la venta se frena si no coincide con el cliente.
     InvoiceLetter? InvoiceLetter = null,
-    string? Notes = null
+    string? Notes = null,
+    // Igual que en mostrador: id del intento de alta, para que un pedido repetido no cree otra venta.
+    Guid? ClientRequestId = null
 ) : IRequest<Result<CreateCcSaleResponse>>, IRequirePermissions
 {
     public IReadOnlyCollection<string> RequiredPermissions => [PermissionCodes.SalesCreate];

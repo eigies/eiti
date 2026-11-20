@@ -51,6 +51,10 @@ public sealed class Sale : AggregateRoot<SaleId>
     // Observación libre que pide el cliente (presupuesto, patente). Sale impresa en la factura,
     // no viaja al fisco: por eso se puede corregir aunque la venta ya esté facturada.
     public string? Notes { get; private set; }
+    // Id que genera el front por cada intento de alta. El mismo pedido puede llegar dos veces (Chrome
+    // reenvía un POST por su cuenta cuando la conexión se traba): con este id el segundo encuentra la
+    // venta que creó el primero en vez de crear otra. Único por empresa; null en ventas sin id.
+    public Guid? ClientRequestId { get; private set; }
     private readonly List<SaleDetail> _details = [];
     private readonly List<SalePayment> _payments = [];
     private readonly List<SaleTradeIn> _tradeIns = [];
@@ -721,6 +725,25 @@ public sealed class Sale : AggregateRoot<SaleId>
         TransportAssignmentId = null;
         UpdatedAt = DateTime.UtcNow;
         IsModified = true;
+    }
+
+    /// <summary>
+    /// Ata la venta al intento de alta que la creó. Se asigna una sola vez, al crearla: cambiarlo
+    /// después dejaría al reintento de ese pedido sin forma de encontrarla.
+    /// </summary>
+    public void AssignClientRequestId(Guid clientRequestId)
+    {
+        if (clientRequestId == Guid.Empty)
+        {
+            throw new ArgumentException("The client request id cannot be empty.", nameof(clientRequestId));
+        }
+
+        if (ClientRequestId is not null)
+        {
+            throw new InvalidOperationException("The sale already has a client request id.");
+        }
+
+        ClientRequestId = clientRequestId;
     }
 
     public void SetSourceChannel(SaleSourceChannel? channel) => SourceChannel = channel;

@@ -65,6 +65,16 @@ public sealed class CreateCcSaleHandler : IRequestHandler<CreateCcSaleCommand, R
         if (branchAccess.IsFailure)
             return Result<CreateCcSaleResponse>.Failure(branchAccess.Error);
 
+        // Igual que en mostrador: si este intento de alta ya creó la venta, se devuelve esa en vez de crear otra.
+        if (request.ClientRequestId is Guid clientRequestId)
+        {
+            var existing = await _saleRepository.GetByClientRequestIdAsync(companyId, clientRequestId, cancellationToken);
+            if (existing is not null)
+            {
+                return Result<CreateCcSaleResponse>.Success(await BuildExistingSaleResponseAsync(existing, companyId, cancellationToken));
+            }
+        }
+
         var branch = await _branchRepository.GetByIdAsync(new BranchId(request.BranchId), companyId, cancellationToken);
         if (branch is null)
         {
@@ -225,6 +235,10 @@ public sealed class CreateCcSaleHandler : IRequestHandler<CreateCcSaleCommand, R
             sale.SetNotes(request.Notes);
             // La CC no tiene tope, pero el descuento queda trazado igual para el reporte de descuentos.
             sale.TrackGeneralDiscount(previousPercent: 0m, _currentUserService.UserId?.Value, reason: null);
+            if (request.ClientRequestId is Guid requestId)
+            {
+                sale.AssignClientRequestId(requestId);
+            }
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
         {
@@ -304,45 +318,85 @@ public sealed class CreateCcSaleHandler : IRequestHandler<CreateCcSaleCommand, R
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
+        // La venta ya existe: facturar no se corta aunque el navegador abandone el pedido (ver CreateSaleHandler).
         var invoicing = await SaleInvoicingFlow.TryInvoiceAsync(
-            _saleInvoicingService, _unitOfWork, sale, request.RequestInvoicing, cancellationToken);
+            _saleInvoicingService, _unitOfWork, sale, request.RequestInvoicing, CancellationToken.None);
 
-        return Result<CreateCcSaleResponse>.Success(
-            new CreateCcSaleResponse(
-                sale.Id.Value,
-                sale.Code,
-                sale.BranchId.Value,
-                customer.Id.Value,
-                customer.FullName,
-                (int)sale.SaleStatus,
-                sale.SaleStatus.ToString(),
-                sale.GeneralDiscountPercent,
-                sale.OriginalTotal,
-                sale.TotalAmount,
-                sale.VatRate,
-                sale.VatAmount,
-                sale.ManualOverridePrice,
-                sale.IsCuentaCorriente,
-                sale.CreatedAt,
-                creditApplied,
-                customer.CreditBalance,
-                sale.Details.Select(detail => new CreateCcSaleDetailItemResponse(
-                    detail.ProductId.Value,
-                    GetProductName(productMap, detail.ProductId.Value),
-                    GetProductBrand(productMap, detail.ProductId.Value),
-                    detail.Quantity,
-                    detail.UnitPrice,
-                    detail.DiscountPercent,
-                    detail.TotalAmount)).ToList(),
-                sale.TradeInAmount,
-                sale.CcPendingAmount,
-                sale.TradeIns.Select(tradeIn => new CreateCcSaleTradeInItemResponse(
-                    tradeIn.ProductId.Value,
-                    GetProductName(productMap, tradeIn.ProductId.Value),
-                    GetProductBrand(productMap, tradeIn.ProductId.Value),
-                    tradeIn.Quantity,
-                    tradeIn.Amount)).ToList(),
-                CreateSaleInvoicingResponse.From(invoicing)));
+        return Result<CreateCcSaleResponse>.Success(BuildResponse(sale, customer, productMap, creditApplied, invoicing));
+    }
+
+    // Reintento de un pedido que ya creó la venta: la misma respuesta que el alta, armada con lo guardado.
+    private async Task<CreateCcSaleResponse> BuildExistingSaleResponseAsync(
+        Sale sale,
+        CompanyId companyId,
+        CancellationToken cancellationToken)
+    {
+        var customer = sale.CustomerId is null
+            ? null
+            : await _customerRepository.GetByIdAsync(sale.CustomerId, companyId, cancellationToken);
+
+        var productIds = sale.Details.Select(detail => detail.ProductId)
+            .Concat(sale.TradeIns.Select(tradeIn => tradeIn.ProductId))
+            .Distinct()
+            .ToList();
+        var productMap = (await _productRepository.GetByIdsAsync(productIds, companyId, cancellationToken))
+            .ToDictionary(product => product.Id.Value);
+
+        // El saldo a favor que el alta aplicó queda como cobro CC con ese método.
+        var creditApplied = sale.CcPayments
+            .Where(payment => payment.Status == SaleCcPaymentStatus.Active && payment.Method == SalePaymentMethod.CustomerCredit)
+            .Sum(payment => payment.Amount);
+
+        var invoicing = _saleInvoicingService.IsEnabled
+            ? await _saleInvoicingService.GetInvoiceOutcomeAsync(sale, cancellationToken)
+            : null;
+
+        return BuildResponse(sale, customer, productMap, creditApplied, invoicing);
+    }
+
+    private static CreateCcSaleResponse BuildResponse(
+        Sale sale,
+        Customer? customer,
+        IDictionary<Guid, Product> productMap,
+        decimal creditApplied,
+        SaleInvoicingOutcome? invoicing)
+    {
+        return new CreateCcSaleResponse(
+            sale.Id.Value,
+            sale.Code,
+            sale.BranchId.Value,
+            // Toda venta CC nace con cliente (Sale.CreateCc lo exige); la ficha puede faltar en un reintento.
+            customer?.Id.Value ?? sale.CustomerId?.Value ?? Guid.Empty,
+            customer?.FullName,
+            (int)sale.SaleStatus,
+            sale.SaleStatus.ToString(),
+            sale.GeneralDiscountPercent,
+            sale.OriginalTotal,
+            sale.TotalAmount,
+            sale.VatRate,
+            sale.VatAmount,
+            sale.ManualOverridePrice,
+            sale.IsCuentaCorriente,
+            sale.CreatedAt,
+            creditApplied,
+            customer?.CreditBalance ?? 0m,
+            sale.Details.Select(detail => new CreateCcSaleDetailItemResponse(
+                detail.ProductId.Value,
+                GetProductName(productMap, detail.ProductId.Value),
+                GetProductBrand(productMap, detail.ProductId.Value),
+                detail.Quantity,
+                detail.UnitPrice,
+                detail.DiscountPercent,
+                detail.TotalAmount)).ToList(),
+            sale.TradeInAmount,
+            sale.CcPendingAmount,
+            sale.TradeIns.Select(tradeIn => new CreateCcSaleTradeInItemResponse(
+                tradeIn.ProductId.Value,
+                GetProductName(productMap, tradeIn.ProductId.Value),
+                GetProductBrand(productMap, tradeIn.ProductId.Value),
+                tradeIn.Quantity,
+                tradeIn.Amount)).ToList(),
+            CreateSaleInvoicingResponse.From(invoicing));
     }
 
     private static string GetProductName(IDictionary<Guid, Product> productMap, Guid productId)
